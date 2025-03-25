@@ -1,5 +1,5 @@
 name: Bug Report
-description: Fill this form out to report a bug in `cyborg_py`.
+description: Fill this form out to report a bug in `cyborgdb_py`.
 title: "[BUG]: "
 labels: bug
 projects: cyborginc/4
