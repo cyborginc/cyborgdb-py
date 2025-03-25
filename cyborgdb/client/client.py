@@ -1,25 +1,36 @@
 """
-CyborgDB Client Wrapper
+CyborgDB REST Client
 
-This module provides a Python wrapper around the CyborgDB C++ library.
-It offers a high-level API for interacting with the encrypted vector database.
+This module provides a Python client for interacting with the CyborgDB REST API.
 """
 
-from typing import Dict, List, Optional, Tuple, Union, Any
+from typing import Dict, List, Optional, Union, Any, Tuple, Callable
 import os
 import json
 import secrets
 import numpy as np
+import logging
 from enum import Enum
 from pathlib import Path
+import binascii
 
-# Import the C++ bindings
+# Import the OpenAPI generated client
 try:
-    import cyborgdb_core as _core
+    from openapi_client.api_client import ApiClient, Configuration
+    from openapi_client.api.default_api import DefaultApi
+    from openapi_client.model.index_config import IndexConfig as ApiIndexConfig
+    from openapi_client.model.index_create_request import IndexCreateRequest
+    from openapi_client.model.query_request import QueryRequest
+    from openapi_client.model.upsert_request import UpsertRequest
+    from openapi_client.model.train_request import TrainRequest
+    from openapi_client.model.item import Item
+    from openapi_client.exceptions import ApiException
 except ImportError:
     raise ImportError(
-        "Failed to import cyborgdb_core. Make sure the C++ library is properly installed."
+        "Failed to import openapi_client. Make sure the OpenAPI client library is properly installed."
     )
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "Client", 
@@ -28,7 +39,7 @@ __all__ = [
     "IndexIVF",
     "IndexIVFPQ",
     "IndexIVFFlat",
-    "DBConfig",
+    "DBLocation",
     "generate_key"
 ]
 
@@ -46,10 +57,8 @@ def generate_key() -> bytes:
 class DBLocation(str, Enum):
     """Storage location for database components."""
     
-    MEMORY = "memory"
     REDIS = "redis"
     POSTGRES = "postgres"
-    NONE = "none"
 
 
 class DBConfig:
@@ -57,7 +66,7 @@ class DBConfig:
     Configuration for a database storage component.
     
     Attributes:
-        location (str): Storage location type ('memory', 'redis', 'postgres', or 'none').
+        location (str): Storage location type ('redis' or 'postgres').
         table_name (Optional[str]): Name of the table (for SQL databases).
         connection_string (Optional[str]): Connection string for the database.
     """
@@ -72,7 +81,7 @@ class DBConfig:
         Initialize a DBConfig object.
         
         Args:
-            location: Storage location ('memory', 'redis', 'postgres', or 'none').
+            location: Storage location ('redis' or 'postgres').
             table_name: Name of the table (for SQL databases).
             connection_string: Connection string for the database.
             
@@ -82,67 +91,81 @@ class DBConfig:
         if isinstance(location, DBLocation):
             location = location.value
             
-        if location not in ["memory", "redis", "postgres", "none"]:
+        if location not in ["redis", "postgres"]:
             raise ValueError(
-                f"Invalid location: {location}. Must be one of: 'memory', 'redis', 'postgres', 'none'"
+                f"Invalid location: {location}. Must be one of: 'redis', 'postgres'"
             )
             
-        self._config = _core.DBConfig(location, table_name, connection_string)
-    
-    @property
-    def core_config(self):
-        """Get the underlying C++ DBConfig object."""
-        return self._config
+        self.location = location
+        self.table_name = table_name
+        self.connection_string = connection_string
 
 
 class IndexConfig:
     """
     Base class for index configurations.
     
-    This is an abstract class that provides common properties and methods
+    This is an abstract base class that provides common properties and methods
     for all index configuration types.
     """
     
-    def __init__(self, core_config):
+    def __init__(self, dimension: int, metric: str, index_type: str, n_lists: int):
         """
-        Initialize with a core IndexConfig object.
+        Initialize with index configuration parameters.
         
         Args:
-            core_config: The C++ IndexConfig object.
+            dimension: The dimensionality of the vectors.
+            metric: The distance metric to use.
+            index_type: The type of index.
+            n_lists: The number of lists (coarse clusters).
         """
-        self._config = core_config
+        self._dimension = dimension
+        self._metric = metric
+        self._index_type = index_type
+        self._n_lists = n_lists
     
     @property
     def dimension(self) -> int:
         """Get the dimensionality of the vectors in the index."""
-        return self._config.dimension
+        return self._dimension
     
     @property
     def metric(self) -> str:
         """Get the distance metric used in the index."""
-        return self._config.metric
+        return self._metric
     
     @property
     def index_type(self) -> str:
         """Get the type of the index."""
-        return self._config.index_type
+        return self._index_type
     
     def n_lists(self) -> int:
         """Get the number of lists (coarse clusters) in the index."""
-        return self._config.n_lists()
+        return self._n_lists
     
     def pq_dim(self) -> int:
         """Get the Product Quantization dimension, if applicable."""
-        return self._config.pq_dim()
+        return 0
     
     def pq_bits(self) -> int:
         """Get the number of bits per PQ code, if applicable."""
-        return self._config.pq_bits()
+        return 0
     
-    @property
-    def core_config(self):
-        """Get the underlying C++ IndexConfig object."""
-        return self._config
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to a dictionary representation."""
+        result = {
+            "dimension": self.dimension,
+            "metric": self.metric,
+            "indexType": self.index_type,
+            "nLists": self.n_lists()
+        }
+        
+        # Add PQ params if applicable
+        if self.pq_dim() > 0:
+            result["pqDim"] = self.pq_dim()
+            result["pqBits"] = self.pq_bits()
+            
+        return result
 
 
 class IndexIVF(IndexConfig):
@@ -170,8 +193,7 @@ class IndexIVF(IndexConfig):
                 f"Invalid metric: {metric}. Must be one of: 'euclidean', 'cosine', 'squared_euclidean'"
             )
             
-        core_config = _core.IndexIVF(dimension, n_lists, metric)
-        super().__init__(core_config)
+        super().__init__(dimension, metric, "ivf", n_lists)
 
 
 class IndexIVFPQ(IndexConfig):
@@ -208,8 +230,17 @@ class IndexIVFPQ(IndexConfig):
                 f"Invalid metric: {metric}. Must be one of: 'euclidean', 'cosine', 'squared_euclidean'"
             )
             
-        core_config = _core.IndexIVFPQ(dimension, n_lists, pq_dim, pq_bits, metric)
-        super().__init__(core_config)
+        super().__init__(dimension, metric, "ivfpq", n_lists)
+        self._pq_dim = pq_dim
+        self._pq_bits = pq_bits
+    
+    def pq_dim(self) -> int:
+        """Get the Product Quantization dimension."""
+        return self._pq_dim
+    
+    def pq_bits(self) -> int:
+        """Get the number of bits per PQ code."""
+        return self._pq_bits
 
 
 class IndexIVFFlat(IndexConfig):
@@ -237,41 +268,80 @@ class IndexIVFFlat(IndexConfig):
                 f"Invalid metric: {metric}. Must be one of: 'euclidean', 'cosine', 'squared_euclidean'"
             )
             
-        core_config = _core.IndexIVFFlat(dimension, n_lists, metric)
-        super().__init__(core_config)
+        super().__init__(dimension, metric, "ivfflat", n_lists)
 
 
 class EncryptedIndex:
     """
-    Provides access to an encrypted vector index.
+    Provides access to an encrypted vector index via the REST API.
     
     This class handles operations on an encrypted vector index, including
     adding/updating vectors, searching, and managing index metadata.
     """
     
-    def __init__(self, core_index):
+    def __init__(
+        self, 
+        index_name: str, 
+        index_key: bytes, 
+        api: DefaultApi,
+        api_client: ApiClient,
+        max_cache_size: int = 0
+    ):
         """
-        Initialize with a core EncryptedIndex object.
+        Initialize with API access to an index.
         
         Args:
-            core_index: The C++ EncryptedIndex object.
+            index_name: Name of the index
+            index_key: Encryption key for the index
+            api: API client instance
+            api_client: The lower-level API client
+            max_cache_size: Maximum cache size
         """
-        self._index = core_index
+        self._index_name = index_name
+        self._index_key = index_key
+        self._api = api
+        self._api_client = api_client
+        self._max_cache_size = max_cache_size
+        self._index_config = None
     
     @property
     def index_name(self) -> str:
         """Get the name of the index."""
-        return self._index.index_name()
+        return self._index_name
     
     @property
     def index_type(self) -> str:
         """Get the type of the index."""
-        return self._index.index_type()
+        # Retrieve index info if not already cached
+        if not hasattr(self, '_index_type_cached'):
+            try:
+                response = self._api.get_index_info(
+                    self._index_name, 
+                    key=self._key_to_hex()
+                )
+                self._index_type_cached = response.index_type
+            except ApiException as e:
+                logger.error(f"Failed to retrieve index type: {e}")
+                self._index_type_cached = "unknown"
+                
+        return self._index_type_cached
     
     @property
     def index_config(self) -> Dict[str, Any]:
         """Get the configuration of the index as a dictionary."""
-        return self._index.index_config()
+        # Retrieve index info if not already cached
+        if not self._index_config:
+            try:
+                response = self._api.get_index_info(
+                    self._index_name, 
+                    key=self._key_to_hex()
+                )
+                self._index_config = response.config
+            except ApiException as e:
+                logger.error(f"Failed to retrieve index config: {e}")
+                self._index_config = {}
+                
+        return self._index_config
     
     def is_trained(self) -> bool:
         """
@@ -280,7 +350,15 @@ class EncryptedIndex:
         Returns:
             bool: True if the index is trained, otherwise False.
         """
-        return self._index.is_trained()
+        try:
+            response = self._api.get_index_status(
+                self._index_name,
+                key=self._key_to_hex()
+            )
+            return response.trained
+        except ApiException as e:
+            logger.error(f"Failed to get index training status: {e}")
+            return False
     
     def delete_index(self) -> None:
         """
@@ -292,7 +370,15 @@ class EncryptedIndex:
         Raises:
             ValueError: If the index could not be deleted.
         """
-        self._index.delete_index()
+        try:
+            self._api.delete_index(
+                self._index_name,
+                key=self._key_to_hex()
+            )
+        except ApiException as e:
+            error_msg = f"Failed to delete index: {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
     
     def get(
         self, 
@@ -314,7 +400,42 @@ class EncryptedIndex:
         Raises:
             ValueError: If the items could not be retrieved or decrypted.
         """
-        return self._index.get(ids, include)
+        try:
+            response = self._api.get_items(
+                self._index_name,
+                ids=ids,
+                key=self._key_to_hex(),
+                include=include
+            )
+            
+            # Convert API response to our format
+            items = []
+            for item in response.items:
+                item_dict = {"id": item.id}
+                
+                if "vector" in include and hasattr(item, "vector"):
+                    item_dict["vector"] = item.vector
+                    
+                if "contents" in include and hasattr(item, "contents"):
+                    item_dict["contents"] = item.contents
+                    
+                if "metadata" in include and hasattr(item, "metadata"):
+                    # Convert metadata string to dict if needed
+                    if isinstance(item.metadata, str):
+                        try:
+                            item_dict["metadata"] = json.loads(item.metadata)
+                        except json.JSONDecodeError:
+                            item_dict["metadata"] = {}
+                    else:
+                        item_dict["metadata"] = item.metadata
+                        
+                items.append(item_dict)
+                
+            return items
+        except ApiException as e:
+            error_msg = f"Failed to retrieve items: {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
     
     def train(
         self, 
@@ -343,7 +464,20 @@ class EncryptedIndex:
             ValueError: If there are not enough vector embeddings in the index for training,
                 or if the index could not be trained.
         """
-        self._index.train(batch_size, max_iters, tolerance, max_memory)
+        try:
+            request = TrainRequest(
+                batch_size=batch_size,
+                max_iters=max_iters,
+                tolerance=tolerance,
+                max_memory=max_memory,
+                key=self._key_to_hex()
+            )
+            
+            self._api.train_index(self._index_name, request)
+        except ApiException as e:
+            error_msg = f"Failed to train index: {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
     
     def upsert(
         self, 
@@ -372,7 +506,74 @@ class EncryptedIndex:
                 the number of vectors and IDs, or if the vectors could not be upserted.
             TypeError: If the arguments do not match expected types.
         """
-        self._index.upsert(arg1, arg2)
+        try:
+            items = []
+            
+            # Case 1: arg1 is a list of dictionaries
+            if arg2 is None:
+                if not isinstance(arg1, list) or not all(isinstance(item, dict) for item in arg1):
+                    raise TypeError("When arg2 is None, arg1 must be a list of dictionaries")
+                    
+                # Convert each dict to an Item
+                for item_dict in arg1:
+                    if "id" not in item_dict:
+                        raise ValueError("Each item dictionary must contain an 'id' field")
+                        
+                    item = {
+                        "id": item_dict["id"]
+                    }
+                    
+                    if "vector" in item_dict:
+                        item["vector"] = item_dict["vector"]
+                        
+                    if "contents" in item_dict:
+                        item["contents"] = item_dict["contents"]
+                        
+                    if "metadata" in item_dict:
+                        # Convert dict metadata to JSON string if needed
+                        if isinstance(item_dict["metadata"], dict):
+                            item["metadata"] = json.dumps(item_dict["metadata"])
+                        else:
+                            item["metadata"] = item_dict["metadata"]
+                            
+                    items.append(item)
+            
+            # Case 2: arg1 is a list of IDs, arg2 is a matrix of vectors
+            else:
+                if not isinstance(arg1, list):
+                    raise TypeError("arg1 must be a list of IDs")
+                    
+                # Convert numpy array to list if needed
+                vectors = arg2
+                if isinstance(vectors, np.ndarray):
+                    vectors = vectors.tolist()
+                    
+                if len(arg1) != len(vectors):
+                    raise ValueError("Number of IDs must match number of vectors")
+                    
+                # Create items from IDs and vectors
+                for id_val, vector in zip(arg1, vectors):
+                    items.append({
+                        "id": str(id_val),
+                        "vector": vector
+                    })
+            
+            # Create the upsert request
+            request = UpsertRequest(
+                items=items,
+                key=self._key_to_hex()
+            )
+            
+            # Make the API call
+            self._api.upsert_items(self._index_name, request)
+            
+        except ApiException as e:
+            error_msg = f"Failed to upsert items: {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        except (TypeError, ValueError) as e:
+            logger.error(str(e))
+            raise
     
     def delete(self, ids: List[str]) -> None:
         """
@@ -389,7 +590,16 @@ class EncryptedIndex:
         Raises:
             ValueError: If the items could not be deleted.
         """
-        self._index.delete(ids)
+        try:
+            self._api.delete_items(
+                self._index_name,
+                ids=ids,
+                key=self._key_to_hex()
+            )
+        except ApiException as e:
+            error_msg = f"Failed to delete items: {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
     
     def query(
         self,
@@ -397,7 +607,7 @@ class EncryptedIndex:
         query_contents: Optional[str] = None,
         top_k: int = 100,
         n_probes: int = 1,
-        filters: Dict[str, Any] = None,
+        filters: Optional[Dict[str, Any]] = None,
         include: List[str] = ["distance", "metadata"],
         greedy: bool = False
     ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
@@ -429,79 +639,149 @@ class EncryptedIndex:
             If this function is called on an index where train() has not been executed, the query will
             use encrypted exhaustive search, which may be slower.
         """
-        filters = filters or {}
-        return self._index.query(
-            query_vector, query_contents, top_k, n_probes, filters, include, greedy
-        )
+        try:
+            # Process query vectors if provided
+            query_vectors_list = None
+            if query_vector is not None:
+                if isinstance(query_vector, np.ndarray):
+                    # Handle 1D and 2D arrays differently
+                    if query_vector.ndim == 1:
+                        query_vectors_list = [query_vector.tolist()]
+                    else:
+                        query_vectors_list = query_vector.tolist()
+                elif isinstance(query_vector, list):
+                    # Check if it's a list of lists or a single list
+                    if query_vector and isinstance(query_vector[0], (list, np.ndarray)):
+                        query_vectors_list = [v if isinstance(v, list) else v.tolist() for v in query_vector]
+                    else:
+                        query_vectors_list = [query_vector]
+                else:
+                    raise TypeError("query_vector must be a numpy array or a list of vectors")
+            
+            # Prepare filters
+            filters_json = None
+            if filters:
+                filters_json = json.dumps(filters)
+            
+            # Create query request
+            request = QueryRequest(
+                vectors=query_vectors_list,
+                contents=query_contents,
+                top_k=top_k,
+                n_probes=n_probes,
+                filters=filters_json,
+                include=include,
+                greedy=greedy,
+                key=self._key_to_hex()
+            )
+            
+            # Execute query
+            response = self._api.query_index(self._index_name, request)
+            
+            # Process results
+            results = []
+            for query_results in response.results:
+                query_items = []
+                for item in query_results:
+                    result_item = {
+                        "id": item.id
+                    }
+                    
+                    if "distance" in include:
+                        result_item["distance"] = item.distance
+                        
+                    if "metadata" in include and hasattr(item, "metadata"):
+                        # Parse metadata JSON if needed
+                        if isinstance(item.metadata, str):
+                            try:
+                                result_item["metadata"] = json.loads(item.metadata)
+                            except json.JSONDecodeError:
+                                result_item["metadata"] = {}
+                        else:
+                            result_item["metadata"] = item.metadata
+                            
+                    query_items.append(result_item)
+                    
+                results.append(query_items)
+            
+            # For single query, return just the results list instead of list of lists
+            return results[0] if len(results) == 1 else results
+            
+        except ApiException as e:
+            error_msg = f"Query failed: {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        except (TypeError, ValueError) as e:
+            logger.error(str(e))
+            raise
+    
+    def _key_to_hex(self) -> str:
+        """Convert the binary key to a hex string for API calls."""
+        return binascii.hexlify(self._index_key).decode('ascii')
 
 
 class Client:
     """
-    Client for interacting with CyborgDB.
+    Client for interacting with CyborgDB via REST API.
     
     This class provides methods for creating, loading, and managing encrypted indexes.
     """
     
     def __init__(
         self,
-        index_location: Union[DBConfig, Dict[str, Any]],
-        config_location: Union[DBConfig, Dict[str, Any]],
-        items_location: Optional[Union[DBConfig, Dict[str, Any]]] = None,
+        api_url: str,
+        index_location: DBConfig,
+        config_location: DBConfig,
+        items_location: Optional[DBConfig] = None,
+        api_key: Optional[str] = None,
+        timeout: int = 60,
         cpu_threads: int = 0,
-        gpu_accelerate: bool = False,
-        working_dir: Optional[str] = None
+        gpu_accelerate: bool = False
     ):
         """
         Initialize a new instance of Client.
         
         Args:
+            api_url: Base URL of the CyborgDB API server (e.g., "https://api.cyborgdb.com/v1")
             index_location: Configuration for index storage location.
             config_location: Configuration for index metadata storage.
             items_location: Configuration for future item storage. Default is None.
+            api_key: Optional API key for authentication
+            timeout: Request timeout in seconds
             cpu_threads: Number of CPU threads to use (0 = all cores). Default is 0.
             gpu_accelerate: Whether to enable GPU acceleration (requires CUDA). Default is False.
-            working_dir: Optional working directory for license files. Default is None.
             
         Raises:
-            ValueError: If cpu_threads is less than 0, if any DBConfig is invalid,
-                if GPU is unavailable when gpu_accelerate is True, if the backing store
-                is not available, or if the Client could not be initialized.
+            ValueError: If the client could not be initialized.
         """
-        # Set working directory if provided
-        if working_dir:
-            _core.set_working_dir(working_dir)
-            
-        # Convert dict to DBConfig if necessary
-        if isinstance(index_location, dict):
-            index_location = DBConfig(
-                index_location.get("location", "memory"),
-                index_location.get("table_name"),
-                index_location.get("connection_string")
-            )
+        # Set up the OpenAPI client configuration
+        self.config = Configuration()
+        self.config.host = api_url
+        self.config.timeout = timeout
         
-        if isinstance(config_location, dict):
-            config_location = DBConfig(
-                config_location.get("location", "memory"),
-                config_location.get("table_name"),
-                config_location.get("connection_string")
-            )
+        # Add authentication if provided
+        if api_key:
+            self.config.api_key = {'ApiKey': api_key}
+            self.config.api_key_prefix = {'ApiKey': 'Bearer'}
+        
+        # Create the API client
+        try:
+            self.api_client = ApiClient(self.config)
+            self.api = DefaultApi(self.api_client)
             
-        if items_location is None:
-            items_location = DBConfig(DBLocation.NONE)
-        elif isinstance(items_location, dict):
-            items_location = DBConfig(
-                items_location.get("location", "none"),
-                items_location.get("table_name"),
-                items_location.get("connection_string")
-            )
+            # Save DB configurations
+            self.index_location = index_location
+            self.config_location = config_location
+            self.items_location = items_location
             
-        self._client = _core.Client(
-            index_location.core_config,
-            config_location.core_config,
-            items_location.core_config,
-            cpu_threads,
-            gpu_accelerate
-        )
+            # Save compute options
+            self.cpu_threads = cpu_threads
+            self.gpu_accelerate = gpu_accelerate
+            
+        except Exception as e:
+            error_msg = f"Failed to initialize client: {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
     
     def list_indexes(self) -> List[str]:
         """
@@ -513,7 +793,13 @@ class Client:
         Raises:
             ValueError: If the list of indexes could not be retrieved.
         """
-        return self._client.list_indexes()
+        try:
+            response = self.api.list_indexes()
+            return response.indexes
+        except ApiException as e:
+            error_msg = f"Failed to list indexes: {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
     
     def create_index(
         self,
@@ -541,23 +827,73 @@ class Client:
             ValueError: If the index name is not unique, if the index configuration is invalid,
                 or if the index could not be created.
         """
-        # Convert index_key to byte array if it's not already
+        # Validate index_key
         if not isinstance(index_key, bytes) or len(index_key) != 32:
             raise ValueError("index_key must be a 32-byte bytes object")
         
-        # Convert to bytearray of length 32 as expected by the C++ code
-        key_array = bytearray(index_key)
-        
-        # Create the index
-        core_index = self._client.create_index(
-            index_name,
-            key_array,
-            index_config.core_config,
-            embedding_model,
-            max_cache_size
-        )
-        
-        return EncryptedIndex(core_index)
+        try:
+            # Convert index_config to API format
+            api_config = self._convert_to_api_config(index_config)
+            
+            # Convert binary key to hex string
+            key_hex = binascii.hexlify(index_key).decode('ascii')
+            
+            # Create database location configs
+            db_config = {
+                "indexLocation": {
+                    "location": self.index_location.location,
+                    "tableName": self.index_location.table_name,
+                    "connectionString": self.index_location.connection_string
+                },
+                "configLocation": {
+                    "location": self.config_location.location,
+                    "tableName": self.config_location.table_name,
+                    "connectionString": self.config_location.connection_string
+                }
+            }
+            
+            # Add items location if provided
+            if self.items_location:
+                db_config["itemsLocation"] = {
+                    "location": self.items_location.location,
+                    "tableName": self.items_location.table_name,
+                    "connectionString": self.items_location.connection_string
+                }
+                
+            # Create the request
+            request = {
+                "name": index_name,
+                "key": key_hex,
+                "config": api_config,
+                "dbConfig": db_config,
+                "cpuThreads": self.cpu_threads,
+                "gpuAccelerate": self.gpu_accelerate
+            }
+            
+            # Add embedding model if provided
+            if embedding_model:
+                request["embeddingModel"] = embedding_model
+                
+            # Add max cache size if specified
+            if max_cache_size > 0:
+                request["maxCacheSize"] = max_cache_size
+                
+            # Create the index
+            self.api.create_index(request)
+            
+            # Return an EncryptedIndex instance
+            return EncryptedIndex(
+                index_name=index_name,
+                index_key=index_key,
+                api=self.api,
+                api_client=self.api_client,
+                max_cache_size=max_cache_size
+            )
+            
+        except ApiException as e:
+            error_msg = f"Failed to create index: {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
     
     def load_index(
         self,
@@ -580,14 +916,43 @@ class Client:
             ValueError: If the index name does not exist, if the index could not be loaded
                 or decrypted.
         """
-        # Convert index_key to byte array if it's not already
+        # Validate index_key
         if not isinstance(index_key, bytes) or len(index_key) != 32:
             raise ValueError("index_key must be a 32-byte bytes object")
         
-        # Convert to bytearray of length 32 as expected by the C++ code
-        key_array = bytearray(index_key)
+        try:
+            # Verify the index exists
+            indexes = self.list_indexes()
+            if index_name not in indexes:
+                raise ValueError(f"Index '{index_name}' does not exist")
+            
+            # Return an EncryptedIndex instance
+            return EncryptedIndex(
+                index_name=index_name,
+                index_key=index_key,
+                api=self.api,
+                api_client=self.api_client,
+                max_cache_size=max_cache_size
+            )
+        except ApiException as e:
+            error_msg = f"Failed to load index: {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+    
+    def _convert_to_api_config(self, index_config: IndexConfig) -> Dict[str, Any]:
+        """Convert a local IndexConfig object to the API's configuration format."""
+        config_dict = {
+            "dimension": index_config.dimension,
+            "metric": index_config.metric,
+            "indexType": index_config.index_type,
+            "nLists": index_config.n_lists()
+        }
         
-        # Load the index
-        core_index = self._client.load_index(index_name, key_array, max_cache_size)
-        
-        return EncryptedIndex(core_index)
+        # Add PQ parameters if applicable
+        if hasattr(index_config, 'pq_dim') and callable(index_config.pq_dim):
+            pq_dim = index_config.pq_dim()
+            if pq_dim > 0:
+                config_dict["pqDim"] = pq_dim
+                config_dict["pqBits"] = index_config.pq_bits()
+                
+        return config_dict
