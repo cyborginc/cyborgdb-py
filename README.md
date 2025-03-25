@@ -1,101 +1,181 @@
 # CyborgDB Python Client
 
-A clean, user-friendly Python client for interacting with the CyborgDB vector database.
+A Python client library for [CyborgDB](https://cyborgdb.io), the confidential vector database for secure AI applications.
+
+## Features
+
+- **End-to-End Encryption**: All vector data is encrypted using strong cryptographic standards
+- **Similarity Search**: Fast and accurate similarity search on encrypted vectors
+- **Automatic Embedding**: Seamlessly convert text to embeddings using SentenceTransformers
+- **Flexible Storage**: Multiple backend options including in-memory, Redis, and PostgreSQL
+- **Advanced Indexing**: Support for multiple ANN algorithms (IVF, IVFPQ, IVFFlat)
+- **Metadata Filtering**: Filter search results based on metadata
 
 ## Installation
 
 ```bash
-pip install cyborgdb-client
+pip install cyborgdb
 ```
 
-Or install from source:
+## Dependencies
 
-```bash
-git clone https://github.com/yourusername/cyborgdb-client-python.git
-cd cyborgdb-client-python
-pip install -e .
-```
+- Python 3.8+
+- cyborgdb_core (C++ extension module, installed automatically)
+- numpy
+- sentence-transformers (for automatic embedding generation)
+- pydantic
 
 ## Quick Start
 
 ```python
-from cyborgdb_client import CyborgDBClient
+from cyborgdb.client.client import Client, DBConfig, IndexIVFFlat, generate_key
 
-# Initialize the client
-client = CyborgDBClient(host="http://localhost:8000")
-
-# Create an index
-client.create_index(
-    vector_dimension=768,
-    index_type="IVF",
-    namespace="documents",
-    metric_type="COSINE"
+# Initialize client with in-memory storage
+client = Client(
+    index_location=DBConfig("memory"),
+    config_location=DBConfig("memory")
 )
 
-# Insert vectors
-vectors = [
+# Generate a secure encryption key
+index_key = generate_key()
+
+# Create an index configuration
+index_config = IndexIVFFlat(
+    dimension=384,  # Matches the embedding model dimension
+    n_lists=100,
+    metric="cosine"
+)
+
+# Create an encrypted index with an embedding model
+index = client.create_index(
+    index_name="my_documents",
+    index_key=index_key,
+    index_config=index_config,
+    embedding_model="sentence-transformers/all-MiniLM-L6-v2"
+)
+
+# Add documents with automatic embedding
+documents = [
     {
-        "id": "doc_1",
-        "vector": [0.1, 0.2, ..., 0.7],  # 768-dimensional vector
-        "metadata": {
-            "title": "Document 1",
-            "category": "Category A"
-        }
+        "id": "doc1",
+        "contents": "CyborgDB is a confidential vector database for secure AI applications.",
+        "metadata": {"category": "database"}
+    },
+    {
+        "id": "doc2",
+        "contents": "Vector databases store and query high-dimensional vector embeddings.",
+        "metadata": {"category": "database"}
     }
 ]
-client.upsert(vectors, namespace="documents")
 
-# Search vectors
-results = client.query(
-    vector=[0.2, 0.3, ..., 0.8],  # Query vector
-    k=10,
-    namespace="documents",
-    filter={"category": "Category A"}
+# Upsert documents
+index.upsert(documents)
+
+# Train the index for faster search
+index.train()
+
+# Search the index
+results = index.query(
+    query_contents="How do vector databases work?",
+    top_k=3
 )
 
-# Close the client when done
-client.close()
+# Print results
+for i, result in enumerate(results):
+    print(f"{i+1}. ID: {result['id']}, Distance: {result['distance']:.4f}")
+    print(f"   Metadata: {result['metadata']}")
 ```
 
-## Features
+## Using Different Storage Backends
 
-- Simple, intuitive interface
-- Comprehensive error handling
-- Full support for all CyborgDB operations:
-  - Vector search
-  - Vector insertion and updates
-  - Vector deletion
-  - Index creation and management
-  - Filtering and metadata management
+### Redis
+
+```python
+# Store index and configuration in Redis
+client = Client(
+    index_location=DBConfig("redis", connection_string="host:127.0.0.1,port:6379,db:0"),
+    config_location=DBConfig("redis", connection_string="host:127.0.0.1,port:6379,db:0")
+)
+```
+
+### PostgreSQL
+
+```python
+# Store index and configuration in PostgreSQL
+client = Client(
+    index_location=DBConfig(
+        "postgres",
+        table_name="cyborg_indexes",
+        connection_string="postgresql://user:password@localhost/dbname"
+    ),
+    config_location=DBConfig(
+        "postgres",
+        table_name="cyborg_configs",
+        connection_string="postgresql://user:password@localhost/dbname"
+    )
+)
+```
+
+## Creating Different Index Types
+
+### IVF (Inverted File)
+
+```python
+index_config = IndexIVF(
+    dimension=384,
+    n_lists=100,
+    metric="cosine"
+)
+```
+
+### IVFPQ (Inverted File with Product Quantization)
+
+```python
+index_config = IndexIVFPQ(
+    dimension=384,
+    n_lists=100,
+    pq_dim=32,  # Subvector dimensionality
+    pq_bits=8,  # Bits per subquantizer
+    metric="cosine"
+)
+```
+
+### IVFFlat (Inverted File with Flat Storage)
+
+```python
+index_config = IndexIVFFlat(
+    dimension=384,
+    n_lists=100,
+    metric="cosine"
+)
+```
+
+## Querying with Filters
+
+```python
+# Query with metadata filters
+results = index.query(
+    query_contents="Machine learning applications",
+    filters={"category": "database", "tags": ["vector-db"]},
+    top_k=5
+)
+```
+
+## Performance Tips
+
+1. Choose the appropriate index type for your workload:
+   - IVFFlat: Higher accuracy, more memory usage
+   - IVFPQ: Less memory usage, slightly lower accuracy
+
+2. Increase the number of lists (`n_lists`) for larger datasets
+
+3. For IVFPQ, adjust `pq_dim` and `pq_bits` based on your accuracy requirements
+
+4. Use `max_cache_size` to control memory usage when loading an index
 
 ## Documentation
 
-For detailed API documentation, please see the [docs](docs/) directory.
-
-## Examples
-
-See the [examples](examples/) directory for more usage examples.
-
-## Development
-
-### Regenerating the Client
-
-If the CyborgDB API changes, you can regenerate the underlying OpenAPI client:
-
-```bash
-# Install the OpenAPI generator
-npm install @openapitools/openapi-generator-cli -g
-
-# Generate the client
-openapi-generator-cli generate -i openapi.json -g python -o .
-```
-
-Then update the wrapper if necessary.
+For detailed documentation, see the [official documentation](https://docs.cyborgdb.io).
 
 ## License
-
-MIT
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+TBD
