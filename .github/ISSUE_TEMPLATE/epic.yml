@@ -1,0 +1,68 @@
+name: New Epic
+description: Use this form to create new epics or user stories.
+title: "[EPIC]: "
+projects: cyborginc/4
+type: Feature
+assignees: []
+
+body:
+  - type: textarea
+    attributes:
+      label: Background
+      placeholder: |
+        Provide a concise but informative overview of the task. Include any relevant business or technical context, such as:
+        - Problem Statement: What issue or opportunity prompted this task?
+        - Current State: What is happening now, and why is it insufficient?
+        - Desired Outcome: What do we hope to achieve by completing this task?
+        - Stakeholders: Who cares about this and why?
+        
+        This section should help anyone new to the task quickly understand the “why” behind it and how it fits into the bigger picture.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: User Story
+      placeholder: |
+        Use clear, human-centered language. The user story should represent a real-world need or problem, focusing on the user's perspective. Avoid technical jargon unless the user persona is technical.
+          *Format: As [a specific user role or persona], I want [to perform a specific action or experience], so that [I can achieve a specific outcome or benefit].*
+        
+        *Example: As a first-time customer, I want to save my shopping cart without creating an account so that I can return later and complete my purchase.*
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Acceptance Criteria
+      placeholder: |
+        List the specific, testable conditions that must be met for this task to be considered complete. These should clearly define **DONE** and help guide both development and QA efforts.
+        - Include:
+          - Expected behavior under normal conditions
+          - Handling of edge cases or exceptions
+          - UI/UX considerations (if applicable)
+          - Security, performance, or accessibility requirements (if relevant)
+        - Each item should be independently verifiable
+        
+        - *Example: Password Reset Flow*
+          - *User can request a password reset via email*
+          - *Email contains a secure, time-limited reset link (expires after 1 hour)*
+          - *User is redirected to a reset form upon clicking the link*
+          - *Password must meet complexity rules (min 8 chars, 1 number, 1 special character)*
+          - *Error message shown if link is expired or invalid*
+          - *Confirmation message shown after successful reset*
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Additional Notes
+      placeholder: |
+        Use this section to capture any important supporting information that does not fit neatly elsewhere, such as:
+        - Related Links: JIRA tickets, PRDs, Figma mockups, Notion docs, API specs, etc.
+        - Dependencies: Is this blocked by another task? Is it part of a feature set?
+        - Technical Notes: Known constraints, decisions made, code references, or areas of complexity.
+        - Business Constraints:** Legal, compliance, timeline pressures, or customer commitments.
+
+        This section is useful for cross-functional collaborators and future maintainers who may need additional context or history.
+    validations:
+      required: false
