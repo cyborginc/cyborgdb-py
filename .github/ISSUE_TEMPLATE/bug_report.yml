@@ -1,0 +1,111 @@
+name: Bug Report
+description: Fill this form out to report a bug in `cyborgdb_py`.
+title: "[BUG]: "
+labels: bug
+projects: cyborginc/4
+type: Bug
+assignees: []
+
+body:
+  - type: checkboxes
+    attributes:
+      label: Bug Report Checklist
+      options:
+        - label: I have searched for similar issues in the repository.
+          required: true
+        - label: I have included all relevant information for reproducing the bug.
+          required: true
+
+  - type: input
+    attributes:
+      label: Summary
+      placeholder: "Enter a short description of the issue..."
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Detailed Description
+      placeholder: "Explain the issue in detail..."
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Steps to Reproduce
+      description: Provide step-by-step instructions for reproducing the issue.
+      placeholder: |
+        Example:
+        1. Initialize the `cyborgdb_core` service using Python 3.10.
+        2. Call the `POST /vector` API with the following payload.
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Observed Behavior
+      description: Describe what actually happened when the issue occurred.
+      placeholder: "What did you observe? Include error messages, unexpected responses, etc."
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Expected Behavior
+      description: Describe what you expected to happen instead.
+      placeholder: "What should the service have done?"
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: API Version
+      description: Specify the version of `cyborgdb_core`.
+      placeholder: "e.g., v0.9.0"
+
+  - type: dropdown
+    attributes:
+      label: API Language
+      description: "Select the `cyborgdb_core` API you're using."
+      options:
+        - C++
+        - Python 3.6
+        - Python 3.7
+        - Python 3.8
+        - Python 3.9
+        - Python 3.10
+        - Python 3.11
+        - Python 3.12
+        - Python 3.13
+    validations:
+      required: true
+    
+  - type: dropdown
+    attributes:
+      label: Operating System
+      description: "Select the operating system you're using."
+      options:
+        - Not OS-specific
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Severity
+      description: Indicate the impact of this bug.
+      options:
+        - Critical - Breaks functionality or crashes the service.
+        - Major - Significant issue but a workaround exists.
+        - Minor - Low impact, minor functionality affected.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Additional Context
+      description: Provide logs, error messages, or any other supporting details.
+      placeholder: "Paste logs, stack traces, or screenshots here."
