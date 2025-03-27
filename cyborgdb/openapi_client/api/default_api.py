@@ -2016,7 +2016,7 @@ class DefaultApi:
         :type _host_index: int, optional
         :return: Returns the result object.
         """ # noqa: E501
-
+        print("about to serialize")
         _param = self._query_vectors_v1_vectors_query_post_serialize(
             request=request,
             _request_auth=_request_auth,
@@ -2024,6 +2024,7 @@ class DefaultApi:
             _headers=_headers,
             _host_index=_host_index
         )
+        print("serialized")
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "QueryResponse",

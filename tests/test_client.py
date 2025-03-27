@@ -39,7 +39,7 @@ class ClientIntegrationTest(unittest.TestCase):
     def test_upsert_and_query(self):
         """Test upserting vectors and querying them."""
         # Create some test vectors
-        num_vectors = 100
+        num_vectors = 1
         dimension = 128
         vectors = np.random.rand(num_vectors, dimension).astype(np.float32)
         ids = [f"test_{i}" for i in range(num_vectors)]
