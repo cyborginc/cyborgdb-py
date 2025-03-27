@@ -45,7 +45,6 @@ __all__ = [
     "IndexIVF",
     "IndexIVFPQ",
     "IndexIVFFlat",
-    "DBLocation",
     "generate_key"
 ]
 
@@ -59,223 +58,21 @@ def generate_key() -> bytes:
     """
     return secrets.token_bytes(32)
 
+# Import from the OpenAPI generated models
+from cyborgdb.openapi_client.models import (
+    IndexIVFModel as _OpenAPIIndexIVFModel,
+    IndexIVFPQModel as _OpenAPIIndexIVFPQModel,
+    IndexIVFFlatModel as _OpenAPIIndexIVFFlatModel,
+    IndexConfig as _OpenAPIIndexConfig,
+    CreateIndexRequest as _OpenAPICreateIndexRequest
+)
 
-class DBLocation(str, Enum):
-    """Storage location for database components."""
-    
-    REDIS = "redis"
-    POSTGRES = "postgres"
-
-
-class DBConfig:
-    """
-    Configuration for a database storage component.
-    
-    Attributes:
-        location (str): Storage location type ('redis' or 'postgres').
-        table_name (Optional[str]): Name of the table (for SQL databases).
-        connection_string (Optional[str]): Connection string for the database.
-    """
-    
-    def __init__(
-        self, 
-        location: Union[str, DBLocation], 
-        table_name: Optional[str] = None,
-        connection_string: Optional[str] = None
-    ):
-        """
-        Initialize a DBConfig object.
-        
-        Args:
-            location: Storage location ('redis' or 'postgres').
-            table_name: Name of the table (for SQL databases).
-            connection_string: Connection string for the database.
-            
-        Raises:
-            ValueError: If location is not one of the supported types.
-        """
-        if isinstance(location, DBLocation):
-            location = location.value
-            
-        if location not in ["redis", "postgres"]:
-            raise ValueError(
-                f"Invalid location: {location}. Must be one of: 'redis', 'postgres'"
-            )
-            
-        self.location = location
-        self.table_name = table_name
-        self.connection_string = connection_string
-
-
-class IndexConfig:
-    """
-    Base class for index configurations.
-    
-    This is an abstract base class that provides common properties and methods
-    for all index configuration types.
-    """
-    
-    def __init__(self, dimension: int, metric: str, index_type: str, n_lists: int):
-        """
-        Initialize with index configuration parameters.
-        
-        Args:
-            dimension: The dimensionality of the vectors.
-            metric: The distance metric to use.
-            index_type: The type of index.
-            n_lists: The number of lists (coarse clusters).
-        """
-        self._dimension = dimension
-        self._metric = metric
-        self._index_type = index_type
-        self._n_lists = n_lists
-    
-    @property
-    def dimension(self) -> int:
-        """Get the dimensionality of the vectors in the index."""
-        return self._dimension
-    
-    @property
-    def metric(self) -> str:
-        """Get the distance metric used in the index."""
-        return self._metric
-    
-    @property
-    def index_type(self) -> str:
-        """Get the type of the index."""
-        return self._index_type
-    
-    def n_lists(self) -> int:
-        """Get the number of lists (coarse clusters) in the index."""
-        return self._n_lists
-    
-    def pq_dim(self) -> int:
-        """Get the Product Quantization dimension, if applicable."""
-        return 0
-    
-    def pq_bits(self) -> int:
-        """Get the number of bits per PQ code, if applicable."""
-        return 0
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to a dictionary representation."""
-        result = {
-            "dimension": self.dimension,
-            "metric": self.metric,
-            "type": self.index_type,
-            "n_lists": self.n_lists()
-        }
-        
-        # Add PQ params if applicable
-        if self.pq_dim() > 0:
-            result["pqDim"] = self.pq_dim()
-            result["pqBits"] = self.pq_bits()
-            
-        return result
-
-
-class IndexIVF(IndexConfig):
-    """
-    Configuration for an IVF (Inverted File) index.
-    
-    IVF performs coarse clustering for accelerated search.
-    """
-    
-    def __init__(self, dimension: int, n_lists: int, metric: str = "euclidean"):
-        """
-        Initialize an IVF index configuration.
-        
-        Args:
-            dimension: Dimensionality of the vectors.
-            n_lists: Number of coarse clusters (lists).
-            metric: Distance metric to use ("euclidean", "cosine", or "squared_euclidean").
-                Default is "euclidean".
-                
-        Raises:
-            ValueError: If metric is not one of the supported types.
-        """
-        if metric not in ["euclidean", "cosine", "squared_euclidean"]:
-            raise ValueError(
-                f"Invalid metric: {metric}. Must be one of: 'euclidean', 'cosine', 'squared_euclidean'"
-            )
-            
-        super().__init__(dimension, metric, "ivf", n_lists)
-
-
-class IndexIVFPQ(IndexConfig):
-    """
-    Configuration for an IVFPQ (Inverted File with Product Quantization) index.
-    
-    IVFPQ performs coarse clustering followed by product quantization for more efficient storage.
-    """
-    
-    def __init__(
-        self, 
-        dimension: int, 
-        n_lists: int, 
-        pq_dim: int, 
-        pq_bits: int,
-        metric: str = "euclidean"
-    ):
-        """
-        Initialize an IVFPQ index configuration.
-        
-        Args:
-            dimension: Dimensionality of the vectors.
-            n_lists: Number of coarse clusters (lists).
-            pq_dim: Dimensionality for product quantization.
-            pq_bits: Number of bits per quantizer.
-            metric: Distance metric to use ("euclidean", "cosine", or "squared_euclidean").
-                Default is "euclidean".
-                
-        Raises:
-            ValueError: If metric is not one of the supported types.
-        """
-        if metric not in ["euclidean", "cosine", "squared_euclidean"]:
-            raise ValueError(
-                f"Invalid metric: {metric}. Must be one of: 'euclidean', 'cosine', 'squared_euclidean'"
-            )
-            
-        super().__init__(dimension, metric, "ivfpq", n_lists)
-        self._pq_dim = pq_dim
-        self._pq_bits = pq_bits
-    
-    def pq_dim(self) -> int:
-        """Get the Product Quantization dimension."""
-        return self._pq_dim
-    
-    def pq_bits(self) -> int:
-        """Get the number of bits per PQ code."""
-        return self._pq_bits
-
-
-class IndexIVFFlat(IndexConfig):
-    """
-    Configuration for an IVFFlat (Inverted File with Flat Quantization) index.
-    
-    IVFFlat performs coarse clustering but stores the original vectors.
-    """
-    
-    def __init__(self, dimension: int, n_lists: int, metric: str = "euclidean"):
-        """
-        Initialize an IVFFlat index configuration.
-        
-        Args:
-            dimension: Dimensionality of the vectors.
-            n_lists: Number of coarse clusters (lists).
-            metric: Distance metric to use ("euclidean", "cosine", or "squared_euclidean").
-                Default is "euclidean".
-                
-        Raises:
-            ValueError: If metric is not one of the supported types.
-        """
-        if metric not in ["euclidean", "cosine", "squared_euclidean"]:
-            raise ValueError(
-                f"Invalid metric: {metric}. Must be one of: 'euclidean', 'cosine', 'squared_euclidean'"
-            )
-            
-        super().__init__(dimension, metric, "ivfflat", n_lists)
-
+# Re-export with your preferred names
+IndexIVF = _OpenAPIIndexIVFModel
+IndexIVFPQ = _OpenAPIIndexIVFPQModel
+IndexIVFFlat = _OpenAPIIndexIVFFlatModel
+IndexConfig = _OpenAPIIndexConfig
+CreateIndexRequest = _OpenAPICreateIndexRequest
 
 class EncryptedIndex:
     """
@@ -733,7 +530,7 @@ class Client:
     This class provides methods for creating, loading, and managing encrypted indexes.
     """
     
-    def __init__(self, api_url, index_location, config_location, items_location=None, api_key=None, timeout=60, cpu_threads=0, gpu_accelerate=False):
+    def __init__(self, api_url, api_key):
         # Set up the OpenAPI client configuration
         self.config = Configuration()
         self.config.host = api_url
@@ -753,39 +550,11 @@ class Client:
                 
                 print(f"Headers set: {self.api_client.default_headers}")
             
-            # Save DB configurations
-            self.index_location = index_location
-            self.config_location = config_location
-            self.items_location = items_location
-            
-            # Save compute options
-            self.cpu_threads = cpu_threads
-            self.gpu_accelerate = gpu_accelerate
-            
         except Exception as e:
             error_msg = f"Failed to initialize client: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
         
-    def _convert_to_api_config(self, index_config: IndexConfig) -> ApiIndexConfig:
-        """Convert a local IndexConfig object to the API's configuration format."""
-        config_dict = {
-            "dimension": index_config.dimension,
-            "metric": index_config.metric,
-            "type": index_config.index_type,
-            "n_lists": index_config.n_lists()
-        }
-        print("config_dict: ", config_dict)
-        
-        # Add PQ parameters if applicable
-        if hasattr(index_config, 'pq_dim') and callable(index_config.pq_dim):
-            pq_dim = index_config.pq_dim()
-            if pq_dim > 0:
-                config_dict["pq_dim"] = pq_dim
-                config_dict["pq_bits"] = index_config.pq_bits()
-                
-        return config_dict
-    
     def list_indexes(self) -> List[str]:
         """
         Get a list of all encrypted index names accessible via the client.
@@ -803,122 +572,7 @@ class Client:
             error_msg = f"Failed to list indexes: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-
-    # def create_index(
-    #     self,
-    #     index_name: str,
-    #     index_key: bytes,
-    #     index_config: Union[IndexIVFModel, IndexIVFPQModel, IndexIVFFlatModel],
-    #     embedding_model: Optional[str] = None,
-    #     max_cache_size: int = 0
-    # ) -> EncryptedIndex:
-    #     """
-    #     Create and return a new encrypted index based on the provided configuration.
-    #     """
-    #     # Validate index_key
-    #     if not isinstance(index_key, bytes) or len(index_key) != 32:
-    #         raise ValueError("index_key must be a 32-byte bytes object")
-
-    #     try:
-    #         # Convert binary key to hex string
-    #         key_hex = binascii.hexlify(index_key).decode('ascii')
-            
-    #         # Get the dictionary from the index_config
-    #         if hasattr(index_config, 'model_dump'):
-    #             index_config_dict = index_config.model_dump()
-    #         elif hasattr(index_config, 'to_dict'):
-    #             index_config_dict = index_config.to_dict()
-    #         else:
-    #             # If it's already a dictionary, use it as is
-    #             index_config_dict = index_config
-                
-    #         # Convert camelCase to snake_case for the API
-    #         converted_config = {}
-    #         for key, value in index_config_dict.items():
-    #             # Convert camelCase to snake_case
-    #             if key == "indexType":
-    #                 converted_config["index_type"] = value
-    #             elif key == "nLists":
-    #                 converted_config["n_lists"] = value
-    #             elif key == "pqDim":
-    #                 converted_config["pq_dim"] = value
-    #             elif key == "pqBits":
-    #                 converted_config["pq_bits"] = value
-    #             else:
-    #                 converted_config[key] = value
-            
-    #         # Get the index type (ivf, ivfpq, etc.)
-    #         index_type = converted_config.pop("index_type", "ivf")
-            
-    #         # Create the appropriate flat structure without nesting under model type
-    #         request_data = {
-    #             "index_name": index_name,
-    #             "index_key": key_hex,
-    #             "index_config": {
-    #                 # Include required fields directly
-    #                 "dimension": converted_config.get("dimension", 128),
-    #                 "metric": converted_config.get("metric", "euclidean"),
-    #                 "index_type": index_type,
-    #                 "n_lists": converted_config.get("n_lists", 10)
-    #             }
-    #         }
-            
-    #         # Add PQ-specific fields if needed
-    #         if index_type == "ivfpq":
-    #             request_data["index_config"]["pq_dim"] = converted_config.get("pq_dim", 8)
-    #             request_data["index_config"]["pq_bits"] = converted_config.get("pq_bits", 8)
-            
-    #         if embedding_model:
-    #             request_data["embedding_model"] = embedding_model
-            
-    #         # Import necessary modules
-    #         import requests
-            
-    #         # Get the base URL from the API client
-    #         host = self.api_client.configuration.host
-            
-    #         # Construct the full URL
-    #         url = f"{host}/v1/indexes/create"
-            
-    #         # Make the request directly
-    #         headers = {
-    #             'X-API-Key': self.config.api_key['X-API-Key'],
-    #             'Content-Type': 'application/json',
-    #             'Accept': 'application/json'
-    #         }
-            
-    #         print("Sending request data:", json.dumps(request_data, indent=2))
-            
-    #         response = requests.post(
-    #             url,
-    #             json=request_data,
-    #             headers=headers
-    #         )
-            
-    #         # Check for successful response
-    #         if not response.ok:
-    #             raise ApiException(
-    #                 status=response.status_code,
-    #                 reason=f"API returned error: {response.text}"
-    #             )
-            
-    #         return EncryptedIndex(
-    #             index_name=index_name,
-    #             index_key=index_key,
-    #             api=self.api,
-    #             api_client=self.api_client,
-    #             max_cache_size=max_cache_size
-    #         )
-
-    #     except ApiException as e:
-    #         error_msg = f"Failed to create index: {e}"
-    #         logger.error(error_msg)
-    #         raise ValueError(error_msg)
-    #     except Exception as e:
-    #         error_msg = f"Unexpected error creating index: {e}"
-    #         logger.error(error_msg)
-    #         raise ValueError(error_msg)
-        
+    
     def create_index(
         self,
         index_name: str,
@@ -937,65 +591,10 @@ class Client:
         try:
             # Convert binary key to hex string
             key_hex = binascii.hexlify(index_key).decode('ascii')
-            
-            # Extract configuration from the index_config object
-            if hasattr(index_config, 'model_dump'):
-                config_dict = index_config.model_dump()
-            elif hasattr(index_config, 'to_dict'):
-                config_dict = index_config.to_dict()
-            else:
-                config_dict = index_config
-                
-            # Determine which model type we need
-            index_type = config_dict.get("indexType", "ivf")
-            print("index_type: ", index_type)
-            
-            # Create the appropriate model object from your OpenAPI generated classes
-            # We'll need to import these classes - adjust the imports as needed
-            from cyborgdb.openapi_client.models import (
-                CreateIndexRequest, 
-                IndexConfig,
-                IndexIVFModel,
-                IndexIVFPQModel, 
-                IndexIVFFlatModel
-            )
-            
-            # Create the specific model instance based on the index type
-            if index_type == "ivf":
-                model = IndexIVFModel(
-                    dimension=config_dict.get("dimension", 128),
-                    metric=config_dict.get("metric", "euclidean"),
-                    n_lists=config_dict.get("nLists", 10)
-                )
-            elif index_type == "ivfpq":
-                model = IndexIVFPQModel(
-                    dimension=config_dict.get("dimension", 128),
-                    metric=config_dict.get("metric", "euclidean"),
-                    n_lists=config_dict.get("nLists", 10),
-                    pq_dim=config_dict.get("pqDim", 8),
-                    pq_bits=config_dict.get("pqBits", 8)
-                )
-            elif index_type == "ivfflat":
-                model = IndexIVFFlatModel(
-                    dimension=config_dict.get("dimension", 128),
-                    metric=config_dict.get("metric", "euclidean"),
-                    n_lists=config_dict.get("nLists", 10)
-                )
-            else:
-                # Default to IVF
-                model = IndexIVFModel(
-                    dimension=config_dict.get("dimension", 128),
-                    metric=config_dict.get("metric", "euclidean"),
-                    n_lists=config_dict.get("nLists", 10)
-                )
-
-            print("model: ", model)
                 
             # Create an IndexConfig instance with the appropriate model
-            index_config_obj = IndexConfig(model)
-        
-            print("index_config_obj: ", index_config_obj)
-            
+            index_config_obj = IndexConfig(index_config)
+
             # Create the complete request object
             request = CreateIndexRequest(
                 index_name=index_name,
@@ -1003,7 +602,7 @@ class Client:
                 index_config=index_config_obj,
                 embedding_model=embedding_model
             )
-            print("index_config: ", index_config)
+
             # Call the generated API method
             response = self.api.create_index_v1_indexes_create_post(
                 create_index_request=request,
