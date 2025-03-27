@@ -4,8 +4,6 @@ import time
 from cyborgdb.client.client import (
     Client, 
     EncryptedIndex,
-    DBConfig, 
-    DBLocation,
     IndexIVF, 
     IndexIVFPQ,
     IndexIVFFlat,
@@ -18,13 +16,8 @@ class ClientIntegrationTest(unittest.TestCase):
     def setUp(self):
         """Set up the test environment."""
         # Create real client (no mocking)
-        api_url = "http://localhost:8000"  # Adjust to your actual API URL
-        redis_conn = "host:127.0.0.1,port:6379,db:0"  # Adjust to your actual Redis connection
-        
         self.client = Client(
-            api_url=api_url,
-            index_location=DBConfig(DBLocation.REDIS, connection_string=redis_conn),
-            config_location=DBConfig(DBLocation.REDIS, connection_string=redis_conn),
+            api_url="http://localhost:8000",
             api_key="C2kFe-ML2wDCYS9tgafnRxrm7rGlmRpZRPWgGUqWvP4"
         )
 

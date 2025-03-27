@@ -8,8 +8,6 @@ from cyborgdb.client.client import (
     IndexIVF,
     IndexIVFPQ,
     IndexIVFFlat,
-    DBConfig,
-    DBLocation,
     generate_key
 )
 
@@ -20,7 +18,5 @@ __all__ = [
     "IndexIVF",
     "IndexIVFPQ",
     "IndexIVFFlat",
-    "DBConfig",
-    "DBLocation",
     "generate_key"
 ]
