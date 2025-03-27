@@ -281,7 +281,6 @@ class EncryptedIndex:
             error_msg = f"Failed to train index: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-    
     def upsert(
         self, 
         arg1: Union[List[Dict[str, Any]], List[str], np.ndarray],
@@ -294,9 +293,9 @@ class EncryptedIndex:
         
         This method can be called in one of two ways:
         1. With a list of dictionaries, each containing 'id', 'vector', and optional 'contents'
-           and 'metadata'.
-           - If the index was created with an embedding model and 'vector' is not provided,
-             'contents' will be automatically embedded.
+        and 'metadata'.
+        - If the index was created with an embedding model and 'vector' is not provided,
+            'contents' will be automatically embedded.
         2. With separate IDs and vectors arrays.
         
         Args:
@@ -361,14 +360,25 @@ class EncryptedIndex:
                         "vector": vector
                     })
             
-            # Create the upsert request
+            # Import the UpsertRequest model from the OpenAPI-generated code
+            from cyborgdb.openapi_client.models import UpsertRequest
+            
+            # Create the upsert request with all required fields
             request = UpsertRequest(
                 items=items,
-                key=self._key_to_hex()
+                index_key=self._key_to_hex(),
+                index_name=self._index_name
             )
             
-            # Make the API call
-            self._api.upsert_vectors_v1_vectors_upsert_post(self._index_name, request)
+            # Make the API call with the correct parameter
+            self._api.upsert_vectors_v1_vectors_upsert_post(
+                upsert_request=request,  # This is the only required parameter
+                _headers={
+                    'X-API-Key': self._api_client.configuration.api_key['X-API-Key'],
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            )
             
         except ApiException as e:
             error_msg = f"Failed to upsert items: {e}"
@@ -377,7 +387,7 @@ class EncryptedIndex:
         except (TypeError, ValueError) as e:
             logger.error(str(e))
             raise
-    
+
     def delete(self, ids: List[str]) -> None:
         """
         Delete the specified encrypted items stored in the index.
@@ -416,31 +426,6 @@ class EncryptedIndex:
     ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
         """
         Retrieve the nearest neighbors for given query vectors.
-        
-        Args:
-            query_vector: Query vectors to search. Can be a 1D array for a single query
-                or a 2D array for multiple queries.
-            query_contents: Text contents to search if auto-embedding is enabled.
-            top_k: Number of nearest neighbors to return for each query. Default is 100.
-            n_probes: Number of lists to probe during the query. Default is 1.
-            filters: JSON-like dictionary specifying metadata filters. Default is None.
-            include: Fields to include in results. Can contain "distance", "metadata".
-                Default is ["distance", "metadata"].
-            greedy: Whether to use greedy search. Default is False.
-            
-        Returns:
-            For a single query, returns a list of dictionaries where each dictionary contains
-            'id', 'distance', and optionally 'metadata'. For multiple queries, returns a list
-            of such lists.
-            
-        Raises:
-            ValueError: If the query vectors have incompatible dimensions with the index,
-                if the index was not created or loaded yet, or if the query could not be executed.
-            TypeError: If query_vectors is not a valid type.
-            
-        Note:
-            If this function is called on an index where train() has not been executed, the query will
-            use encrypted exhaustive search, which may be slower.
         """
         try:
             # Process query vectors if provided
@@ -466,8 +451,14 @@ class EncryptedIndex:
             if filters:
                 filters_json = json.dumps(filters)
             
-            # Create query request
-            request = QueryRequest(
+            # Import necessary models
+            from cyborgdb.openapi_client.models import (
+                Request, 
+                QueryRequest
+            )
+            
+            # First create a QueryRequest object
+            query_request = QueryRequest(
                 vectors=query_vectors_list,
                 contents=query_contents,
                 top_k=top_k,
@@ -475,48 +466,68 @@ class EncryptedIndex:
                 filters=filters_json,
                 include=include,
                 greedy=greedy,
-                key=self._key_to_hex()
+                index_key=self._key_to_hex(),
+                index_name=self._index_name
             )
             
-            # Execute query
-            response = self._api.query_vectors_v1_vectors_query_post(self._index_name, request)
+            # Then create a Request object with QueryRequest as its actual_instance
+            request = Request(query_request)
+            
+            print("about to query")
+            
+            # Execute query with the proper Request object
+            response = self._api.query_vectors_v1_vectors_query_post(
+                request=request,
+                _headers={
+                    'X-API-Key': self._api_client.configuration.api_key['X-API-Key'],
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            )
+            
+            print("got response")
             
             # Process results
             results = []
-            for query_results in response.results:
-                query_items = []
-                for item in query_results:
-                    result_item = {
-                        "id": item.id
-                    }
-                    
-                    if "distance" in include:
-                        result_item["distance"] = item.distance
+            if hasattr(response, 'results') and response.results:
+                for query_results in response.results:
+                    query_items = []
+                    for item in query_results:
+                        result_item = {
+                            "id": item.id if hasattr(item, 'id') else None
+                        }
                         
-                    if "metadata" in include and hasattr(item, "metadata"):
-                        # Parse metadata JSON if needed
-                        if isinstance(item.metadata, str):
-                            try:
-                                result_item["metadata"] = json.loads(item.metadata)
-                            except json.JSONDecodeError:
-                                result_item["metadata"] = {}
-                        else:
-                            result_item["metadata"] = item.metadata
+                        if "distance" in include and hasattr(item, 'distance'):
+                            result_item["distance"] = item.distance
                             
-                    query_items.append(result_item)
-                    
-                results.append(query_items)
+                        if "metadata" in include and hasattr(item, 'metadata') and item.metadata:
+                            # Parse metadata JSON if needed
+                            metadata = item.metadata
+                            if isinstance(metadata, str):
+                                try:
+                                    result_item["metadata"] = json.loads(metadata)
+                                except json.JSONDecodeError:
+                                    result_item["metadata"] = {}
+                            else:
+                                result_item["metadata"] = metadata
+                                
+                        query_items.append(result_item)
+                        
+                    results.append(query_items)
             
             # For single query, return just the results list instead of list of lists
             return results[0] if len(results) == 1 else results
-            
+                
         except ApiException as e:
             error_msg = f"Query failed: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (TypeError, ValueError) as e:
-            logger.error(str(e))
-            raise
+        except Exception as e:
+            error_msg = f"Unexpected error in query: {str(e)}"
+            logger.error(error_msg)
+            import traceback
+            logger.error(traceback.format_exc())
+            raise ValueError(error_msg)
     
     def _key_to_hex(self) -> str:
         """Convert the binary key to a hex string for API calls."""
