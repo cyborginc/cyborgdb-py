@@ -19,8 +19,8 @@ import pprint
 import re  # noqa: F401
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
 from typing import Optional
-from openapi_client.models.batch_query_request import BatchQueryRequest
-from openapi_client.models.query_request import QueryRequest
+from cyborgdb.openapi_client.models.batch_query_request import BatchQueryRequest
+from cyborgdb.openapi_client.models.query_request import QueryRequest
 from typing import Union, Any, List, Set, TYPE_CHECKING, Optional, Dict
 from typing_extensions import Literal, Self
 from pydantic import Field

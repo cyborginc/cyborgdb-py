@@ -19,7 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict
 from typing import Any, ClassVar, Dict, List
-from openapi_client.models.query_result_item import QueryResultItem
+from cyborgdb.openapi_client.models.query_result_item import QueryResultItem
 from typing import Optional, Set
 from typing_extensions import Self
 

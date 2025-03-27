@@ -13,18 +13,24 @@ import logging
 from enum import Enum
 from pathlib import Path
 import binascii
+from pydantic import ValidationError
+from cyborgdb.openapi_client.models.create_index_request import CreateIndexRequest
+
 
 # Import the OpenAPI generated client
 try:
-    from openapi_client.api_client import ApiClient, Configuration
-    from openapi_client.api.default_api import DefaultApi
-    from openapi_client.model.index_config import IndexConfig as ApiIndexConfig
-    from openapi_client.model.index_create_request import IndexCreateRequest
-    from openapi_client.model.query_request import QueryRequest
-    from openapi_client.model.upsert_request import UpsertRequest
-    from openapi_client.model.train_request import TrainRequest
-    from openapi_client.model.item import Item
-    from openapi_client.exceptions import ApiException
+    from cyborgdb.openapi_client.api_client import ApiClient, Configuration
+    from cyborgdb.openapi_client.api.default_api import DefaultApi
+    from cyborgdb.openapi_client.models.index_config import IndexConfig as ApiIndexConfig
+    from cyborgdb.openapi_client.models.create_index_request import CreateIndexRequest as IndexCreateRequest
+    from cyborgdb.openapi_client.models.query_request import QueryRequest
+    from cyborgdb.openapi_client.models.upsert_request import UpsertRequest
+    from cyborgdb.openapi_client.models.train_request import TrainRequest
+    from cyborgdb.openapi_client.models.vector_item import VectorItem as Item
+    from cyborgdb.openapi_client.models.index_ivf_flat_model import IndexIVFFlatModel
+    from cyborgdb.openapi_client.models.index_ivf_model import IndexIVFModel
+    from cyborgdb.openapi_client.models.index_ivfpq_model import IndexIVFPQModel
+    from cyborgdb.openapi_client.exceptions import ApiException
 except ImportError:
     raise ImportError(
         "Failed to import openapi_client. Make sure the OpenAPI client library is properly installed."
@@ -156,8 +162,8 @@ class IndexConfig:
         result = {
             "dimension": self.dimension,
             "metric": self.metric,
-            "indexType": self.index_type,
-            "nLists": self.n_lists()
+            "type": self.index_type,
+            "n_lists": self.n_lists()
         }
         
         # Add PQ params if applicable
@@ -315,7 +321,7 @@ class EncryptedIndex:
         # Retrieve index info if not already cached
         if not hasattr(self, '_index_type_cached'):
             try:
-                response = self._api.get_index_info(
+                response = self._api.get_index_info_v1_indexes_describe_post(
                     self._index_name, 
                     key=self._key_to_hex()
                 )
@@ -332,7 +338,7 @@ class EncryptedIndex:
         # Retrieve index info if not already cached
         if not self._index_config:
             try:
-                response = self._api.get_index_info(
+                response = self._api.get_index_info_v1_indexes_describe_post(
                     self._index_name, 
                     key=self._key_to_hex()
                 )
@@ -371,7 +377,7 @@ class EncryptedIndex:
             ValueError: If the index could not be deleted.
         """
         try:
-            self._api.delete_index(
+            self._api.delete_index_v1_indexes_delete_post(
                 self._index_name,
                 key=self._key_to_hex()
             )
@@ -401,7 +407,7 @@ class EncryptedIndex:
             ValueError: If the items could not be retrieved or decrypted.
         """
         try:
-            response = self._api.get_items(
+            response = self._api.get_vectors_v1_vectors_get_post(
                 self._index_name,
                 ids=ids,
                 key=self._key_to_hex(),
@@ -473,7 +479,7 @@ class EncryptedIndex:
                 key=self._key_to_hex()
             )
             
-            self._api.train_index(self._index_name, request)
+            self._api.train_index_v1_indexes_train_post(self._index_name, request)
         except ApiException as e:
             error_msg = f"Failed to train index: {e}"
             logger.error(error_msg)
@@ -565,7 +571,7 @@ class EncryptedIndex:
             )
             
             # Make the API call
-            self._api.upsert_items(self._index_name, request)
+            self._api.upsert_vectors_v1_vectors_upsert_post(self._index_name, request)
             
         except ApiException as e:
             error_msg = f"Failed to upsert items: {e}"
@@ -591,7 +597,7 @@ class EncryptedIndex:
             ValueError: If the items could not be deleted.
         """
         try:
-            self._api.delete_items(
+            self._api.delete_vectors_v1_vectors_delete_post(
                 self._index_name,
                 ids=ids,
                 key=self._key_to_hex()
@@ -676,7 +682,7 @@ class EncryptedIndex:
             )
             
             # Execute query
-            response = self._api.query_index(self._index_name, request)
+            response = self._api.query_vectors_v1_vectors_query_post(self._index_name, request)
             
             # Process results
             results = []
@@ -727,47 +733,25 @@ class Client:
     This class provides methods for creating, loading, and managing encrypted indexes.
     """
     
-    def __init__(
-        self,
-        api_url: str,
-        index_location: DBConfig,
-        config_location: DBConfig,
-        items_location: Optional[DBConfig] = None,
-        api_key: Optional[str] = None,
-        timeout: int = 60,
-        cpu_threads: int = 0,
-        gpu_accelerate: bool = False
-    ):
-        """
-        Initialize a new instance of Client.
-        
-        Args:
-            api_url: Base URL of the CyborgDB API server (e.g., "https://api.cyborgdb.com/v1")
-            index_location: Configuration for index storage location.
-            config_location: Configuration for index metadata storage.
-            items_location: Configuration for future item storage. Default is None.
-            api_key: Optional API key for authentication
-            timeout: Request timeout in seconds
-            cpu_threads: Number of CPU threads to use (0 = all cores). Default is 0.
-            gpu_accelerate: Whether to enable GPU acceleration (requires CUDA). Default is False.
-            
-        Raises:
-            ValueError: If the client could not be initialized.
-        """
+    def __init__(self, api_url, index_location, config_location, items_location=None, api_key=None, timeout=60, cpu_threads=0, gpu_accelerate=False):
         # Set up the OpenAPI client configuration
         self.config = Configuration()
         self.config.host = api_url
-        self.config.timeout = timeout
         
         # Add authentication if provided
         if api_key:
-            self.config.api_key = {'ApiKey': api_key}
-            self.config.api_key_prefix = {'ApiKey': 'Bearer'}
+            self.config.api_key = {'X-API-Key': api_key}
         
         # Create the API client
         try:
             self.api_client = ApiClient(self.config)
             self.api = DefaultApi(self.api_client)
+            
+            # If API key was provided, also set it directly in default headers
+            if api_key:
+                self.api_client.default_headers['X-API-Key'] = api_key
+                
+                print(f"Headers set: {self.api_client.default_headers}")
             
             # Save DB configurations
             self.index_location = index_location
@@ -782,6 +766,25 @@ class Client:
             error_msg = f"Failed to initialize client: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
+        
+    def _convert_to_api_config(self, index_config: IndexConfig) -> ApiIndexConfig:
+        """Convert a local IndexConfig object to the API's configuration format."""
+        config_dict = {
+            "dimension": index_config.dimension,
+            "metric": index_config.metric,
+            "type": index_config.index_type,
+            "n_lists": index_config.n_lists()
+        }
+        print("config_dict: ", config_dict)
+        
+        # Add PQ parameters if applicable
+        if hasattr(index_config, 'pq_dim') and callable(index_config.pq_dim):
+            pq_dim = index_config.pq_dim()
+            if pq_dim > 0:
+                config_dict["pq_dim"] = pq_dim
+                config_dict["pq_bits"] = index_config.pq_bits()
+                
+        return config_dict
     
     def list_indexes(self) -> List[str]:
         """
@@ -794,94 +797,223 @@ class Client:
             ValueError: If the list of indexes could not be retrieved.
         """
         try:
-            response = self.api.list_indexes()
+            response = self.api.list_indexes_v1_indexes_list_get()
             return response.indexes
         except ApiException as e:
             error_msg = f"Failed to list indexes: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-    
+
+    # def create_index(
+    #     self,
+    #     index_name: str,
+    #     index_key: bytes,
+    #     index_config: Union[IndexIVFModel, IndexIVFPQModel, IndexIVFFlatModel],
+    #     embedding_model: Optional[str] = None,
+    #     max_cache_size: int = 0
+    # ) -> EncryptedIndex:
+    #     """
+    #     Create and return a new encrypted index based on the provided configuration.
+    #     """
+    #     # Validate index_key
+    #     if not isinstance(index_key, bytes) or len(index_key) != 32:
+    #         raise ValueError("index_key must be a 32-byte bytes object")
+
+    #     try:
+    #         # Convert binary key to hex string
+    #         key_hex = binascii.hexlify(index_key).decode('ascii')
+            
+    #         # Get the dictionary from the index_config
+    #         if hasattr(index_config, 'model_dump'):
+    #             index_config_dict = index_config.model_dump()
+    #         elif hasattr(index_config, 'to_dict'):
+    #             index_config_dict = index_config.to_dict()
+    #         else:
+    #             # If it's already a dictionary, use it as is
+    #             index_config_dict = index_config
+                
+    #         # Convert camelCase to snake_case for the API
+    #         converted_config = {}
+    #         for key, value in index_config_dict.items():
+    #             # Convert camelCase to snake_case
+    #             if key == "indexType":
+    #                 converted_config["index_type"] = value
+    #             elif key == "nLists":
+    #                 converted_config["n_lists"] = value
+    #             elif key == "pqDim":
+    #                 converted_config["pq_dim"] = value
+    #             elif key == "pqBits":
+    #                 converted_config["pq_bits"] = value
+    #             else:
+    #                 converted_config[key] = value
+            
+    #         # Get the index type (ivf, ivfpq, etc.)
+    #         index_type = converted_config.pop("index_type", "ivf")
+            
+    #         # Create the appropriate flat structure without nesting under model type
+    #         request_data = {
+    #             "index_name": index_name,
+    #             "index_key": key_hex,
+    #             "index_config": {
+    #                 # Include required fields directly
+    #                 "dimension": converted_config.get("dimension", 128),
+    #                 "metric": converted_config.get("metric", "euclidean"),
+    #                 "index_type": index_type,
+    #                 "n_lists": converted_config.get("n_lists", 10)
+    #             }
+    #         }
+            
+    #         # Add PQ-specific fields if needed
+    #         if index_type == "ivfpq":
+    #             request_data["index_config"]["pq_dim"] = converted_config.get("pq_dim", 8)
+    #             request_data["index_config"]["pq_bits"] = converted_config.get("pq_bits", 8)
+            
+    #         if embedding_model:
+    #             request_data["embedding_model"] = embedding_model
+            
+    #         # Import necessary modules
+    #         import requests
+            
+    #         # Get the base URL from the API client
+    #         host = self.api_client.configuration.host
+            
+    #         # Construct the full URL
+    #         url = f"{host}/v1/indexes/create"
+            
+    #         # Make the request directly
+    #         headers = {
+    #             'X-API-Key': self.config.api_key['X-API-Key'],
+    #             'Content-Type': 'application/json',
+    #             'Accept': 'application/json'
+    #         }
+            
+    #         print("Sending request data:", json.dumps(request_data, indent=2))
+            
+    #         response = requests.post(
+    #             url,
+    #             json=request_data,
+    #             headers=headers
+    #         )
+            
+    #         # Check for successful response
+    #         if not response.ok:
+    #             raise ApiException(
+    #                 status=response.status_code,
+    #                 reason=f"API returned error: {response.text}"
+    #             )
+            
+    #         return EncryptedIndex(
+    #             index_name=index_name,
+    #             index_key=index_key,
+    #             api=self.api,
+    #             api_client=self.api_client,
+    #             max_cache_size=max_cache_size
+    #         )
+
+    #     except ApiException as e:
+    #         error_msg = f"Failed to create index: {e}"
+    #         logger.error(error_msg)
+    #         raise ValueError(error_msg)
+    #     except Exception as e:
+    #         error_msg = f"Unexpected error creating index: {e}"
+    #         logger.error(error_msg)
+    #         raise ValueError(error_msg)
+        
     def create_index(
         self,
         index_name: str,
         index_key: bytes,
-        index_config: Union[IndexConfig, IndexIVF, IndexIVFPQ, IndexIVFFlat],
+        index_config: Union[IndexIVFModel, IndexIVFPQModel, IndexIVFFlatModel],
         embedding_model: Optional[str] = None,
         max_cache_size: int = 0
     ) -> EncryptedIndex:
         """
         Create and return a new encrypted index based on the provided configuration.
-        
-        Args:
-            index_name: Name of the index to create (must be unique).
-            index_key: 32-byte encryption key for the index, used to secure index data.
-            index_config: Configuration for the index type.
-            embedding_model: Name of the SentenceTransformer model to use for text embeddings.
-                Default is None.
-            max_cache_size: Maximum size for the local cache. Default is 0.
-            
-        Returns:
-            An EncryptedIndex instance for the newly created index.
-            
-        Raises:
-            ValueError: If the index name is not unique, if the index configuration is invalid,
-                or if the index could not be created.
         """
         # Validate index_key
         if not isinstance(index_key, bytes) or len(index_key) != 32:
             raise ValueError("index_key must be a 32-byte bytes object")
-        
+
         try:
-            # Convert index_config to API format
-            api_config = self._convert_to_api_config(index_config)
-            
             # Convert binary key to hex string
             key_hex = binascii.hexlify(index_key).decode('ascii')
             
-            # Create database location configs
-            db_config = {
-                "indexLocation": {
-                    "location": self.index_location.location,
-                    "tableName": self.index_location.table_name,
-                    "connectionString": self.index_location.connection_string
-                },
-                "configLocation": {
-                    "location": self.config_location.location,
-                    "tableName": self.config_location.table_name,
-                    "connectionString": self.config_location.connection_string
+            # Extract configuration from the index_config object
+            if hasattr(index_config, 'model_dump'):
+                config_dict = index_config.model_dump()
+            elif hasattr(index_config, 'to_dict'):
+                config_dict = index_config.to_dict()
+            else:
+                config_dict = index_config
+                
+            # Determine which model type we need
+            index_type = config_dict.get("indexType", "ivf")
+            print("index_type: ", index_type)
+            
+            # Create the appropriate model object from your OpenAPI generated classes
+            # We'll need to import these classes - adjust the imports as needed
+            from cyborgdb.openapi_client.models import (
+                CreateIndexRequest, 
+                IndexConfig,
+                IndexIVFModel,
+                IndexIVFPQModel, 
+                IndexIVFFlatModel
+            )
+            
+            # Create the specific model instance based on the index type
+            if index_type == "ivf":
+                model = IndexIVFModel(
+                    dimension=config_dict.get("dimension", 128),
+                    metric=config_dict.get("metric", "euclidean"),
+                    n_lists=config_dict.get("nLists", 10)
+                )
+            elif index_type == "ivfpq":
+                model = IndexIVFPQModel(
+                    dimension=config_dict.get("dimension", 128),
+                    metric=config_dict.get("metric", "euclidean"),
+                    n_lists=config_dict.get("nLists", 10),
+                    pq_dim=config_dict.get("pqDim", 8),
+                    pq_bits=config_dict.get("pqBits", 8)
+                )
+            elif index_type == "ivfflat":
+                model = IndexIVFFlatModel(
+                    dimension=config_dict.get("dimension", 128),
+                    metric=config_dict.get("metric", "euclidean"),
+                    n_lists=config_dict.get("nLists", 10)
+                )
+            else:
+                # Default to IVF
+                model = IndexIVFModel(
+                    dimension=config_dict.get("dimension", 128),
+                    metric=config_dict.get("metric", "euclidean"),
+                    n_lists=config_dict.get("nLists", 10)
+                )
+
+            print("model: ", model)
+                
+            # Create an IndexConfig instance with the appropriate model
+            index_config_obj = IndexConfig(model)
+        
+            print("index_config_obj: ", index_config_obj)
+            
+            # Create the complete request object
+            request = CreateIndexRequest(
+                index_name=index_name,
+                index_key=key_hex,
+                index_config=index_config_obj,
+                embedding_model=embedding_model
+            )
+            print("index_config: ", index_config)
+            # Call the generated API method
+            response = self.api.create_index_v1_indexes_create_post(
+                create_index_request=request,
+                _headers={
+                    'X-API-Key': self.config.api_key['X-API-Key'],
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
                 }
-            }
+            )
             
-            # Add items location if provided
-            if self.items_location:
-                db_config["itemsLocation"] = {
-                    "location": self.items_location.location,
-                    "tableName": self.items_location.table_name,
-                    "connectionString": self.items_location.connection_string
-                }
-                
-            # Create the request
-            request = {
-                "name": index_name,
-                "key": key_hex,
-                "config": api_config,
-                "dbConfig": db_config,
-                "cpuThreads": self.cpu_threads,
-                "gpuAccelerate": self.gpu_accelerate
-            }
-            
-            # Add embedding model if provided
-            if embedding_model:
-                request["embeddingModel"] = embedding_model
-                
-            # Add max cache size if specified
-            if max_cache_size > 0:
-                request["maxCacheSize"] = max_cache_size
-                
-            # Create the index
-            self.api.create_index(request)
-            
-            # Return an EncryptedIndex instance
             return EncryptedIndex(
                 index_name=index_name,
                 index_key=index_key,
@@ -889,70 +1021,12 @@ class Client:
                 api_client=self.api_client,
                 max_cache_size=max_cache_size
             )
-            
+
         except ApiException as e:
             error_msg = f"Failed to create index: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-    
-    def load_index(
-        self,
-        index_name: str,
-        index_key: bytes,
-        max_cache_size: int = 0
-    ) -> EncryptedIndex:
-        """
-        Load an existing encrypted index and return an instance of EncryptedIndex.
-        
-        Args:
-            index_name: Name of the index to load.
-            index_key: 32-byte encryption key for the index, used to secure index data.
-            max_cache_size: Maximum size for the local cache. Default is 0.
-            
-        Returns:
-            An EncryptedIndex instance for the loaded index.
-            
-        Raises:
-            ValueError: If the index name does not exist, if the index could not be loaded
-                or decrypted.
-        """
-        # Validate index_key
-        if not isinstance(index_key, bytes) or len(index_key) != 32:
-            raise ValueError("index_key must be a 32-byte bytes object")
-        
-        try:
-            # Verify the index exists
-            indexes = self.list_indexes()
-            if index_name not in indexes:
-                raise ValueError(f"Index '{index_name}' does not exist")
-            
-            # Return an EncryptedIndex instance
-            return EncryptedIndex(
-                index_name=index_name,
-                index_key=index_key,
-                api=self.api,
-                api_client=self.api_client,
-                max_cache_size=max_cache_size
-            )
-        except ApiException as e:
-            error_msg = f"Failed to load index: {e}"
+        except ValidationError as ve:
+            error_msg = f"Validation error while creating index: {ve}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-    
-    def _convert_to_api_config(self, index_config: IndexConfig) -> Dict[str, Any]:
-        """Convert a local IndexConfig object to the API's configuration format."""
-        config_dict = {
-            "dimension": index_config.dimension,
-            "metric": index_config.metric,
-            "indexType": index_config.index_type,
-            "nLists": index_config.n_lists()
-        }
-        
-        # Add PQ parameters if applicable
-        if hasattr(index_config, 'pq_dim') and callable(index_config.pq_dim):
-            pq_dim = index_config.pq_dim()
-            if pq_dim > 0:
-                config_dict["pqDim"] = pq_dim
-                config_dict["pqBits"] = index_config.pq_bits()
-                
-        return config_dict

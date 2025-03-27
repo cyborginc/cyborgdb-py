@@ -19,9 +19,9 @@ import pprint
 import re  # noqa: F401
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
 from typing import Optional
-from openapi_client.models.index_ivf_flat_model import IndexIVFFlatModel
-from openapi_client.models.index_ivf_model import IndexIVFModel
-from openapi_client.models.index_ivfpq_model import IndexIVFPQModel
+from cyborgdb.openapi_client.models.index_ivf_flat_model import IndexIVFFlatModel
+from cyborgdb.openapi_client.models.index_ivf_model import IndexIVFModel
+from cyborgdb.openapi_client.models.index_ivfpq_model import IndexIVFPQModel
 from typing import Union, Any, List, Set, TYPE_CHECKING, Optional, Dict
 from typing_extensions import Literal, Self
 from pydantic import Field

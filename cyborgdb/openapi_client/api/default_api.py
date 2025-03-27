@@ -18,23 +18,23 @@ from typing_extensions import Annotated
 
 from pydantic import StrictStr
 from typing import Dict
-from openapi_client.models.create_index_request import CreateIndexRequest
-from openapi_client.models.cyborgdb_service_api_schemas_index_success_response_model import CyborgdbServiceApiSchemasIndexSuccessResponseModel
-from openapi_client.models.cyborgdb_service_api_schemas_vectors_success_response_model import CyborgdbServiceApiSchemasVectorsSuccessResponseModel
-from openapi_client.models.delete_request import DeleteRequest
-from openapi_client.models.get_request import GetRequest
-from openapi_client.models.get_response_model import GetResponseModel
-from openapi_client.models.index_info_response_model import IndexInfoResponseModel
-from openapi_client.models.index_list_response_model import IndexListResponseModel
-from openapi_client.models.index_operation_request import IndexOperationRequest
-from openapi_client.models.query_response import QueryResponse
-from openapi_client.models.request import Request
-from openapi_client.models.train_request import TrainRequest
-from openapi_client.models.upsert_request import UpsertRequest
+from cyborgdb.openapi_client.models.create_index_request import CreateIndexRequest
+from cyborgdb.openapi_client.models.cyborgdb_service_api_schemas_index_success_response_model import CyborgdbServiceApiSchemasIndexSuccessResponseModel
+from cyborgdb.openapi_client.models.cyborgdb_service_api_schemas_vectors_success_response_model import CyborgdbServiceApiSchemasVectorsSuccessResponseModel
+from cyborgdb.openapi_client.models.delete_request import DeleteRequest
+from cyborgdb.openapi_client.models.get_request import GetRequest
+from cyborgdb.openapi_client.models.get_response_model import GetResponseModel
+from cyborgdb.openapi_client.models.index_info_response_model import IndexInfoResponseModel
+from cyborgdb.openapi_client.models.index_list_response_model import IndexListResponseModel
+from cyborgdb.openapi_client.models.index_operation_request import IndexOperationRequest
+from cyborgdb.openapi_client.models.query_response import QueryResponse
+from cyborgdb.openapi_client.models.request import Request
+from cyborgdb.openapi_client.models.train_request import TrainRequest
+from cyborgdb.openapi_client.models.upsert_request import UpsertRequest
 
-from openapi_client.api_client import ApiClient, RequestSerialized
-from openapi_client.api_response import ApiResponse
-from openapi_client.rest import RESTResponseType
+from cyborgdb.openapi_client.api_client import ApiClient, RequestSerialized
+from cyborgdb.openapi_client.api_response import ApiResponse
+from cyborgdb.openapi_client.rest import RESTResponseType
 
 
 class DefaultApi:
@@ -94,6 +94,7 @@ class DefaultApi:
         :type _host_index: int, optional
         :return: Returns the result object.
         """ # noqa: E501
+        print("headers: " , _headers)
 
         _param = self._create_index_v1_indexes_create_post_serialize(
             create_index_request=create_index_request,
@@ -290,7 +291,7 @@ class DefaultApi:
         if create_index_request is not None:
             _body_params = create_index_request
 
-
+        print("_body_params: " , _body_params)
         # set the HTTP header `Accept`
         if 'Accept' not in _header_params:
             _header_params['Accept'] = self.api_client.select_header_accept(
