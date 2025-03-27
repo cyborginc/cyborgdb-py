@@ -1,0 +1,9 @@
+{ 
+    'index_name': 'test_index_1743017166', 
+    'index_key': 'bf0b4581609582b4b2baef488ac5f2aef8b7c08787b87810dd2b8840498899c8', 
+    'index_config': { 
+        'dimension': 128, 
+        'metric': 'euclidean', 
+        'type': 'ivf', 
+        'n_lists': 10 }
+    , 'embedding_model': '' }

@@ -19,7 +19,7 @@ import ssl
 
 import urllib3
 
-from openapi_client.exceptions import ApiException, ApiValueError
+from cyborgdb.openapi_client.exceptions import ApiException, ApiValueError
 
 SUPPORTED_SOCKS_PROXIES = {"socks5", "socks5h", "socks4", "socks4a"}
 RESTResponseType = urllib3.HTTPResponse
@@ -76,7 +76,6 @@ class RESTClientObject:
             "ca_certs": configuration.ssl_ca_cert,
             "cert_file": configuration.cert_file,
             "key_file": configuration.key_file,
-            "ca_cert_data": configuration.ca_cert_data,
         }
         if configuration.assert_hostname is not None:
             pool_args['assert_hostname'] = (
