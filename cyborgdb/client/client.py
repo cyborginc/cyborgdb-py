@@ -216,7 +216,6 @@ class EncryptedIndex:
                 ids=ids,
                 include=include
             )
-            print("get_request: ", get_request)
             response = self._api.get_vectors_v1_vectors_get_post(
                 get_request=get_request,
                 _headers={
@@ -487,8 +486,6 @@ class EncryptedIndex:
                 raise ValueError("You must provide `query_vector`, `query_vectors`, or `query_contents`.")
 
             # Construct query request
-            print("top k =", top_k)
-            print("vector_list:", vector_list)
             query_request = BatchQueryRequest(
                 index_key=self._key_to_hex(),
                 index_name=self._index_name,
@@ -504,7 +501,6 @@ class EncryptedIndex:
             request = Request(query_request)
 
             # Execute query via REST
-            print("calling query_vectors_v1_vectors_query_post")
             try:
                 # Get raw response instead of deserialized object
                 raw_response = self._api.query_vectors_v1_vectors_query_post_without_preload_content(
@@ -595,8 +591,6 @@ class Client:
             # If API key was provided, also set it directly in default headers
             if api_key:
                 self.api_client.default_headers['X-API-Key'] = api_key
-                
-                print(f"Headers set: {self.api_client.default_headers}")
             
         except Exception as e:
             error_msg = f"Failed to initialize client: {e}"

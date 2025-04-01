@@ -1234,7 +1234,6 @@ class DefaultApi:
         :type _host_index: int, optional
         :return: Returns the result object.
         """ # noqa: E501
-        print("before serialization")
         _param = self._get_vectors_v1_vectors_get_post_serialize(
             get_request=get_request,
             _request_auth=_request_auth,
@@ -1242,7 +1241,6 @@ class DefaultApi:
             _headers=_headers,
             _host_index=_host_index
         )
-        print("AFTER serialization")
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "GetResponseModel",
@@ -2033,7 +2031,6 @@ class DefaultApi:
             *_param,
             _request_timeout=_request_timeout
         )
-        print("response_data: ", response_data )
         response_data.read()
         return self.api_client.response_deserialize(
             response_data=response_data,

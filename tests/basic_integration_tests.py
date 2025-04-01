@@ -16,7 +16,6 @@ def check_query_results(results, neighbors, num_queries):
 
     # Convert the results to numpy array
     result_ids = np.array(result_ids)
-    print("result_ids", result_ids)
     if neighbors.shape != result_ids.shape:
         raise ValueError(f"The shapes of the neighbors and results do not match: {neighbors.shape} != {result_ids.shape}")
 
@@ -156,11 +155,8 @@ class TestUnitFlow(unittest.TestCase):
 
     def test_02_untrained_query_no_metadata(self):
         # UNTRAINED QUERY (NO METADATA)
-        print("Query 02: ")
         results = self.index.query(query_vectors=self.queries, top_k=100, n_probes=1)
-        print("resutls: ", results)
         recall = check_query_results(results, self.untrained_neighbors, self.num_queries)
-        print(f"Untrained Query (No Metadata). Expected recall: {self.untrained_recall}, got {recall}")
 
         self.assertAlmostEqual(recall.mean(), 
                                self.untrained_recall, 
