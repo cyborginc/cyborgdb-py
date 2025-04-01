@@ -1,15 +1,17 @@
 """Client module for CyborgDB."""
 
-# Import all items from the client module for easier access
+# Import from client.py
 from cyborgdb.client.client import (
     Client,
-    EncryptedIndex,
     IndexConfig,
     IndexIVF,
-    IndexIVFPQ,
+    IndexIVFPQ, 
     IndexIVFFlat,
     generate_key
 )
+
+# Import from encrypted_index.py
+from cyborgdb.client.encrypted_index import EncryptedIndex
 
 __all__ = [
     "Client",
