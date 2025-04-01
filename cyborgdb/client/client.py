@@ -24,13 +24,16 @@ try:
     from cyborgdb.openapi_client.models.index_config import IndexConfig as ApiIndexConfig
     from cyborgdb.openapi_client.models.create_index_request import CreateIndexRequest as IndexCreateRequest
     from cyborgdb.openapi_client.models.query_request import QueryRequest
+    from cyborgdb.openapi_client.models.batch_query_request import BatchQueryRequest
     from cyborgdb.openapi_client.models.upsert_request import UpsertRequest
+    from cyborgdb.openapi_client.models.delete_request import DeleteRequest
     from cyborgdb.openapi_client.models.train_request import TrainRequest
     from cyborgdb.openapi_client.models.vector_item import VectorItem as Item
     from cyborgdb.openapi_client.models.index_ivf_flat_model import IndexIVFFlatModel
     from cyborgdb.openapi_client.models.index_ivf_model import IndexIVFModel
     from cyborgdb.openapi_client.models.index_ivfpq_model import IndexIVFPQModel
     from cyborgdb.openapi_client.exceptions import ApiException
+    from cyborgdb.openapi_client.models.query_result_item import QueryResultItem
 except ImportError:
     raise ImportError(
         "Failed to import openapi_client. Make sure the OpenAPI client library is properly installed."
@@ -204,37 +207,54 @@ class EncryptedIndex:
             ValueError: If the items could not be retrieved or decrypted.
         """
         try:
-            response = self._api.get_vectors_v1_vectors_get_post(
-                self._index_name,
+            from cyborgdb.openapi_client.models import GetRequest, Request
+            
+            # Create the proper request objects
+            get_request = GetRequest(
+                index_key=self._key_to_hex(),
+                index_name=self._index_name,
                 ids=ids,
-                key=self._key_to_hex(),
                 include=include
+            )
+            print("get_request: ", get_request)
+            response = self._api.get_vectors_v1_vectors_get_post(
+                get_request=get_request,
+                _headers={
+                    'X-API-Key': self._api_client.configuration.api_key['X-API-Key'],
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
             )
             
             # Convert API response to our format
             items = []
-            for item in response.items:
-                item_dict = {"id": item.id}
-                
-                if "vector" in include and hasattr(item, "vector"):
-                    item_dict["vector"] = item.vector
+            if hasattr(response, 'results'):
+                for item in response.results:
+                    item_dict = {"id": item.id}
                     
-                if "contents" in include and hasattr(item, "contents"):
-                    item_dict["contents"] = item.contents
-                    
-                if "metadata" in include and hasattr(item, "metadata"):
-                    # Convert metadata string to dict if needed
-                    if isinstance(item.metadata, str):
-                        try:
-                            item_dict["metadata"] = json.loads(item.metadata)
-                        except json.JSONDecodeError:
-                            item_dict["metadata"] = {}
-                    else:
-                        item_dict["metadata"] = item.metadata
+                    if "vector" in include and hasattr(item, "vector"):
+                        item_dict["vector"] = item.vector
                         
-                items.append(item_dict)
-                
+                    if "contents" in include and hasattr(item, "contents"):
+                        item_dict["contents"] = item.contents
+                        
+                    if "metadata" in include and hasattr(item, "metadata"):
+                        # Convert metadata string to dict if needed
+                        if isinstance(item.metadata, str):
+                            try:
+                                item_dict["metadata"] = json.loads(item.metadata)
+                            except json.JSONDecodeError:
+                                item_dict["metadata"] = {}
+                        else:
+                            item_dict["metadata"] = item.metadata
+                            
+                    items.append(item_dict)
+                    
             return items
+        except Exception as e:
+            error_msg = f"Get operation failed: {str(e)}"
+            logger.error(error_msg)
+            raise
         except ApiException as e:
             error_msg = f"Failed to retrieve items: {e}"
             logger.error(error_msg)
@@ -270,13 +290,14 @@ class EncryptedIndex:
         try:
             request = TrainRequest(
                 batch_size=batch_size,
+                index_name=self._index_name,
                 max_iters=max_iters,
                 tolerance=tolerance,
                 max_memory=max_memory,
-                key=self._key_to_hex()
+                index_key=self._key_to_hex()
             )
-            
-            self._api.train_index_v1_indexes_train_post(self._index_name, request)
+
+            self._api.train_index_v1_indexes_train_post(train_request=request)
         except ApiException as e:
             error_msg = f"Failed to train index: {e}"
             logger.error(error_msg)
@@ -334,7 +355,7 @@ class EncryptedIndex:
                     if "metadata" in item_dict:
                         # Convert dict metadata to JSON string if needed
                         if isinstance(item_dict["metadata"], dict):
-                            item["metadata"] = json.dumps(item_dict["metadata"])
+                            item["metadata"] = item_dict["metadata"]#json.dumps(item_dict["metadata"])
                         else:
                             item["metadata"] = item_dict["metadata"]
                             
@@ -404,10 +425,13 @@ class EncryptedIndex:
             ValueError: If the items could not be deleted.
         """
         try:
+
+            delete_request = DeleteRequest(
+                index_key=self._key_to_hex(),
+                index_name=self._index_name,
+                ids=ids)
             self._api.delete_vectors_v1_vectors_delete_post(
-                self._index_name,
-                ids=ids,
-                key=self._key_to_hex()
+                delete_request=delete_request
             )
         except ApiException as e:
             error_msg = f"Failed to delete items: {e}"
@@ -416,7 +440,8 @@ class EncryptedIndex:
     
     def query(
         self,
-        query_vector: Optional[Union[List[float], np.ndarray, List[List[float]]]] = None,
+        query_vector: Optional[Union[List[float], np.ndarray]] = None,
+        query_vectors: Optional[Union[np.ndarray, List[List[float]]]] = None,
         query_contents: Optional[str] = None,
         top_k: int = 100,
         n_probes: int = 1,
@@ -426,109 +451,121 @@ class EncryptedIndex:
     ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
         """
         Retrieve the nearest neighbors for given query vectors.
+        Supports both single vector (1D) and batched vectors (2D).
         """
         try:
-            # Process query vectors if provided
-            query_vectors_list = None
+            from cyborgdb.openapi_client.models import QueryRequest, Request
+            import numpy as np
+
+            if filters is None:
+                filters = {}
+
+            # Determine the correct vector input
+            vector_list = None
+
             if query_vector is not None:
                 if isinstance(query_vector, np.ndarray):
-                    # Handle 1D and 2D arrays differently
-                    if query_vector.ndim == 1:
-                        query_vectors_list = [query_vector.tolist()]
-                    else:
-                        query_vectors_list = query_vector.tolist()
+                    if query_vector.ndim != 1:
+                        raise ValueError("Expected 1D NumPy array for `query_vector`.")
+                    vector_list = query_vector.tolist()
                 elif isinstance(query_vector, list):
-                    # Check if it's a list of lists or a single list
                     if query_vector and isinstance(query_vector[0], (list, np.ndarray)):
-                        query_vectors_list = [v if isinstance(v, list) else v.tolist() for v in query_vector]
-                    else:
-                        query_vectors_list = [query_vector]
+                        raise ValueError("Received nested list in `query_vector`; did you mean to use `query_vectors`?")
+                    vector_list = list(map(float, query_vector))  # Ensure float type
+
+            elif query_vectors is not None:
+                if isinstance(query_vectors, list):
+                    query_vectors = np.array(query_vectors, dtype=np.float32)
+                if isinstance(query_vectors, np.ndarray):
+                    if query_vectors.ndim != 2:
+                        raise ValueError("Expected 2D NumPy array or list of lists for `query_vectors`.")
+                    vector_list = query_vectors.tolist()
                 else:
-                    raise TypeError("query_vector must be a numpy array or a list of vectors")
-            
-            # Prepare filters
-            filters_json = None
-            if filters:
-                filters_json = json.dumps(filters)
-            
-            # Import necessary models
-            from cyborgdb.openapi_client.models import (
-                Request, 
-                QueryRequest
-            )
-            
-            # First create a QueryRequest object
-            query_request = QueryRequest(
-                vectors=query_vectors_list,
-                contents=query_contents,
+                    raise ValueError("Invalid type for `query_vectors`")
+
+            elif query_contents is None:
+                raise ValueError("You must provide `query_vector`, `query_vectors`, or `query_contents`.")
+
+            # Construct query request
+            print("top k =", top_k)
+            print("vector_list:", vector_list)
+            query_request = BatchQueryRequest(
+                index_key=self._key_to_hex(),
+                index_name=self._index_name,
+                query_vectors=vector_list,
+                query_contents=query_contents,
                 top_k=top_k,
                 n_probes=n_probes,
-                filters=filters_json,
-                include=include,
                 greedy=greedy,
-                index_key=self._key_to_hex(),
-                index_name=self._index_name
+                filters=filters,
+                include=include,
             )
-            
-            # Then create a Request object with QueryRequest as its actual_instance
+
             request = Request(query_request)
-            
-            print("about to query")
-            
-            # Execute query with the proper Request object
-            response = self._api.query_vectors_v1_vectors_query_post(
-                request=request,
-                _headers={
-                    'X-API-Key': self._api_client.configuration.api_key['X-API-Key'],
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            )
-            
-            print("got response")
-            
-            # Process results
-            results = []
-            if hasattr(response, 'results') and response.results:
-                for query_results in response.results:
-                    query_items = []
-                    for item in query_results:
-                        result_item = {
-                            "id": item.id if hasattr(item, 'id') else None
-                        }
-                        
-                        if "distance" in include and hasattr(item, 'distance'):
-                            result_item["distance"] = item.distance
-                            
-                        if "metadata" in include and hasattr(item, 'metadata') and item.metadata:
-                            # Parse metadata JSON if needed
-                            metadata = item.metadata
-                            if isinstance(metadata, str):
-                                try:
-                                    result_item["metadata"] = json.loads(metadata)
-                                except json.JSONDecodeError:
-                                    result_item["metadata"] = {}
-                            else:
-                                result_item["metadata"] = metadata
-                                
-                        query_items.append(result_item)
-                        
-                    results.append(query_items)
-            
-            # For single query, return just the results list instead of list of lists
-            return results[0] if len(results) == 1 else results
+
+            # Execute query via REST
+            print("calling query_vectors_v1_vectors_query_post")
+            try:
+                # Get raw response instead of deserialized object
+                raw_response = self._api.query_vectors_v1_vectors_query_post_without_preload_content(
+                    request=request,
+                    _headers={
+                        'X-API-Key': self._api_client.configuration.api_key['X-API-Key'],
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                )
                 
+                # Parse raw JSON response manually
+                response_text = raw_response.data.decode('utf-8')
+                response_json = json.loads(response_text)
+                
+                # Process the results as plain dictionaries
+                results = []
+                if 'results' in response_json:
+                    # Check if the results is a list of lists or just a list
+                    if response_json['results'] and isinstance(response_json['results'][0], list):
+                        # It's a list of lists (batch query results)
+                        for query_result in response_json['results']:
+                            query_items = []
+                            for item in query_result:
+                                result_item = {"id": item["id"]}
+                                if "distance" in include and "distance" in item:
+                                    result_item["distance"] = item["distance"]
+                                if "metadata" in include and "metadata" in item:
+                                    result_item["metadata"] = item["metadata"]
+                                query_items.append(result_item)
+                            results.append(query_items)
+                    else:
+                        # It's a flat list (single query results)
+                        query_items = []
+                        for item in response_json['results']:
+                            result_item = {"id": item["id"]}
+                            if "distance" in include and "distance" in item:
+                                result_item["distance"] = item["distance"]
+                            if "metadata" in include and "metadata" in item:
+                                result_item["metadata"] = item["metadata"]
+                            query_items.append(result_item)
+                        results.append(query_items)
+                
+                return results
+            except Exception as e:
+                error_msg = f"Unexpected error in query: {str(e)}"
+                logger.error(error_msg)
+                import traceback
+                logger.error(traceback.format_exc())
+                raise
         except ApiException as e:
             error_msg = f"Query failed: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
+
         except Exception as e:
             error_msg = f"Unexpected error in query: {str(e)}"
             logger.error(error_msg)
             import traceback
-            logger.error(traceback.format_exc())
-            raise ValueError(error_msg)
-    
+            logger.error
+
     def _key_to_hex(self) -> str:
         """Convert the binary key to a hex string for API calls."""
         return binascii.hexlify(self._index_key).decode('ascii')

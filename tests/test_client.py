@@ -26,7 +26,7 @@ class ClientIntegrationTest(unittest.TestCase):
         
         # Create a test index
         index_name = f"test_index_{int(time.time())}"
-        self.index_config = IndexIVF(dimension=128, n_lists=10)
+        self.index_config = IndexIVF(dimension=128, n_lists=10, metric="euclidean")
         self.index = self.client.create_index(index_name, self.test_key, self.index_config)
     
     def tearDown(self):
