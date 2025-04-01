@@ -94,7 +94,6 @@ class DefaultApi:
         :type _host_index: int, optional
         :return: Returns the result object.
         """ # noqa: E501
-        print("headers: " , _headers)
 
         _param = self._create_index_v1_indexes_create_post_serialize(
             create_index_request=create_index_request,
@@ -291,7 +290,6 @@ class DefaultApi:
         if create_index_request is not None:
             _body_params = create_index_request
 
-        print("_body_params: " , _body_params)
         # set the HTTP header `Accept`
         if 'Accept' not in _header_params:
             _header_params['Accept'] = self.api_client.select_header_accept(
@@ -1236,7 +1234,7 @@ class DefaultApi:
         :type _host_index: int, optional
         :return: Returns the result object.
         """ # noqa: E501
-
+        print("before serialization")
         _param = self._get_vectors_v1_vectors_get_post_serialize(
             get_request=get_request,
             _request_auth=_request_auth,
@@ -1244,6 +1242,7 @@ class DefaultApi:
             _headers=_headers,
             _host_index=_host_index
         )
+        print("AFTER serialization")
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "GetResponseModel",
@@ -2016,7 +2015,6 @@ class DefaultApi:
         :type _host_index: int, optional
         :return: Returns the result object.
         """ # noqa: E501
-        print("about to serialize")
         _param = self._query_vectors_v1_vectors_query_post_serialize(
             request=request,
             _request_auth=_request_auth,
@@ -2024,7 +2022,6 @@ class DefaultApi:
             _headers=_headers,
             _host_index=_host_index
         )
-        print("serialized")
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "QueryResponse",
@@ -2036,6 +2033,7 @@ class DefaultApi:
             *_param,
             _request_timeout=_request_timeout
         )
+        print("response_data: ", response_data )
         response_data.read()
         return self.api_client.response_deserialize(
             response_data=response_data,

@@ -227,7 +227,6 @@ class ApiClient:
         # body
         if body:
             body = self.sanitize_for_serialization(body)
-        print("serialized body: ", body)
 
         # request url
         if _host is None or self.configuration.ignore_operation_servers:
