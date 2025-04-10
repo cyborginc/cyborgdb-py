@@ -413,7 +413,7 @@ class EncryptedIndex:
             # Determine the correct vector input
             vector_list = None
 
-            if query_vector is not None:
+            if query_vector or query_contents is not None:
                 if isinstance(query_vector, np.ndarray):
                     if query_vector.ndim != 1:
                         raise ValueError("Expected 1D NumPy array for `query_vector`.")
@@ -422,6 +422,17 @@ class EncryptedIndex:
                     if query_vector and isinstance(query_vector[0], (list, np.ndarray)):
                         raise ValueError("Received nested list in `query_vector`; did you mean to use `query_vectors`?")
                     vector_list = list(map(float, query_vector))  # Ensure float type
+                query_request = QueryRequest(
+                    index_key=self._key_to_hex(),
+                    index_name=self._index_name,
+                    query_vectors=vector_list,
+                    query_contents=query_contents,
+                    top_k=top_k,
+                    n_probes=n_probes,
+                    greedy=greedy,
+                    filters=filters,
+                    include=include,
+                )
 
             elif query_vectors is not None:
                 if isinstance(query_vectors, list):
@@ -432,22 +443,20 @@ class EncryptedIndex:
                     vector_list = query_vectors.tolist()
                 else:
                     raise ValueError("Invalid type for `query_vectors`")
+                query_request = BatchQueryRequest(
+                    index_key=self._key_to_hex(),
+                    index_name=self._index_name,
+                    query_vectors=vector_list,
+                    query_contents=query_contents,
+                    top_k=top_k,
+                    n_probes=n_probes,
+                    greedy=greedy,
+                    filters=filters,
+                    include=include,
+                )
 
             elif query_contents is None:
                 raise ValueError("You must provide `query_vector`, `query_vectors`, or `query_contents`.")
-
-            # Construct query request
-            query_request = BatchQueryRequest(
-                index_key=self._key_to_hex(),
-                index_name=self._index_name,
-                query_vectors=vector_list,
-                query_contents=query_contents,
-                top_k=top_k,
-                n_probes=n_probes,
-                greedy=greedy,
-                filters=filters,
-                include=include,
-            )
 
             request = Request(query_request)
 
