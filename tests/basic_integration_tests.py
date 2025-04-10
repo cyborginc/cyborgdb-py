@@ -4,7 +4,7 @@ import pickle
 import json
 import numpy as np
 import time
-import cyborgdb.client.client as cyborgdb
+import cyborgdb as cyborgdb
 from compress_utils import decompress
 
 def check_query_results(results, neighbors, num_queries):
