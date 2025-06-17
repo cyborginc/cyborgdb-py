@@ -1,7 +1,9 @@
+# cyborgdb/__init__.py
+
 """CyborgDB: A vector database platform."""
 
 # Re-export classes from client module
-from cyborgdb.client.client import (
+from .client.client import (
     Client,
     IndexConfig,
     IndexIVF,
@@ -11,7 +13,7 @@ from cyborgdb.client.client import (
 )
 
 # Re-export from encrypted_index.py
-from cyborgdb.client.encrypted_index import EncryptedIndex
+from .client.encrypted_index import EncryptedIndex
 
 __all__ = [
     "Client",
