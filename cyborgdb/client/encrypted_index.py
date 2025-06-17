@@ -413,7 +413,7 @@ class EncryptedIndex:
             # Determine the correct vector input
             vector_list = None
 
-            if query_vector or query_contents is not None:
+            if query_vector is not None or query_contents is not None:
                 if isinstance(query_vector, np.ndarray):
                     if query_vector.ndim != 1:
                         raise ValueError("Expected 1D NumPy array for `query_vector`.")
