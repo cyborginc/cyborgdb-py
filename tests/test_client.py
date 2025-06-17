@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 import time
-from cyborgdb.client.client import (
+from cyborgdb import (
     Client, 
     EncryptedIndex,
     IndexIVF, 
@@ -18,7 +18,7 @@ class ClientIntegrationTest(unittest.TestCase):
         # Create real client (no mocking)
         self.client = Client(
             api_url="http://localhost:8000",
-            api_key="C2kFe-ML2wDCYS9tgafnRxrm7rGlmRpZRPWgGUqWvP4"
+            api_key="NSu0mQeykFIWlYmVGNZGmtpSBSN3uL3cTW6LckhPl58"
         )
 
         # Create a test key
