@@ -24,7 +24,7 @@ from typing_extensions import Self
 
 class BatchQueryRequest(BaseModel):
     """
-    Request model for batch similarity search.  Inherits:     IndexOperationRequest: Includes `index_name` and `index_key`.  Attributes:     query_vectors (List[List[float]]): List of vectors to search for in batch mode.     top_k (int): Number of nearest neighbors to return for each query. Defaults to 100.     n_probes (int): Number of lists to probe during the query. Defaults to 1.     greedy (bool): Whether to use greedy search. Defaults to False.     filters (Optional[Dict[str, Any]]): JSON-like dictionary specifying metadata filters. Defaults to {}.     include (List[str]): List of additional fields to include in the response. Defaults to `[\"distances\"]`.
+    Request model for batch similarity search.  Inherits:     IndexOperationRequest: Includes `index_name` and `index_key`.  Attributes:     query_vectors (List[List[float]]): List of vectors to search for in batch mode.     top_k (int): Number of nearest neighbors to return for each query. Defaults to 100.     n_probes (int): Number of lists to probe during the query. Defaults to 1.     greedy (bool): Whether to use greedy search. Defaults to False.     filters (Optional[Dict[str, Any]]): JSON-like dictionary specifying metadata filters. Defaults to {}.     include (List[str]): List of additional fields to include in the response. Defaults to `[\"distance\", \"metadata\"]`.
     """ # noqa: E501
     index_key: StrictStr = Field(description="32-byte encryption key as hex string")
     index_name: StrictStr = Field(description="ID name")

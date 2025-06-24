@@ -18,7 +18,7 @@ class ClientIntegrationTest(unittest.TestCase):
         # Create real client (no mocking)
         self.client = Client(
             api_url="http://localhost:8000",
-            api_key="NSu0mQeykFIWlYmVGNZGmtpSBSN3uL3cTW6LckhPl58"
+            api_key="IvJx-LwBe12J50WP0jdsKcL-ZRTo_gL4zHI1V103Q2U"
         )
 
         # Create a test key
@@ -39,7 +39,7 @@ class ClientIntegrationTest(unittest.TestCase):
     def test_upsert_and_query(self):
         """Test upserting vectors and querying them."""
         # Create some test vectors
-        num_vectors = 1
+        num_vectors = 100
         dimension = 128
         vectors = np.random.rand(num_vectors, dimension).astype(np.float32)
         ids = [f"test_{i}" for i in range(num_vectors)]
@@ -52,6 +52,6 @@ class ClientIntegrationTest(unittest.TestCase):
         results = self.index.query(query_vector=query_vector, top_k=10)
         
         # Check results
-        self.assertEqual(len(results), 10)
+        self.assertEqual(len(results[0]), 10)
         self.assertTrue("id" in results[0])
         self.assertTrue("distance" in results[0])

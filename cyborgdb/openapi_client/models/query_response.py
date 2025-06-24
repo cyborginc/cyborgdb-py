@@ -19,7 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict
 from typing import Any, ClassVar, Dict, List
-from cyborgdb.openapi_client.models.query_result_item import QueryResultItem
+from cyborgdb.openapi_client.models.results import Results
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -27,7 +27,7 @@ class QueryResponse(BaseModel):
     """
     Response model for similarity search queries.  Attributes:     results (List[QueryResultItem]): List of search results.
     """ # noqa: E501
-    results: List[QueryResultItem]
+    results: Results
     __properties: ClassVar[List[str]] = ["results"]
 
     model_config = ConfigDict(
@@ -69,13 +69,9 @@ class QueryResponse(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of each item in results (list)
-        _items = []
+        # override the default output from pydantic by calling `to_dict()` of results
         if self.results:
-            for _item_results in self.results:
-                if _item_results:
-                    _items.append(_item_results.to_dict())
-            _dict['results'] = _items
+            _dict['results'] = self.results.to_dict()
         return _dict
 
     @classmethod
@@ -88,7 +84,7 @@ class QueryResponse(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "results": [QueryResultItem.from_dict(_item) for _item in obj["results"]] if obj.get("results") is not None else None
+            "results": Results.from_dict(obj["results"]) if obj.get("results") is not None else None
         })
         return _obj
 

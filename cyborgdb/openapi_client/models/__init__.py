@@ -15,6 +15,7 @@
 
 # import models into model package
 from cyborgdb.openapi_client.models.batch_query_request import BatchQueryRequest
+from cyborgdb.openapi_client.models.contents import Contents
 from cyborgdb.openapi_client.models.create_index_request import CreateIndexRequest
 from cyborgdb.openapi_client.models.cyborgdb_service_api_schemas_index_success_response_model import CyborgdbServiceApiSchemasIndexSuccessResponseModel
 from cyborgdb.openapi_client.models.cyborgdb_service_api_schemas_vectors_success_response_model import CyborgdbServiceApiSchemasVectorsSuccessResponseModel
@@ -35,6 +36,7 @@ from cyborgdb.openapi_client.models.query_request import QueryRequest
 from cyborgdb.openapi_client.models.query_response import QueryResponse
 from cyborgdb.openapi_client.models.query_result_item import QueryResultItem
 from cyborgdb.openapi_client.models.request import Request
+from cyborgdb.openapi_client.models.results import Results
 from cyborgdb.openapi_client.models.train_request import TrainRequest
 from cyborgdb.openapi_client.models.upsert_request import UpsertRequest
 from cyborgdb.openapi_client.models.validation_error import ValidationError
