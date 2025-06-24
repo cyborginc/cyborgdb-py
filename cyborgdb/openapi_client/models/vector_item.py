@@ -19,16 +19,17 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
+from cyborgdb.openapi_client.models.contents import Contents
 from typing import Optional, Set
 from typing_extensions import Self
 
 class VectorItem(BaseModel):
     """
-    Represents a vectorized item for storage in the encrypted index.  Attributes:     id (str): Unique identifier for the vector item.     vector (Optional[List[float]]): The vector representation of the item.     contents (Optional[str]): The original text or associated content.     metadata (Optional[Dict[str, Any]]): Additional metadata associated with the item.
+    Represents a vectorized item for storage in the encrypted index.  Attributes:     id (str): Unique identifier for the vector item.     vector (Optional[List[float]]): The vector representation of the item.     contents (Optional[Union[str, bytes]]): The original text or associated content (can be string or bytes).     metadata (Optional[Dict[str, Any]]): Additional metadata associated with the item.
     """ # noqa: E501
     id: StrictStr
     vector: Optional[List[Union[StrictFloat, StrictInt]]] = None
-    contents: Optional[StrictStr] = None
+    contents: Optional[Contents] = None
     metadata: Optional[Dict[str, Any]] = None
     __properties: ClassVar[List[str]] = ["id", "vector", "contents", "metadata"]
 
@@ -71,6 +72,9 @@ class VectorItem(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of contents
+        if self.contents:
+            _dict['contents'] = self.contents.to_dict()
         # set to None if vector (nullable) is None
         # and model_fields_set contains the field
         if self.vector is None and "vector" in self.model_fields_set:
@@ -100,7 +104,7 @@ class VectorItem(BaseModel):
         _obj = cls.model_validate({
             "id": obj.get("id"),
             "vector": obj.get("vector"),
-            "contents": obj.get("contents"),
+            "contents": Contents.from_dict(obj["contents"]) if obj.get("contents") is not None else None,
             "metadata": obj.get("metadata")
         })
         return _obj
