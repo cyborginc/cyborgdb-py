@@ -68,3 +68,5 @@ target/
 datasets
 
 .DS_Store
+
+venv

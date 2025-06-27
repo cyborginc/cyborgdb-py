@@ -4,6 +4,7 @@ import pickle
 import json
 import numpy as np
 import time
+import os
 import cyborgdb as cyborgdb
 from compress_utils import decompress
 
@@ -133,12 +134,20 @@ class TestUnitFlow(unittest.TestCase):
         cls.index_config = cyborgdb.IndexIVFFlat(dimension=cls.dimension, n_lists=512, metric="euclidean")
         cls.client = cyborgdb.Client(
             api_url="http://localhost:8000",
-            api_key="zAtg1-YuzONgYzotykouojcfNVHGEh2hqfzBkjF7cEA"
+            api_key=os.getenv("CYBORGDB_API_KEY", " ")
         )
         cls.index_name = "memory_example_index1"
         cls.index_key = cyborgdb. generate_key() #bytes([1] * 32)
         cls.index = cls.client.create_index(cls.index_name, cls.index_key, cls.index_config)
 
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up the index after all tests are done."""
+        try:
+            if hasattr(cls, 'index') and cls.index:
+                cls.index.delete_index()
+        except Exception as e:
+            print(f"Error during index cleanup: {e}")
 
     def test_01_untrained_upsert(self):
         # UNTRAINED UPSERT: upsert untrained items.
@@ -200,6 +209,7 @@ class TestUnitFlow(unittest.TestCase):
         # TRAIN INDEX
         self.index.train()
         self.assertTrue(True)
+        self.assertTrue(self.index.is_trained())
 
     def test_06_trained_upsert(self):
         # TRAINED UPSERT: upsert training vectors.
@@ -334,6 +344,21 @@ class TestUnitFlow(unittest.TestCase):
                 self.assertNotIn(query_result["id"], range(self.num_untrained_vectors))
         
         self.assertTrue(True)
+    
+    def test_13_list_indexes(self):
+        # LIST INDEXES
+        indexes = self.client.list_indexes()
+        self.assertIsInstance(indexes, list)
+        self.assertGreater(len(indexes), 0, "No indexes found")
+        
+        # Check if the created index is in the list
+        self.assertIn(self.index_name, indexes, f"Index {self.index_name} not found in the list of indexes")
+
+    def test_14_index_properies(self):
+        # Check if the index has the expected properties
+        self.assertEqual(self.index.index_name, self.index_name, "Index name does not match")
+        self.assertIsInstance(self.index.index_config, dict, "Index config is not a dictionary")
+        self.assertEqual(self.index.index_type, "ivfflat", "Index type is not IVFFlat")
 
 if __name__ == '__main__':
     unittest.main()

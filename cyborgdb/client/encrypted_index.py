@@ -17,6 +17,7 @@ try:
     from cyborgdb.openapi_client.models.train_request import TrainRequest
     from cyborgdb.openapi_client.models.delete_request import DeleteRequest
     from cyborgdb.openapi_client.models.batch_query_request import BatchQueryRequest
+    from cyborgdb.openapi_client.models.index_operation_request import IndexOperationRequest
     from cyborgdb.openapi_client.models.upsert_request import UpsertRequest
     from cyborgdb.openapi_client.exceptions import ApiException
     from cyborgdb.openapi_client.models.query_request import QueryRequest
@@ -72,9 +73,13 @@ class EncryptedIndex:
         # Retrieve index info if not already cached
         if not hasattr(self, '_index_type_cached'):
             try:
+                request = IndexOperationRequest(
+                    index_key=self._key_to_hex(),
+                    index_name=self._index_name
+                )
+
                 response = self._api.get_index_info_v1_indexes_describe_post(
-                    self._index_name, 
-                    key=self._key_to_hex()
+                    index_operation_request=request
                 )
                 self._index_type_cached = response.index_type
             except ApiException as e:
@@ -89,11 +94,15 @@ class EncryptedIndex:
         # Retrieve index info if not already cached
         if not self._index_config:
             try:
-                response = self._api.get_index_info_v1_indexes_describe_post(
-                    self._index_name, 
-                    key=self._key_to_hex()
+                request = IndexOperationRequest(
+                    index_key=self._key_to_hex(),
+                    index_name=self._index_name
                 )
-                self._index_config = response.config
+
+                response = self._api.get_index_info_v1_indexes_describe_post(
+                    index_operation_request=request
+                )
+                self._index_config = response.index_config
             except ApiException as e:
                 logger.error(f"Failed to retrieve index config: {e}")
                 self._index_config = {}
@@ -108,11 +117,15 @@ class EncryptedIndex:
             bool: True if the index is trained, otherwise False.
         """
         try:
-            response = self._api.get_index_status(
-                self._index_name,
-                key=self._key_to_hex()
+            request = IndexOperationRequest(
+                index_key=self._key_to_hex(),
+                index_name=self._index_name
             )
-            return response.trained
+
+            response = self._api.get_index_info_v1_indexes_describe_post(
+                index_operation_request=request
+            )
+            return response.is_trained
         except ApiException as e:
             logger.error(f"Failed to get index training status: {e}")
             return False
@@ -128,9 +141,13 @@ class EncryptedIndex:
             ValueError: If the index could not be deleted.
         """
         try:
+            request = IndexOperationRequest(
+                index_key=self._key_to_hex(),
+                index_name=self._index_name
+            )
+
             self._api.delete_index_v1_indexes_delete_post(
-                self._index_name,
-                key=self._key_to_hex()
+                index_operation_request=request
             )
         except ApiException as e:
             error_msg = f"Failed to delete index: {e}"
