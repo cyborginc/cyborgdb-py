@@ -50,6 +50,8 @@ jobs:
     needs: [build_distributions]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
+    environment:
+      name: prod
     permissions:
       id-token: write
       contents: write
