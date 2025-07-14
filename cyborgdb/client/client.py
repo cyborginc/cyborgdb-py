@@ -85,10 +85,37 @@ class Client:
     This class provides methods for creating, loading, and managing encrypted indexes.
     """
     
-    def __init__(self, api_url, api_key):
+    def __init__(self, api_url, api_key, verify_ssl=None):
+        # Ensure the API URL uses HTTPS
+        if api_url.startswith('http://'):
+            api_url = api_url.replace('http://', 'https://')
+            logger.warning(f"Automatically converted HTTP URL to HTTPS: {api_url}")
+        
+        # Validate that the URL uses HTTPS
+        if not api_url.startswith('https://'):
+            raise ValueError("API URL must use HTTPS protocol")
+        
         # Set up the OpenAPI client configuration
         self.config = Configuration()
         self.config.host = api_url
+        
+        # Configure SSL verification
+        if verify_ssl is None:
+            # Auto-detect: disable SSL verification for localhost/127.0.0.1 (development)
+            if 'localhost' in api_url or '127.0.0.1' in api_url:
+                self.config.verify_ssl = False
+                # Disable SSL warnings for localhost
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                logger.info("SSL verification disabled for localhost (development mode)")
+            else:
+                self.config.verify_ssl = True
+        else:
+            self.config.verify_ssl = verify_ssl
+            if not verify_ssl:
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                logger.warning("SSL verification is disabled. Not recommended for production.")
         
         # Add authentication if provided
         if api_key:
