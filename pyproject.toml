@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cyborgdb"
 dynamic = ["version"]
-description = "CyborgDB Python Client"
+description = "Python Client SDK for CyborgDB: The Confidential Vector Database"
 readme = "README.md"
 requires-python = ">= 3.8"
 license = {text = "MIT"}
