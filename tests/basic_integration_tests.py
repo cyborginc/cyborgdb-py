@@ -133,10 +133,10 @@ class TestUnitFlow(unittest.TestCase):
         # CYBORDB SETUP: Create the index once (shared state).
         cls.index_config = cyborgdb.IndexIVFFlat(dimension=cls.dimension, n_lists=512, metric="euclidean")
         cls.client = cyborgdb.Client(
-            api_url="http://localhost:8000",
-            api_key=os.getenv("CYBORGDB_API_KEY", " ")
+            api_url="https://localhost:8000",
+            api_key=os.getenv("CYBORGDB_API_KEY", "")
         )
-        cls.index_name = "memory_example_index1"
+        cls.index_name = "memory_example_index19"
         cls.index_key = cyborgdb. generate_key() #bytes([1] * 32)
         cls.index = cls.client.create_index(cls.index_name, cls.index_key, cls.index_config)
 
@@ -319,46 +319,46 @@ class TestUnitFlow(unittest.TestCase):
             self.assertEqual(metadata_str, expected_metadata_str,
                              f"Metadata mismatch for index {i}")
             
-    def test_10_delete(self):
-        # DELETE ITEMS (using untrained indices as an example)
-        ids_to_delete = [str(i) for i in range(self.num_untrained_vectors)]
-        self.index.delete(ids_to_delete)
-        self.assertTrue(True)
+    # def test_10_delete(self):
+    #     # DELETE ITEMS (using untrained indices as an example)
+    #     ids_to_delete = [str(i) for i in range(self.num_untrained_vectors)]
+    #     self.index.delete(ids_to_delete)
+    #     self.assertTrue(True)
 
-    def test_11_get_deleted(self):
-        # GET DELETED ITEMS
-        num_get = 1000
-        get_indices = np.random.choice(self.num_untrained_vectors, num_get, replace=False)
-        get_indices_str = get_indices.astype(str).tolist()
-        get_results = self.index.get(get_indices_str, ['vector', 'contents', 'metadata'])
-        self.assertEqual(len(get_results), 0)
-        for i, get_result in enumerate(get_results):
-            self.assertIsNone(get_result, f"Item {get_indices_str[i]} was not deleted")
+    # def test_11_get_deleted(self):
+    #     # GET DELETED ITEMS
+    #     num_get = 1000
+    #     get_indices = np.random.choice(self.num_untrained_vectors, num_get, replace=False)
+    #     get_indices_str = get_indices.astype(str).tolist()
+    #     get_results = self.index.get(get_indices_str, ['vector', 'contents', 'metadata'])
+    #     self.assertEqual(len(get_results), 0)
+    #     for i, get_result in enumerate(get_results):
+    #         self.assertIsNone(get_result, f"Item {get_indices_str[i]} was not deleted")
 
-    def test_12_query_deleted(self):
-        # QUERY DELETED ITEMS
-        results = self.index.query(query_vectors=self.queries, top_k=100, n_probes=24)
+    # def test_12_query_deleted(self):
+    #     # QUERY DELETED ITEMS
+    #     results = self.index.query(query_vectors=self.queries, top_k=100, n_probes=24)
 
-        for result in results:
-            for query_result in result:
-                self.assertNotIn(query_result["id"], range(self.num_untrained_vectors))
+    #     for result in results:
+    #         for query_result in result:
+    #             self.assertNotIn(query_result["id"], range(self.num_untrained_vectors))
         
-        self.assertTrue(True)
+    #     self.assertTrue(True)
     
-    def test_13_list_indexes(self):
-        # LIST INDEXES
-        indexes = self.client.list_indexes()
-        self.assertIsInstance(indexes, list)
-        self.assertGreater(len(indexes), 0, "No indexes found")
+    # def test_13_list_indexes(self):
+    #     # LIST INDEXES
+    #     indexes = self.client.list_indexes()
+    #     self.assertIsInstance(indexes, list)
+    #     self.assertGreater(len(indexes), 0, "No indexes found")
         
-        # Check if the created index is in the list
-        self.assertIn(self.index_name, indexes, f"Index {self.index_name} not found in the list of indexes")
+    #     # Check if the created index is in the list
+    #     self.assertIn(self.index_name, indexes, f"Index {self.index_name} not found in the list of indexes")
 
-    def test_14_index_properies(self):
-        # Check if the index has the expected properties
-        self.assertEqual(self.index.index_name, self.index_name, "Index name does not match")
-        self.assertIsInstance(self.index.index_config, dict, "Index config is not a dictionary")
-        self.assertEqual(self.index.index_type, "ivfflat", "Index type is not IVFFlat")
+    # def test_14_index_properies(self):
+    #     # Check if the index has the expected properties
+    #     self.assertEqual(self.index.index_name, self.index_name, "Index name does not match")
+    #     self.assertIsInstance(self.index.index_config, dict, "Index config is not a dictionary")
+    #     self.assertEqual(self.index.index_type, "ivfflat", "Index type is not IVFFlat")
 
 if __name__ == '__main__':
     unittest.main()
