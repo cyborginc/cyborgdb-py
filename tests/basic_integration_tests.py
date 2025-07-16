@@ -133,10 +133,10 @@ class TestUnitFlow(unittest.TestCase):
         # CYBORDB SETUP: Create the index once (shared state).
         cls.index_config = cyborgdb.IndexIVFFlat(dimension=cls.dimension, n_lists=512, metric="euclidean")
         cls.client = cyborgdb.Client(
-            api_url="http://localhost:8000",
-            api_key=os.getenv("CYBORGDB_API_KEY", " ")
+            api_url="https://localhost:8000",
+            api_key=os.getenv("CYBORGDB_API_KEY", "cyborg_e9n8t7e6r5p4r3i2s1e0987654321abc")
         )
-        cls.index_name = "memory_example_index1"
+        cls.index_name = "memory_example_index19"
         cls.index_key = cyborgdb. generate_key() #bytes([1] * 32)
         cls.index = cls.client.create_index(cls.index_name, cls.index_key, cls.index_config)
 
