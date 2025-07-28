@@ -15,6 +15,9 @@ from .client.client import (
 # Re-export from encrypted_index.py
 from .client.encrypted_index import EncryptedIndex
 
+# Re-export from langchain.py
+from .integration.langchain import CyborgVectorStore
+
 __all__ = [
     "Client",
     "EncryptedIndex",
@@ -22,5 +25,6 @@ __all__ = [
     "IndexIVF",
     "IndexIVFPQ",
     "IndexIVFFlat",
-    "generate_key"
+    "generate_key",
+    "CyborgVectorStore"
 ]
