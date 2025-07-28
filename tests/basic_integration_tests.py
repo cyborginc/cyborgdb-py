@@ -7,6 +7,10 @@ import time
 import os
 import cyborgdb as cyborgdb
 from compress_utils import decompress
+from dotenv import load_dotenv
+
+# Load environment variables from .env.local
+load_dotenv('.env.local')
 
 def check_query_results(results, neighbors, num_queries):
 
@@ -134,7 +138,7 @@ class TestUnitFlow(unittest.TestCase):
         cls.index_config = cyborgdb.IndexIVFFlat(dimension=cls.dimension, n_lists=512, metric="euclidean")
         cls.client = cyborgdb.Client(
             api_url="https://localhost:8000",
-            api_key=os.getenv("CYBORGDB_API_KEY", "cyborg_e9n8t7e6r5p4r3i2s1e0987654321abc")
+            api_key=os.getenv("CYBORG_API_KEY")
         )
         cls.index_name = "memory_example_index19"
         cls.index_key = cyborgdb. generate_key() #bytes([1] * 32)

@@ -1,6 +1,8 @@
+import os
 import unittest
 import numpy as np
 import time
+from dotenv import load_dotenv
 from cyborgdb import (
     Client, 
     EncryptedIndex,
@@ -10,6 +12,9 @@ from cyborgdb import (
     generate_key
 )
 
+# Load environment variables from .env.local
+load_dotenv('.env.local')
+
 class ClientIntegrationTest(unittest.TestCase):
     """Integration tests for the CyborgDB client."""
     
@@ -18,7 +23,7 @@ class ClientIntegrationTest(unittest.TestCase):
         # Create real client (no mocking)
         self.client = Client(
             api_url="http://localhost:8000",
-            api_key="IvJx-LwBe12J50WP0jdsKcL-ZRTo_gL4zHI1V103Q2U"
+            api_key=os.getenv("TEST_API_KEY")
         )
 
         # Create a test key

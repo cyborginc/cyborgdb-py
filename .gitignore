@@ -70,3 +70,5 @@ datasets
 .DS_Store
 
 venv
+
+.env.local
