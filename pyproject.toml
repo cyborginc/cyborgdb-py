@@ -18,6 +18,7 @@ dependencies = [
     "python-dateutil >= 2.8.2",
     "pydantic >= 2",
     "typing-extensions >= 4.7.1",
+    "python-dotenv >= 0.19.0",
 ]
 classifiers = [
     "Intended Audience :: Developers",
@@ -36,9 +37,17 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 
+[project.optional-dependencies]
+langchain = [
+    "langchain-core >= 0.1.0",
+    "sentence-transformers >= 2.2.0",
+    "numpy >= 1.21.0",
+]
+
 [project.urls]
 "Homepage" = "https://www.cyborg.co"
 "Documentation" = "https://docs.cyborg.co"
+"Repository" = "https://github.com/cyborginc/cyborgdb-py"
 
 [tool.setuptools.packages.find]
 where = ["."]
