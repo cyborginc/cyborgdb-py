@@ -1,12 +1,11 @@
 """
-LangChain integration for CyborgDB-py.
+LangChain integration for CyborgDB-py REST API.
 
 This module requires the langchain-core package:
     pip install cyborgdb-py[langchain]
 """
 
 import uuid
-import sys
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple, Union, Iterable
 import warnings
@@ -20,7 +19,7 @@ try:
     # Import from your cyborgdb-py SDK
     from cyborgdb import (
         Client,
-        IndexConfig,
+        EncryptedIndex,
         IndexIVF,
         IndexIVFPQ, 
         IndexIVFFlat,
@@ -39,14 +38,13 @@ try:
                     index_name: str, 
                     index_key: bytes, 
                     api_key: str,
+                    api_url: str,
                     embedding: Union[str, Embeddings, SentenceTransformer], 
-                    index_location: str, 
-                    config_location: str, 
-                    items_location: Optional[str] = None, 
                     index_type: str = "ivfflat", 
                     index_config_params: Optional[Dict[str, Any]] = None,
                     dimension: Optional[int] = None, 
-                    metric: str = "cosine") -> None:
+                    metric: str = "cosine",
+                    max_cache_size: int = 0) -> None:
             """
             Initialize a new CyborgVectorStore.
             
@@ -54,19 +52,19 @@ try:
                 index_name: Name of the index
                 index_key: 32-byte encryption key
                 api_key: API key for CyborgDB
+                api_url: URL of the CyborgDB API server
                 embedding: Embedding model or function (string model name, SentenceTransformer, or LangChain Embeddings)
-                index_location: Location for index data
-                config_location: Location for index configuration
-                items_location: Optional location for item data
                 index_type: Type of index ("ivfflat", "ivf", or "ivfpq")
                 index_config_params: Additional parameters for index configuration
                 dimension: Dimension of embeddings (if not provided, inferred from model)
                 metric: Distance metric to use ("cosine", "euclidean", "squared_euclidean")
+                max_cache_size: Maximum cache size for the index
             """
             
             # Store parameters
             self.index_name = index_name
             self.index_key = index_key
+            self.max_cache_size = max_cache_size
             
             # Handle embedding model
             if isinstance(embedding, str):
@@ -74,17 +72,15 @@ try:
                 self.embedding_model = None
             else:
                 self.embedding_model = embedding
-                self.embedding_model_name = ""
+                self.embedding_model_name = getattr(embedding, 'model_name', '') if hasattr(embedding, 'model_name') else ''
             
             # Create configs
             index_config_params = index_config_params or {}
             
-            # Create the client and index
+            # Create the client
             self.client = Client(
-                api_key=api_key,
-                index_location=index_location,
-                config_location=config_location,
-                items_location=items_location or "memory"
+                api_url=api_url,
+                api_key=api_key
             )
             
             # Check if index exists
@@ -92,29 +88,32 @@ try:
             try:
                 existing_indexes = self.client.list_indexes()
                 index_exists = index_name in existing_indexes
-            except Exception:
-                # Fallback in case ListIndexes isn't supported by the backend
+            except Exception as e:
+                # Fallback in case list_indexes isn't supported
                 index_exists = False
                 warnings.warn(
-                    f"Could not verify if index '{index_name}' exists. Proceeding to create a new one.",
+                    f"Could not verify if index '{index_name}' exists: {e}",
                     RuntimeWarning
                 )
             
             if index_exists:
-                self.index = self.client.load_index(index_name, index_key)
-                # Try to extract model name from index config if available
+                # Try to load existing index
                 try:
-                    config_model_name = self.index.get_config().get("embedding_model")
-                    if config_model_name:
-                        self.embedding_model_name = config_model_name
-                        if self.embedding_model is not None and hasattr(self.embedding_model, "__str__"):
-                            if str(self.embedding_model) != self.embedding_model_name:
-                                self.embedding_model = None
-                except:
-                    pass
+                    # Create a temporary encrypted index instance
+                    from cyborgdb.client.encrypted_index import EncryptedIndex
+                    self.index = EncryptedIndex(
+                        index_name=index_name,
+                        index_key=index_key,
+                        api=self.client.api,
+                        api_client=self.client.api_client,
+                        max_cache_size=max_cache_size
+                    )
+                except Exception as e:
+                    raise ValueError(f"Failed to load existing index: {e}")
             else:
+                # Create new index
                 # Determine embedding dimension
-                if dimension is not None and embedding is None:
+                if dimension is not None:
                     embedding_dim = dimension
                 else:
                     if self.embedding_model is None and self.embedding_model_name:
@@ -126,8 +125,12 @@ try:
                     # Determine embedding dimension from model
                     if hasattr(self.embedding_model, "get_sentence_embedding_dimension"):
                         embedding_dim = self.embedding_model.get_sentence_embedding_dimension()
-                    else:
+                    elif hasattr(self.embedding_model, "embed_query"):
                         dummy = self.embedding_model.embed_query("dimension check")
+                        embedding_dim = len(dummy) if isinstance(dummy, list) else np.asarray(dummy).shape[0]
+                    else:
+                        # Try to encode a dummy text
+                        dummy = self.embedding_model.encode(["dimension check"])[0]
                         embedding_dim = len(dummy) if isinstance(dummy, list) else np.asarray(dummy).shape[0]
 
                 # Build the index config
@@ -137,29 +140,28 @@ try:
                 # Create the appropriate index config
                 if index_type == "ivf":
                     n_lists = index_config_params.get("n_lists", 1024)
-                    config = IndexIVF(embedding_dim, n_lists, metric)
+                    config = IndexIVF(dimension=embedding_dim, n_lists=n_lists, metric=metric)
                 elif index_type == "ivfpq":
                     n_lists = index_config_params.get("n_lists", 1024)
                     pq_dim = index_config_params.get("pq_dim", 8)
                     pq_bits = index_config_params.get("pq_bits", 8)
-                    config = IndexIVFPQ(embedding_dim, n_lists, pq_dim, pq_bits, metric)
+                    config = IndexIVFPQ(dimension=embedding_dim, n_lists=n_lists, pq_dim=pq_dim, pq_bits=pq_bits, metric=metric)
                 else:  # ivfflat
                     n_lists = index_config_params.get("n_lists", 1024)
-                    config = IndexIVFFlat(embedding_dim, n_lists, metric)
+                    config = IndexIVFFlat(dimension=embedding_dim, n_lists=n_lists, metric=metric)
 
                 # Create the index
                 self.index = self.client.create_index(
                     index_name=index_name,
                     index_key=index_key,
                     index_config=config,
-                    embedding_model=self.embedding_model_name
+                    embedding_model=self.embedding_model_name if self.embedding_model_name else None,
+                    max_cache_size=max_cache_size
                 )
             
         def get_embeddings(self, texts: Union[str, List[str]]) -> np.ndarray:
             """
-            Generate embeddings for the given texts using either:
-            - A SentenceTransformer
-            - Any LangChain Embeddings implementation
+            Generate embeddings for the given texts.
             """
             # Lazy load by name if needed
             if self.embedding_model is None and self.embedding_model_name:
@@ -172,24 +174,27 @@ try:
             texts_list = [texts] if is_single else texts
 
             # 1) SentenceTransformer path
-            if isinstance(self.embedding_model, SentenceTransformer):
-                # SentenceTransformer.encode always returns NumPy if requested
+            if hasattr(self.embedding_model, 'encode') and hasattr(self.embedding_model, 'get_sentence_embedding_dimension'):
                 embeddings = self.embedding_model.encode(texts_list, convert_to_numpy=True)
 
             # 2) LangChain Embeddings path
-            elif isinstance(self.embedding_model, Embeddings):
-                # embed_query or embed_documents returns List[float] or List[List[float]]
+            elif hasattr(self.embedding_model, 'embed_documents') and hasattr(self.embedding_model, 'embed_query'):
                 if is_single:
                     raw = self.embedding_model.embed_query(texts)
                     embeddings = np.array(raw, dtype=np.float32)[None, :]
                 else:
                     raw = self.embedding_model.embed_documents(texts_list)
                     embeddings = np.array(raw, dtype=np.float32)
-
+            
+            # 3) Generic callable
+            elif callable(self.embedding_model):
+                embeddings = self.embedding_model(texts_list)
+                if not isinstance(embeddings, np.ndarray):
+                    embeddings = np.array(embeddings, dtype=np.float32)
             else:
                 raise TypeError(
                     f"Unsupported embedding model type: {type(self.embedding_model)}. "
-                    "Must be SentenceTransformer or a LangChain Embeddings."
+                    "Must be SentenceTransformer, LangChain Embeddings, or callable."
                 )
 
             # If single-text, return 1-D array
@@ -200,18 +205,13 @@ try:
         def add_texts(self, texts: Iterable[str], metadatas: Optional[List[dict]] = None, ids: Optional[List[str]] = None, **kwargs) -> List[str]:
             """
             Add texts to the vector store.
-            
-            Args:
-                texts: Iterable of strings to add
-                metadatas: Optional list of metadata dictionaries
-                ids: Optional list of document IDs
-                
-            Returns:
-                List of IDs of the added texts
             """
-            # Convert texts to a list if it's not already
             texts_list = list(texts)
             num_texts = len(texts_list)
+            
+            # Return early if no texts
+            if num_texts == 0:
+                return []
             
             # Validate or generate IDs
             if ids is not None:
@@ -221,10 +221,14 @@ try:
             else:
                 id_list = [str(uuid.uuid4()) for _ in range(num_texts)]
             
+            # Validate metadata length if provided
+            if metadatas is not None and len(metadatas) != num_texts:
+                raise ValueError("Length of metadatas must match length of texts.")
+            
             # Generate embeddings
             embeddings = self.get_embeddings(texts_list)
             
-            # Process metadata if provided
+            # Process metadata
             items = []
             for i, (text, doc_id) in enumerate(zip(texts_list, id_list)):
                 item = {
@@ -233,8 +237,8 @@ try:
                     "vector": embeddings[i].tolist() if len(embeddings.shape) > 1 else embeddings.tolist()
                 }
                 
-                if metadatas is not None and i < len(metadatas):
-                    item["metadata"] = metadatas[i] or {}
+                if metadatas is not None and metadatas[i]:
+                    item["metadata"] = metadatas[i]
                 
                 items.append(item)
             
@@ -246,47 +250,29 @@ try:
         def add_documents(self, documents: List[Document], ids: Optional[List[str]] = None, **kwargs) -> List[str]:
             """
             Add documents to the vector store.
-            
-            Args:
-                documents: List of Document objects
-                ids: Optional list of document IDs
-                
-            Returns:
-                List of IDs of the added documents
             """
-            # Extract texts and metadata from documents
             texts = [doc.page_content for doc in documents]
             metadatas = [doc.metadata for doc in documents]
             
-            # Call add_texts
             return self.add_texts(texts, metadatas, ids=ids, **kwargs)
         
         def delete(self, ids: Optional[List[str]] = None, delete_index: bool = False) -> bool:
             """
             Delete documents from the vector store or delete the entire index.
-            
-            Args:
-                ids: Optional list of IDs to delete
-                delete_index: If True, deletes the entire index regardless of `ids`
-                
-            Returns:
-                Success of deletion
             """
             try:
                 if delete_index:
-                    # Delete the entire index
                     self.index.delete_index()
-                elif ids is not None:
-                    # Delete specified documents
+                elif ids is not None and len(ids) > 0:
                     self.index.delete(ids)
                 else:
-                    # No action if delete_index is False and no ids provided
                     return False
                 return True
-            except Exception:
+            except Exception as e:
+                warnings.warn(f"Delete operation failed: {e}")
                 return False
 
-        def _execute_query(self, query, k=4, filter=None) -> Tuple[List[Dict[str, Any]], List[float]]:
+        def _execute_query(self, query, k=4, filter=None, n_probes=1) -> List[Dict[str, Any]]:
             """Helper to execute a search query and process the results"""
             filter = filter or {}
             
@@ -294,72 +280,55 @@ try:
                 # Text query - get embeddings first
                 embedding = self.get_embeddings(query)
                 results = self.index.query(
-                    query_vectors=embedding, 
+                    query_vector=embedding, 
                     top_k=k,
+                    n_probes=n_probes,
                     filters=filter,
                     include=["distance", "metadata", "contents"]
                 )
             else:
                 # Embedding query
                 results = self.index.query(
-                    query_vectors=query, 
+                    query_vector=query, 
                     top_k=k,
+                    n_probes=n_probes,
                     filters=filter,
                     include=["distance", "metadata", "contents"]
                 )
             
-            # If no results, return empty
-            if not results or len(results) == 0:
-                return [], []
+            # Handle the results format
+            if isinstance(results, list) and len(results) > 0 and isinstance(results[0], list):
+                # Batch query result - take the first result
+                results = results[0]
             
-            # Get contents for results if needed
-            result_ids = [r["id"] for r in results]
-            
-            # Get full items from the index if contents are not in the results
-            if "contents" not in results[0]:
-                items = self.index.get(result_ids, include=["contents", "metadata"])
-                # Map items by ID for easy lookup
-                items_by_id = {item["id"]: item for item in items}
-                
-                # Add contents to results
-                for r in results:
-                    if r["id"] in items_by_id:
-                        r["contents"] = items_by_id[r["id"]].get("contents", "")
-                        r["metadata"] = items_by_id[r["id"]].get("metadata", {})
-            
-            # Process the results
-            items = []
-            distances = []
-            
-            for r in results:
-                items.append(r)
-                distances.append(r.get("distance", 0.0))
-            
-            return items, distances
+            return results if results else []
         
         def similarity_search(self, query: str, k: int = 4, filter: Optional[Dict] = None, **kwargs) -> List[Document]:
             """
             Return documents most similar to query.
-            
-            Args:
-                query: Query text
-                k: Number of documents to return
-                filter: Optional metadata filters
-                
-            Returns:
-                List of Documents
             """
-            items, _ = self._execute_query(query, k, filter)
+            n_probes = kwargs.get('n_probes', 1)
+            results = self._execute_query(query, k, filter, n_probes)
             
             # Convert to Documents
             docs = []
-            for item in items:
+            for item in results:
                 content = item.get("contents", "")
                 if isinstance(content, bytes):
                     content = content.decode("utf-8", errors="replace")
+                    
+                # Handle metadata
+                metadata = item.get("metadata", {})
+                if isinstance(metadata, str):
+                    try:
+                        import json
+                        metadata = json.loads(metadata)
+                    except:
+                        metadata = {"raw": metadata}
+                        
                 docs.append(Document(
                     page_content=content,
-                    metadata=item.get("metadata", {})
+                    metadata=metadata
                 ))
             
             return docs
@@ -367,31 +336,34 @@ try:
         def similarity_search_with_score(self, query: str, k: int = 4, filter: Optional[Dict] = None, **kwargs) -> List[Tuple[Document, float]]:
             """
             Return documents most similar to query along with relevance scores.
-            
-            Args:
-                query: Query text
-                k: Number of documents to return
-                filter: Optional metadata filters
-                
-            Returns:
-                List of (Document, score) tuples
             """
-            items, distances = self._execute_query(query, k, filter)
+            n_probes = kwargs.get('n_probes', 1)
+            results = self._execute_query(query, k, filter, n_probes)
             
             # Convert to Documents with scores
             docs_with_scores = []
-            for i, item in enumerate(items):
+            for item in results:
                 content = item.get("contents", "")
                 if isinstance(content, bytes):
                     content = content.decode("utf-8", errors="replace")
                 
+                # Handle metadata
+                metadata = item.get("metadata", {})
+                if isinstance(metadata, str):
+                    try:
+                        import json
+                        metadata = json.loads(metadata)
+                    except:
+                        metadata = {"raw": metadata}
+                
                 doc = Document(
                     page_content=content,
-                    metadata=item.get("metadata", {})
+                    metadata=metadata
                 )
                 
-                # Normalize the distance to a similarity score
-                similarity = self._normalize_score(distances[i])
+                # Get distance and normalize to similarity
+                distance = item.get("distance", 0.0)
+                similarity = self._normalize_score(distance)
                 
                 docs_with_scores.append((doc, similarity))
             
@@ -400,57 +372,56 @@ try:
         def _normalize_score(self, distance: float) -> float:
             """
             Normalize a distance score to a similarity score in the range [0, 1].
-            
-            Args:
-                distance: Raw distance score from the index
-                
-            Returns:
-                Normalized score where 1 is most similar and 0 is least similar
             """
-            # Get the metric used by the index - adjust this based on your API
+            # Get the metric from the index config
             try:
-                metric = getattr(self.index, 'metric', 'cosine')
+                config = self.index.index_config
+                if isinstance(config, dict):
+                    metric = config.get('metric', 'cosine')
+                else:
+                    metric = getattr(config, 'metric', 'cosine')
             except:
-                metric = 'cosine'  # default fallback
+                metric = 'cosine'
             
             if metric == "cosine":
-                # Cosine distance: 0 (identical) to 2 (opposite), convert to 1 to 0
-                return 1.0 - (distance / 2.0)
+                # Cosine distance: 0 (identical) to 2 (opposite)
+                return max(0.0, 1.0 - (distance / 2.0))
             elif metric == "euclidean":
-                # Euclidean: normalize based on embedding size
-                max_distance = 2.0  # For normalized embeddings
-                return 1.0 - min(distance / max_distance, 1.0)
+                # Euclidean: use exponential decay
+                return np.exp(-distance)
             elif metric == "squared_euclidean":
-                # Euclidean: normalize based on embedding size
-                max_distance = 4.0  # For normalized embeddings
-                return 1.0 - min(distance / max_distance, 1.0)
+                # Squared Euclidean: use exponential decay with sqrt
+                return np.exp(-np.sqrt(distance))
             else:
-                # Default normalization, assuming 0 = identical, higher = more different
+                # Default normalization
                 return 1.0 / (1.0 + distance)
         
         def similarity_search_by_vector(self, embedding: List[float], k: int = 4, filter: Optional[Dict] = None, **kwargs) -> List[Document]:
             """
             Return documents most similar to embedding vector.
-            
-            Args:
-                embedding: Embedding vector
-                k: Number of documents to return
-                filter: Optional metadata filters
-                
-            Returns:
-                List of Documents
             """
-            items, _ = self._execute_query(embedding, k, filter)
+            n_probes = kwargs.get('n_probes', 1)
+            results = self._execute_query(embedding, k, filter, n_probes)
             
             # Convert to Documents
             docs = []
-            for item in items:
+            for item in results:
                 content = item.get("contents", "")
                 if isinstance(content, bytes):
                     content = content.decode("utf-8", errors="replace")
+                    
+                # Handle metadata
+                metadata = item.get("metadata", {})
+                if isinstance(metadata, str):
+                    try:
+                        import json
+                        metadata = json.loads(metadata)
+                    except:
+                        metadata = {"raw": metadata}
+                        
                 docs.append(Document(
                     page_content=content,
-                    metadata=item.get("metadata", {})
+                    metadata=metadata
                 ))
             
             return docs
@@ -461,16 +432,7 @@ try:
             search_kwargs: Optional[Dict[str, Any]] = None,
             **kwargs: Any,
         ) -> VectorStoreRetriever:
-            """Return a retriever object for this vectorstore.
-
-            Args:
-                search_type: Type of search to perform. Defaults to "similarity".
-                search_kwargs: Keyword arguments to pass to the search function.
-                **kwargs: Additional keyword arguments to pass to the retriever.
-
-            Returns:
-                A retriever object.
-            """
+            """Return a retriever object for this vectorstore."""
             
             return VectorStoreRetriever(
                 vectorstore=self,
@@ -483,15 +445,6 @@ try:
         def from_texts(cls, texts: List[str], embedding: Union[str, Embeddings, SentenceTransformer], metadatas: Optional[List[Dict]] = None, **kwargs) -> "CyborgVectorStore":
             """
             Create a vector store from texts.
-            
-            Args:
-                texts: List of strings
-                embedding: Embedding function
-                metadatas: Optional list of metadata dictionaries
-                **kwargs: Additional arguments for vector store creation
-                
-            Returns:
-                CyborgVectorStore
             """
             ids = kwargs.pop("ids", None)
             
@@ -499,6 +452,7 @@ try:
             index_name = kwargs.pop("index_name", "langchain_index")
             index_key = kwargs.pop("index_key", None)
             api_key = kwargs.pop("api_key", None)
+            api_url = kwargs.pop("api_url", "https://api.cyborgdb.com")
 
             if index_key is None:
                 raise ValueError(
@@ -506,12 +460,14 @@ try:
                     "Use generate_key() to generate a secure 32-byte key."
                 )
             
-            index_location = kwargs.pop("index_location")
-            config_location = kwargs.pop("config_location")
+            if api_key is None:
+                raise ValueError("api_key must be provided for CyborgVectorStore.")
+            
+            # Extract other parameters
             index_type = kwargs.pop("index_type", "ivfflat")
             metric = kwargs.pop("metric", "cosine")
-            items_location = kwargs.pop("items_location", None)
             dimension = kwargs.pop("dimension", None)
+            max_cache_size = kwargs.pop("max_cache_size", 0)
             
             # Handle index config parameters
             index_config_params = kwargs.pop("index_config_params", {})
@@ -519,35 +475,31 @@ try:
                 if key in kwargs:
                     index_config_params[key] = kwargs.pop(key)
             
-            # Create documents if metadatas provided
-            if metadatas is None:
-                metadatas = [{} for _ in texts]
-            
             # Create the vector store
             store = cls(
                 index_name=index_name,
                 index_key=index_key,
                 api_key=api_key,
+                api_url=api_url,
                 embedding=embedding,
-                index_location=index_location,
-                config_location=config_location,
-                items_location=items_location,
                 index_type=index_type,
                 index_config_params=index_config_params,
                 dimension=dimension,
-                metric=metric
+                metric=metric,
+                max_cache_size=max_cache_size
             )
             
-            # Add texts
-            store.add_texts(texts, metadatas, ids=ids)
+            # Add texts if provided
+            if texts:
+                store.add_texts(texts, metadatas, ids=ids)
             
             # Train the index if needed and there are enough documents
             n_lists = index_config_params.get("n_lists", 1024)
             try:
                 if not store.index.is_trained() and len(texts) >= 2 * n_lists:
                     store.index.train()
-            except:
-                pass  # Training might not be available in all versions
+            except Exception as e:
+                warnings.warn(f"Could not train index: {e}")
             
             return store
         
@@ -555,14 +507,6 @@ try:
         def from_documents(cls, documents: List[Document], embedding: Union[str, Embeddings, SentenceTransformer], **kwargs) -> "CyborgVectorStore":
             """
             Create a vector store from documents.
-            
-            Args:
-                documents: List of Document objects
-                embedding: Embedding function
-                **kwargs: Additional arguments for vector store creation
-                
-            Returns:
-                CyborgVectorStore
             """
             texts = [doc.page_content for doc in documents]
             metadatas = [doc.metadata for doc in documents]
