@@ -57,8 +57,8 @@ class TestLangChainIntegration(unittest.TestCase):
         """Set up test fixtures."""
         # Test parameters
         cls.dimension = 384
-        cls.api_url = "https://localhost:8000"
-        cls.api_key = os.getenv("CYBORGDB_API_KEY", "cyborg_5e5be271a8884c10a6c96caa68870e74")
+        cls.api_url = "http://localhost:8000"
+        cls.api_key = os.getenv("CYBORGDB_API_KEY", "cyborg_e9n8t7e6r5p4r3i2s1e0987654321abc")
         
         # Test data
         cls.test_texts = [
@@ -158,44 +158,94 @@ class TestLangChainIntegration(unittest.TestCase):
         self.assertEqual(len(results), 3)
         self.assertIsInstance(results[0], Document)
     
-    def test_02_create_vectorstore_with_sentence_transformer(self):
-        """Test creating a vector store with SentenceTransformer."""
-        index_name = "langchain_test_sentence_transformer"
+    def test_02_verify_content_storage_in_metadata(self):
+        """Test that text is stored in metadata with _content key."""
+        index_name = "langchain_test_content_storage"
         self.index_names_to_cleanup.append(index_name)
         
-        # Use a small pre-trained model for faster testing
-        model_name = "sentence-transformers/all-MiniLM-L6-v2"
-        
-        # Create vector store with SentenceTransformer model name
         vectorstore = CyborgVectorStore(
             index_name=index_name,
             index_key=self.index_key,
             api_key=self.api_key,
             api_url=self.api_url,
-            embedding=model_name,
+            embedding=MockEmbeddings(self.dimension),
             index_type="ivfflat",
             metric="cosine",
             index_config_params={"n_lists": 10}
         )
         
-        # Add documents
-        ids = vectorstore.add_documents(self.test_documents[:5])
-        self.assertEqual(len(ids), 5)
+        # Add test documents with specific IDs
+        test_ids = ["test_id_1", "test_id_2", "test_id_3"]
+        test_texts = self.test_texts[:3]
+        test_metadatas = self.test_metadata[:3]
         
-        # Test similarity search with score
-        results_with_scores = vectorstore.similarity_search_with_score(
-            "What is machine learning?", 
-            k=3
+        ids = vectorstore.add_texts(
+            texts=test_texts,
+            metadatas=test_metadatas,
+            ids=test_ids
         )
         
-        self.assertEqual(len(results_with_scores), 3)
-        for doc, score in results_with_scores:
-            self.assertIsInstance(doc, Document)
-            self.assertIsInstance(score, float)
-            self.assertGreaterEqual(score, 0.0)
-            self.assertLessEqual(score, 1.0)
+        # Use the underlying index to verify data storage
+        raw_items = vectorstore.index.get(test_ids, include=["metadata"])
+        
+        for i, item in enumerate(raw_items):
+            # Verify that text is stored in metadata with _content key
+            metadata = item["metadata"]
+            if isinstance(metadata, str):
+                metadata = json.loads(metadata)
+            
+            # Check that _content key exists and has correct value
+            self.assertIn("_content", metadata)
+            self.assertEqual(metadata["_content"], test_texts[i])
+            
+            # Verify that original metadata is preserved
+            for key, value in test_metadatas[i].items():
+                self.assertEqual(metadata.get(key), value)
     
-    def test_03_metadata_filtering(self):
+    def test_03_get_documents_by_id(self):
+        """Test retrieving documents by ID."""
+        index_name = "langchain_test_get_by_id"
+        self.index_names_to_cleanup.append(index_name)
+        
+        vectorstore = CyborgVectorStore(
+            index_name=index_name,
+            index_key=self.index_key,
+            api_key=self.api_key,
+            api_url=self.api_url,
+            embedding=MockEmbeddings(self.dimension),
+            index_type="ivfflat"
+        )
+        
+        # Add documents with specific IDs
+        test_ids = [f"doc_{i}" for i in range(5)]
+        ids = vectorstore.add_texts(
+            texts=self.test_texts[:5],
+            metadatas=self.test_metadata[:5],
+            ids=test_ids
+        )
+        
+        # Get specific documents
+        retrieved_docs = vectorstore.get(["doc_1", "doc_3"])
+        
+        self.assertEqual(len(retrieved_docs), 2)
+        
+        # Verify the content and metadata
+        doc_map = {doc.page_content: doc for doc in retrieved_docs}
+        
+        # Check that we got the right documents
+        self.assertIn(self.test_texts[1], doc_map)
+        self.assertIn(self.test_texts[3], doc_map)
+        
+        # Verify metadata for each document
+        doc1 = doc_map[self.test_texts[1]]
+        self.assertEqual(doc1.metadata["category"], "AI")
+        self.assertEqual(doc1.metadata["source"], "textbook")
+        
+        doc3 = doc_map[self.test_texts[3]]
+        self.assertEqual(doc3.metadata["category"], "AI")
+        self.assertEqual(doc3.metadata["source"], "research")
+    
+    def test_04_metadata_filtering(self):
         """Test metadata filtering in searches."""
         index_name = "langchain_test_metadata_filter"
         self.index_names_to_cleanup.append(index_name)
@@ -236,7 +286,7 @@ class TestLangChainIntegration(unittest.TestCase):
             self.assertEqual(doc.metadata.get("category"), "AI")
             self.assertEqual(doc.metadata.get("source"), "research")
     
-    def test_04_similarity_search_by_vector(self):
+    def test_05_similarity_search_by_vector(self):
         """Test similarity search using a vector directly."""
         index_name = "langchain_test_vector_search"
         self.index_names_to_cleanup.append(index_name)
@@ -268,7 +318,7 @@ class TestLangChainIntegration(unittest.TestCase):
         for doc in results:
             self.assertIsInstance(doc, Document)
     
-    def test_05_delete_operations(self):
+    def test_06_delete_operations(self):
         """Test delete operations."""
         index_name = "langchain_test_delete"
         self.index_names_to_cleanup.append(index_name)
@@ -301,7 +351,7 @@ class TestLangChainIntegration(unittest.TestCase):
         # doc2 text should not be in results
         self.assertNotIn(self.test_texts[1], result_texts)
     
-    def test_06_from_texts_classmethod(self):
+    def test_07_from_texts_classmethod(self):
         """Test creating vector store from texts using class method."""
         index_name = "langchain_test_from_texts"
         self.index_names_to_cleanup.append(index_name)
@@ -322,7 +372,7 @@ class TestLangChainIntegration(unittest.TestCase):
         results = vectorstore.similarity_search("programming", k=3)
         self.assertGreater(len(results), 0)
     
-    def test_07_from_documents_classmethod(self):
+    def test_08_from_documents_classmethod(self):
         """Test creating vector store from documents using class method."""
         index_name = "langchain_test_from_documents"
         self.index_names_to_cleanup.append(index_name)
@@ -342,7 +392,7 @@ class TestLangChainIntegration(unittest.TestCase):
         results = vectorstore.similarity_search("database", k=3)
         self.assertGreater(len(results), 0)
     
-    def test_08_as_retriever(self):
+    def test_09_as_retriever(self):
         """Test using vector store as a retriever."""
         index_name = "langchain_test_retriever"
         self.index_names_to_cleanup.append(index_name)
@@ -372,7 +422,7 @@ class TestLangChainIntegration(unittest.TestCase):
         for doc in docs:
             self.assertIsInstance(doc, Document)
     
-    def test_09_async_operations(self):
+    def test_10_async_operations(self):
         """Test async operations."""
         index_name = "langchain_test_async"
         self.index_names_to_cleanup.append(index_name)
@@ -415,7 +465,7 @@ class TestLangChainIntegration(unittest.TestCase):
         # Run async tests
         asyncio.run(run_async_tests())
     
-    def test_10_train_index(self):
+    def test_11_train_index(self):
         """Test training the index when enough vectors are present."""
         index_name = "langchain_test_train"
         self.index_names_to_cleanup.append(index_name)
@@ -457,7 +507,7 @@ class TestLangChainIntegration(unittest.TestCase):
         results = vectorstore.similarity_search("test document", k=5)
         self.assertGreater(len(results), 0)
     
-    def test_11_edge_cases(self):
+    def test_12_edge_cases(self):
         """Test edge cases and error handling."""
         index_name = "langchain_test_edge_cases"
         self.index_names_to_cleanup.append(index_name)
@@ -480,7 +530,7 @@ class TestLangChainIntegration(unittest.TestCase):
         self.assertEqual(len(ids), 0)
         
         # Test mismatched texts and metadata lengths
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             vectorstore.add_texts(
                 texts=["text1", "text2"],
                 metadatas=[{"meta": 1}],  # Only one metadata for two texts
@@ -490,6 +540,49 @@ class TestLangChainIntegration(unittest.TestCase):
         # Test delete with no IDs
         success = vectorstore.delete(ids=None, delete_index=False)
         self.assertFalse(success)
+    
+    def test_13_content_preserved_through_search(self):
+        """Test that content is properly preserved through search operations via metadata."""
+        index_name = "langchain_test_content_search"
+        self.index_names_to_cleanup.append(index_name)
+        
+        vectorstore = CyborgVectorStore(
+            index_name=index_name,
+            index_key=self.index_key,
+            api_key=self.api_key,
+            api_url=self.api_url,
+            embedding=MockEmbeddings(self.dimension),
+            index_type="ivfflat",
+            metric="cosine"
+        )
+        
+        # Add documents with distinct content
+        test_texts = [
+            "This is a very specific test sentence about quantum computing.",
+            "Another unique sentence about blockchain technology and cryptocurrencies.",
+            "A third sentence discussing artificial general intelligence (AGI)."
+        ]
+        test_metadata = [
+            {"topic": "quantum"},
+            {"topic": "blockchain"},
+            {"topic": "AGI"}
+        ]
+        
+        vectorstore.add_texts(texts=test_texts, metadatas=test_metadata)
+        
+        # Search and verify exact content is returned
+        results = vectorstore.similarity_search("quantum computing", k=1)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].page_content, test_texts[0])
+        self.assertEqual(results[0].metadata["topic"], "quantum")
+        
+        # Search with score and verify
+        results_with_score = vectorstore.similarity_search_with_score("blockchain", k=1)
+        self.assertEqual(len(results_with_score), 1)
+        doc, score = results_with_score[0]
+        self.assertEqual(doc.page_content, test_texts[1])
+        self.assertEqual(doc.metadata["topic"], "blockchain")
+        self.assertIsInstance(score, float)
 
 
 if __name__ == '__main__':
