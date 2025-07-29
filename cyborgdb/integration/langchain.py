@@ -140,9 +140,7 @@ try:
                 self._create_new_index(index_type, index_config_params, dimension, metric)
         
         def _load_existing_index(self) -> None:
-            """Load an existing index."""
-            from cyborgdb.client.encrypted_index import EncryptedIndex
-            
+            """Load an existing index."""            
             self.index = EncryptedIndex(
                 index_name=self.index_name,
                 index_key=self.index_key,
@@ -176,7 +174,7 @@ try:
             )
         
         def _detect_embedding_dimension(self) -> int:
-            """Detect the embedding dimension from the model."""
+            """Helper to detect the embedding dimension from the model."""
             # Lazy load if needed
             if self.embedding_model is None and self.embedding_model_name:
                 self.embedding_model = SentenceTransformer(self.embedding_model_name)
@@ -225,7 +223,7 @@ try:
         
         def get_embeddings(self, texts: Union[str, List[str]]) -> np.ndarray:
             """
-            Generate embeddings for the given texts.
+            Helper to generate embeddings for the given texts.
             
             Args:
                 texts: Single text string or list of texts
