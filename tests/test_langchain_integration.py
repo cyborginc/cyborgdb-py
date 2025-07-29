@@ -27,27 +27,66 @@ from cyborgdb.integration.langchain import CyborgVectorStore
 
 # Mock embedding class for testing
 class MockEmbeddings(Embeddings):
-    """Mock embeddings for testing that generates deterministic vectors."""
+    """Mock embeddings for testing that generates semantically meaningful vectors."""
     
     def __init__(self, dimension: int = 384):
         self.dimension = dimension
+        # Create a simple vocabulary for keyword extraction
+        self.vocab = {}
+        self.vocab_size = 0
+    
+    def _text_to_vector(self, text: str) -> List[float]:
+        """Convert text to a vector with semantic meaning."""
+        # Tokenize and normalize
+        words = text.lower().split()
+        
+        # Build vocabulary on the fly
+        for word in words:
+            if word not in self.vocab:
+                self.vocab[word] = self.vocab_size
+                self.vocab_size += 1
+        
+        # Create a sparse vector representation
+        vector = np.zeros(self.dimension)
+        
+        # Use TF representation with position encoding
+        for i, word in enumerate(words):
+            if word in self.vocab:
+                # Use multiple dimensions per word to avoid collisions
+                word_idx = self.vocab[word]
+                # Spread the word representation across multiple dimensions
+                base_idx = (word_idx * 7) % self.dimension  # 7 is a prime number
+                
+                # Add term frequency
+                vector[base_idx] += 1.0
+                
+                # Add position encoding to neighboring dimensions
+                if base_idx + 1 < self.dimension:
+                    vector[base_idx + 1] += 0.5 / (i + 1)  # Position weight
+                if base_idx + 2 < self.dimension:
+                    vector[base_idx + 2] += 0.3  # Word presence indicator
+        
+        # Add some deterministic noise based on full text to make vectors unique
+        # but preserve similarity
+        np.random.seed(hash(text) % 1000000)
+        noise = np.random.randn(self.dimension) * 0.1  # Small noise
+        vector += noise
+        
+        # Normalize to unit length (important for cosine similarity)
+        norm = np.linalg.norm(vector)
+        if norm > 0:
+            vector = vector / norm
+            
+        return vector.tolist()
     
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """Generate deterministic embeddings based on text hash."""
-        embeddings = []
-        for text in texts:
-            # Create a deterministic embedding based on text content
-            hash_val = hash(text) % 1000000
-            np.random.seed(hash_val)
-            embedding = np.random.randn(self.dimension).tolist()
-            embeddings.append(embedding)
-        return embeddings
+        """Generate embeddings that capture semantic similarity."""
+        return [self._text_to_vector(text) for text in texts]
     
     def embed_query(self, text: str) -> List[float]:
-        """Generate deterministic embedding for a single query."""
-        return self.embed_documents([text])[0]
-
-
+        """Generate embedding for a single query."""
+        return self._text_to_vector(text)
+    
 @unittest.skipUnless(LANGCHAIN_AVAILABLE, "LangChain dependencies not available")
 class TestLangChainIntegration(unittest.TestCase):
     """Test suite for CyborgDB LangChain integration."""

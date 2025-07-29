@@ -519,7 +519,6 @@ try:
             
             docs_with_scores = []
             for item in results:
-                content = item.get("contents", "")
                 metadata = item.get("metadata", {})
                 
                 if isinstance(metadata, str):
@@ -528,7 +527,11 @@ try:
                     except json.JSONDecodeError:
                         metadata = {"raw": metadata}
                 
-                doc = Document(page_content=content, metadata=metadata)
+                # Extract content from metadata (consistent with other methods)
+                metadata_copy = metadata.copy() if isinstance(metadata, dict) else {}
+                content = metadata_copy.pop("_content", "")
+                
+                doc = Document(page_content=content, metadata=metadata_copy)
                 
                 # Convert distance to similarity score
                 distance = item.get("distance", 0.0)
