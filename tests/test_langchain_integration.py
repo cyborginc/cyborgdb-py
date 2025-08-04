@@ -22,7 +22,7 @@ except ImportError:
 
 # Import CyborgDB components
 import cyborgdb
-from cyborgdb.integration.langchain import CyborgVectorStore
+from cyborgdb.integrations.langchain import CyborgVectorStore
 
 
 # Mock embedding class for testing

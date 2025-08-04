@@ -15,10 +15,8 @@ from .client.client import (
 # Re-export from encrypted_index.py
 from .client.encrypted_index import EncryptedIndex
 
-from .integration.langchain import CyborgVectorStore
+from .integrations.langchain import CyborgVectorStore
 
-
-from .client.encrypted_index import EncryptedIndex
 __all__ = [
     "Client",
     "EncryptedIndex",
