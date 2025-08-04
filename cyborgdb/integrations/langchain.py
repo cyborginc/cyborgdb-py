@@ -49,6 +49,30 @@ try:
             client: CyborgDB client instance
         """
 
+        @staticmethod
+        def _validate_index_key(index_key: bytes) -> None:
+            """
+            Validate that index_key is a proper 32-byte encryption key.
+            
+            Args:
+                index_key: The encryption key to validate
+                
+            Raises:
+                TypeError: If index_key is not bytes type
+                ValueError: If index_key is not exactly 32 bytes
+            """
+            if not isinstance(index_key, bytes):
+                raise TypeError(
+                    f"index_key must be bytes, got {type(index_key).__name__}. "
+                    f"Use generate_key() to create a secure 32-byte key."
+                )
+            
+            if len(index_key) != 32:
+                raise ValueError(
+                    f"index_key must be exactly 32 bytes, got {len(index_key)} bytes. "
+                    f"Use generate_key() to create a secure 32-byte key."
+                )
+            
         def __init__(
             self, 
             index_name: str, 
@@ -85,6 +109,8 @@ try:
             Raises:
                 ValueError: If required parameters are invalid or index creation fails
             """
+            self._validate_index_key(index_key)
+
             self.index_name = index_name
             self.index_key = index_key
             self.max_cache_size = max_cache_size
@@ -309,9 +335,15 @@ try:
             # Build items for upsert
             items = []
             for i in range(num_texts):
+                # Handle both numpy arrays and lists for embeddings
+                if hasattr(embeddings, "shape"):
+                    vector = embeddings[i].tolist() if len(embeddings.shape) > 1 else embeddings.tolist()
+                else:
+                    # embeddings is likely a list of lists or a list
+                    vector = embeddings[i] if isinstance(embeddings[i], list) else [embeddings[i]]
                 item = {
                     "id": id_list[i],
-                    "vector": embeddings[i].tolist() if len(embeddings.shape) > 1 else embeddings.tolist()
+                    "vector": vector
                 }
                 
                 # Store text in metadata with document content
@@ -735,11 +767,7 @@ try:
             api_key = kwargs.pop("api_key", None)
             api_url = kwargs.pop("api_url", "https://api.cyborgdb.com")
             
-            if index_key is None:
-                raise ValueError(
-                    "index_key must be provided. Use generate_key() to create a secure 32-byte key."
-                )
-            
+            cls._validate_index_key(index_key)
             if api_key is None:
                 raise ValueError("api_key must be provided for CyborgDB.")
             
