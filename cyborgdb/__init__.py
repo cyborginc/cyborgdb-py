@@ -15,7 +15,23 @@ from .client.client import (
 # Re-export from encrypted_index.py
 from .client.encrypted_index import EncryptedIndex
 
-from .integrations.langchain import CyborgVectorStore
+# Try to import LangChain integration (optional dependency)
+try:
+    from .integrations.langchain import CyborgVectorStore
+except ImportError as e:
+    # Create a placeholder that raises a helpful error when accessed
+    class CyborgVectorStore:
+        def __init__(self, *args, **kwargs):
+            raise ImportError(
+                "CyborgVectorStore requires LangChain dependencies. "
+                "Please install them with: pip install cyborgdb[langchain]"
+            )
+        
+        def __class_getitem__(cls, item):
+            raise ImportError(
+                "CyborgVectorStore requires LangChain dependencies. "
+                "Please install them with: pip install cyborgdb[langchain]"
+            )
 
 __all__ = [
     "Client",
