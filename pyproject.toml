@@ -36,6 +36,13 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 
+[project.optional-dependencies]
+langchain = [
+    "langchain-core >= 0.1.0",
+    "sentence-transformers >= 2.2.0",
+    "numpy >= 1.21.0",
+]
+
 [project.urls]
 "Homepage" = "https://www.cyborg.co"
 "Documentation" = "https://docs.cyborg.co"
