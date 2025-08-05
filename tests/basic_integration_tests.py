@@ -360,5 +360,11 @@ class TestUnitFlow(unittest.TestCase):
         self.assertIsInstance(self.index.index_config, dict, "Index config is not a dictionary")
         self.assertEqual(self.index.index_type, "ivfflat", "Index type is not IVFFlat")
 
+    def test_15_load_index(self):
+        # Test loading an existing index.
+        loaded_index = self.client.load_index(self.index_name, self.test_key)
+        self.assertIsInstance(loaded_index, cyborgdb.EncryptedIndex)
+        self.assertEqual(loaded_index.index_name, self.index_name)
+
 if __name__ == '__main__':
     unittest.main()
