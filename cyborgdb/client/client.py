@@ -209,3 +209,29 @@ class Client:
             error_msg = f"Validation error while creating index: {ve}"
             logger.error(error_msg)
             raise ValueError(error_msg)
+        
+    def load_index(self, index_name: str, index_key: bytes) -> EncryptedIndex:
+        """
+        Load an existing encrypted index by name and key.
+        """
+
+        # Validate index_key
+        if not isinstance(index_key, bytes) or len(index_key) != 32:
+            raise ValueError("index_key must be a 32-byte bytes object")
+
+        try:
+            # Convert binary key to hex string
+            key_hex = binascii.hexlify(index_key).decode('ascii')
+            
+            # Create the EncryptedIndex instance
+            return EncryptedIndex(
+                index_name=index_name,
+                index_key=index_key,
+                api=self.api,
+                api_client=self.api_client
+            )
+        
+        except Exception as e:
+            error_msg = f"Failed to load index '{index_name}': {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
