@@ -220,14 +220,20 @@ class Client:
         try:
             # Convert binary key to hex string
             key_hex = binascii.hexlify(index_key).decode('ascii')
-            
-            # Create the EncryptedIndex instance
-            return EncryptedIndex(
+
+            index = EncryptedIndex(
                 index_name=index_name,
                 index_key=index_key,
                 api=self.api,
                 api_client=self.api_client
             )
+
+            # Check if the index exists by trying to retrieve its type
+            # This will raise an exception if the index does not exist
+            index_type = index.index_type
+            
+            # Create the EncryptedIndex instance
+            return index
         
         except Exception as e:
             error_msg = f"Failed to load index '{index_name}': {e}"
