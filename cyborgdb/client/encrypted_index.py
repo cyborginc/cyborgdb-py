@@ -42,8 +42,7 @@ class EncryptedIndex:
         index_name: str, 
         index_key: bytes, 
         api: DefaultApi,
-        api_client: ApiClient,
-        max_cache_size: int = 0
+        api_client: ApiClient
     ):
         """
         Initialize with API access to an index.
@@ -53,13 +52,11 @@ class EncryptedIndex:
             index_key: Encryption key for the index
             api: API client instance
             api_client: The lower-level API client
-            max_cache_size: Maximum cache size
         """
         self._index_name = index_name
         self._index_key = index_key
         self._api = api
         self._api_client = api_client
-        self._max_cache_size = max_cache_size
         self._index_config = None
     
     @property
@@ -232,7 +229,6 @@ class EncryptedIndex:
         batch_size: int = 2048, 
         max_iters: int = 100, 
         tolerance: float = 1e-6,
-        max_memory: int = 0
     ) -> None:
         """
         Build the index using the specified training configuration.
@@ -260,7 +256,6 @@ class EncryptedIndex:
                 index_name=self._index_name,
                 max_iters=max_iters,
                 tolerance=tolerance,
-                max_memory=max_memory,
                 index_key=self._key_to_hex()
             )
 
