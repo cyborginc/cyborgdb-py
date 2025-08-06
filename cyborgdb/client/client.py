@@ -219,7 +219,6 @@ class Client:
 
         try:
             # Convert binary key to hex string
-            key_hex = binascii.hexlify(index_key).decode('ascii')
 
             index = EncryptedIndex(
                 index_name=index_name,
