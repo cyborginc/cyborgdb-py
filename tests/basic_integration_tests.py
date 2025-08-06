@@ -373,7 +373,7 @@ class TestUnitFlow(unittest.TestCase):
 
     def test_15_load_index(self):
         # Test loading an existing index.
-        loaded_index = self.client.load_index(self.index_name, self.test_key)
+        loaded_index = self.client.load_index(self.index_name, self.index_key)
         self.assertIsInstance(loaded_index, cyborgdb.EncryptedIndex)
         self.assertEqual(loaded_index.index_name, self.index_name)
 
