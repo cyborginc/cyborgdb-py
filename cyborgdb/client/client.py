@@ -240,7 +240,7 @@ class Client:
             logger.error(error_msg)
             raise ValueError(error_msg)
         
-    def get_health(self) -> Dict[str, Any]:
+    def get_health(self) -> Dict[str, str]:
         """
         Get the health status of the CyborgDB instance.
         
@@ -251,10 +251,7 @@ class Client:
             ValueError: If the health status could not be retrieved.
         """
         try:
-            response = self.api.health_check_v1_health_get()
-            return {
-                "status": response.status
-            }
+            return self.api.health_check_v1_health_get()
         except ApiException as e:
             error_msg = f"Failed to get health status: {e}"
             logger.error(error_msg)
