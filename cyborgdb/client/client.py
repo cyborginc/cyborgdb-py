@@ -158,8 +158,7 @@ class Client:
         index_name: str,
         index_key: bytes,
         index_config: Union[IndexIVFModel, IndexIVFPQModel, IndexIVFFlatModel],
-        embedding_model: Optional[str] = None,
-        max_cache_size: int = 0
+        embedding_model: Optional[str] = None
     ) -> EncryptedIndex:
         """
         Create and return a new encrypted index based on the provided configuration.
@@ -197,8 +196,7 @@ class Client:
                 index_name=index_name,
                 index_key=index_key,
                 api=self.api,
-                api_client=self.api_client,
-                max_cache_size=max_cache_size
+                api_client=self.api_client
             )
 
         except ApiException as e:
@@ -233,5 +231,25 @@ class Client:
         
         except Exception as e:
             error_msg = f"Failed to load index '{index_name}': {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+    def get_health(self) -> Dict[str, Any]:
+        """
+        Get the health status of the CyborgDB instance.
+        
+        Returns:
+            A dictionary containing health status information.
+            
+        Raises:
+            ValueError: If the health status could not be retrieved.
+        """
+        try:
+            response = self.api.health_check_v1_health_get()
+            return {
+                "status": response.status
+            }
+        except ApiException as e:
+            error_msg = f"Failed to get health status: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
