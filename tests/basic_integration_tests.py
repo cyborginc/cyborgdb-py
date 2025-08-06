@@ -138,7 +138,7 @@ class TestUnitFlow(unittest.TestCase):
         cls.index_config = cyborgdb.IndexIVFFlat(dimension=cls.dimension, n_lists=512, metric="euclidean")
         cls.client = cyborgdb.Client(
             api_url="https://localhost:8000",
-            api_key=os.getenv("CYBORG_API_KEY")
+            api_key=os.getenv("CYBORGDB_API_KEY", "")
         )
         cls.index_name = "memory_example_index19"
         cls.index_key = cyborgdb. generate_key() #bytes([1] * 32)
@@ -152,6 +152,13 @@ class TestUnitFlow(unittest.TestCase):
                 cls.index.delete_index()
         except Exception as e:
             print(f"Error during index cleanup: {e}")
+
+    def test_00_get_health(self):
+        # Check if the API is healthy.
+        health = self.client.get_health()
+        self.assertIsInstance(health, dict)
+        self.assertIn("status", health)
+        self.assertEqual(health["status"], "healthy", "API is not healthy")
 
     def test_01_untrained_upsert(self):
         # UNTRAINED UPSERT: upsert untrained items.
