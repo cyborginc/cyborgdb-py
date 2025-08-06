@@ -227,9 +227,9 @@ class Client:
                 api_client=self.api_client
             )
 
-            # Check if the index exists by trying to retrieve its type
-            # This will raise an exception if the index does not exist
-            index_type = index.index_type
+            # Attempt to access index.index_type to validate existence.
+            # This will raise an exception if the index does not exist.
+            _ = index.index_type  # Access for validation; value not used.
             
             # Create the EncryptedIndex instance
             return index
