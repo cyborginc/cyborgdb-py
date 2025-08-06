@@ -234,8 +234,12 @@ class Client:
             # Create the EncryptedIndex instance
             return index
         
-        except Exception as e:
+        except ApiException as e:
             error_msg = f"Failed to load index '{index_name}': {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        except ValidationError as ve:
+            error_msg = f"Validation error while loading index '{index_name}': {ve}"
             logger.error(error_msg)
             raise ValueError(error_msg)
         
