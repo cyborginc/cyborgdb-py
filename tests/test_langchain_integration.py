@@ -10,6 +10,10 @@ import json
 import numpy as np
 import asyncio
 from typing import List, Dict, Any
+from dotenv import load_dotenv
+
+# Load environment variables from .env.local
+load_dotenv('.env.local')
 
 # Test imports
 try:
@@ -97,7 +101,7 @@ class TestLangChainIntegration(unittest.TestCase):
         # Test parameters
         cls.dimension = 384
         cls.api_url = "http://localhost:8000"
-        cls.api_key = os.getenv("CYBORGDB_API_KEY", "cyborg_e9n8t7e6r5p4r3i2s1e0987654321abc")
+        cls.api_key = os.getenv("CYBORG_API_KEY")
         
         # Test data
         cls.test_texts = [
