@@ -18,7 +18,7 @@ class ClientIntegrationTest(unittest.TestCase):
         """Set up the test environment."""
         # Create real client (no mocking)
         self.client = Client(
-            api_url="https://localhost:8000",
+            api_url="http://localhost:8000",
             api_key=os.getenv("CYBORGDB_API_KEY", "")
         )
 

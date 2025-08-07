@@ -455,7 +455,7 @@ class TestLangChainIntegration(unittest.TestCase):
         )
         
         # Use retriever
-        docs = retriever.get_relevant_documents("What is deep learning?")
+        docs = retriever.invoke("What is deep learning?")
         
         self.assertEqual(len(docs), 3)
         for doc in docs:
