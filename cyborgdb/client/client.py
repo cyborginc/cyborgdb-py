@@ -86,14 +86,9 @@ class Client:
     """
     
     def __init__(self, api_url, api_key, verify_ssl=None):
-        # Ensure the API URL uses HTTPS
+        # If api_url is http, disable SSL verification
         if api_url.startswith('http://'):
-            api_url = api_url.replace('http://', 'https://')
-            logger.warning(f"Automatically converted HTTP URL to HTTPS: {api_url}")
-        
-        # Validate that the URL uses HTTPS
-        if not api_url.startswith('https://'):
-            raise ValueError("API URL must use HTTPS protocol")
+            verify_ssl = False
         
         # Set up the OpenAPI client configuration
         self.config = Configuration()

@@ -84,7 +84,6 @@ try:
             index_config_params: Optional[Dict[str, Any]] = None,
             dimension: Optional[int] = None, 
             metric: str = "cosine",
-            max_cache_size: int = 0,
             verify_ssl: Optional[bool] = None
         ) -> None:
             """
@@ -103,7 +102,6 @@ try:
                 index_config_params: Additional index configuration parameters
                 dimension: Embedding dimension (auto-detected if not provided)
                 metric: Distance metric - "cosine", "euclidean", or "squared_euclidean"
-                max_cache_size: Maximum cache size for the index
                 verify_ssl: SSL verification (None for auto-detect, True/False to override)
                 
             Raises:
@@ -113,7 +111,6 @@ try:
 
             self.index_name = index_name
             self.index_key = index_key
-            self.max_cache_size = max_cache_size
             
             # Set up embedding model
             self._setup_embedding_model(embedding)
@@ -171,8 +168,7 @@ try:
                 index_name=self.index_name,
                 index_key=self.index_key,
                 api=self.client.api,
-                api_client=self.client.api_client,
-                max_cache_size=self.max_cache_size
+                api_client=self.client.api_client
             )
         
         def _create_new_index(
@@ -195,8 +191,7 @@ try:
                 index_name=self.index_name,
                 index_key=self.index_key,
                 index_config=config,
-                embedding_model=self.embedding_model_name if self.embedding_model_name else None,
-                max_cache_size=self.max_cache_size
+                embedding_model=self.embedding_model_name if self.embedding_model_name else None
             )
         
         def _detect_embedding_dimension(self) -> int:
@@ -775,7 +770,6 @@ try:
             index_type = kwargs.pop("index_type", "ivfflat")
             metric = kwargs.pop("metric", "cosine")
             dimension = kwargs.pop("dimension", None)
-            max_cache_size = kwargs.pop("max_cache_size", 0)
             verify_ssl = kwargs.pop("verify_ssl", None)
             
             # Handle index config
@@ -795,7 +789,6 @@ try:
                 index_config_params=index_config_params,
                 dimension=dimension,
                 metric=metric,
-                max_cache_size=max_cache_size,
                 verify_ssl=verify_ssl
             )
             
