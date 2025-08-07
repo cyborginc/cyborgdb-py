@@ -458,7 +458,7 @@ try:
                 # Text query - generate embedding
                 embedding = self.get_embeddings(query)
                 results = self.index.query(
-                    query_vector=embedding,
+                    query_vectors=embedding,
                     top_k=k,
                     n_probes=n_probes,
                     filters=filter,
@@ -467,7 +467,7 @@ try:
             else:
                 # Vector query
                 results = self.index.query(
-                    query_vector=query,
+                    query_vectors=query,
                     top_k=k,
                     n_probes=n_probes,
                     filters=filter,
