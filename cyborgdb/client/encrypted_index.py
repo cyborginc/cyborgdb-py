@@ -240,7 +240,6 @@ class EncryptedIndex:
             batch_size: Size of each batch for training. Default is 2048.
             max_iters: Maximum iterations for training. Default is 100.
             tolerance: Convergence tolerance for training. Default is 1e-6.
-            max_memory: Maximum memory (MB) usage during training. Default is 0 (no limit).
             
         Note:
             There must be at least 2 * n_lists vector embeddings in the index prior to calling
