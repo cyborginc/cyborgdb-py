@@ -86,14 +86,9 @@ class Client:
     """
     
     def __init__(self, api_url, api_key, verify_ssl=None):
-        # Ensure the API URL uses HTTPS
+        # If api_url is http, disable SSL verification
         if api_url.startswith('http://'):
-            api_url = api_url.replace('http://', 'https://')
-            logger.warning(f"Automatically converted HTTP URL to HTTPS: {api_url}")
-        
-        # Validate that the URL uses HTTPS
-        if not api_url.startswith('https://'):
-            raise ValueError("API URL must use HTTPS protocol")
+            verify_ssl = False
         
         # Set up the OpenAPI client configuration
         self.config = Configuration()
@@ -158,8 +153,7 @@ class Client:
         index_name: str,
         index_key: bytes,
         index_config: Union[IndexIVFModel, IndexIVFPQModel, IndexIVFFlatModel],
-        embedding_model: Optional[str] = None,
-        max_cache_size: int = 0
+        embedding_model: Optional[str] = None
     ) -> EncryptedIndex:
         """
         Create and return a new encrypted index based on the provided configuration.
@@ -197,8 +191,7 @@ class Client:
                 index_name=index_name,
                 index_key=index_key,
                 api=self.api,
-                api_client=self.api_client,
-                max_cache_size=max_cache_size
+                api_client=self.api_client
             )
 
         except ApiException as e:
@@ -207,5 +200,57 @@ class Client:
             raise ValueError(error_msg)
         except ValidationError as ve:
             error_msg = f"Validation error while creating index: {ve}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+    def load_index(self, index_name: str, index_key: bytes) -> EncryptedIndex:
+        """
+        Load an existing encrypted index by name and key.
+        """
+
+        # Validate index_key
+        if not isinstance(index_key, bytes) or len(index_key) != 32:
+            raise ValueError("index_key must be a 32-byte bytes object")
+
+        try:
+            # Convert binary key to hex string
+
+            index = EncryptedIndex(
+                index_name=index_name,
+                index_key=index_key,
+                api=self.api,
+                api_client=self.api_client
+            )
+
+            # Attempt to access index.index_type to validate existence.
+            # This will raise an exception if the index does not exist.
+            _ = index.index_type  # Access for validation; value not used.
+            
+            # Create the EncryptedIndex instance
+            return index
+        
+        except ApiException as e:
+            error_msg = f"Failed to load index '{index_name}': {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        except ValidationError as ve:
+            error_msg = f"Validation error while loading index '{index_name}': {ve}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+    def get_health(self) -> Dict[str, str]:
+        """
+        Get the health status of the CyborgDB instance.
+        
+        Returns:
+            A dictionary containing health status information.
+            
+        Raises:
+            ValueError: If the health status could not be retrieved.
+        """
+        try:
+            return self.api.health_check_v1_health_get()
+        except ApiException as e:
+            error_msg = f"Failed to get health status: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
