@@ -467,7 +467,6 @@ class EncryptedIndex:
                     index_key=self._key_to_hex(),
                     index_name=self._index_name,
                     query_vectors=vector_list,
-                    query_contents=query_contents,
                     top_k=top_k,
                     n_probes=n_probes,
                     greedy=greedy,
