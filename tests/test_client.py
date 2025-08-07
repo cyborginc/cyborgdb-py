@@ -54,7 +54,7 @@ class ClientIntegrationTest(unittest.TestCase):
         
         # Query a vector
         query_vector = np.random.rand(dimension).astype(np.float32)
-        results = self.index.query(query_vector=query_vector, top_k=10)
+        results = self.index.query(query_vectors=query_vector, top_k=10)
         
         # Check results
         self.assertEqual(len(results[0]), 10)

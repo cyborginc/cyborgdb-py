@@ -401,8 +401,7 @@ class EncryptedIndex:
     
     def query(
         self,
-        query_vector: Optional[Union[List[float], np.ndarray]] = None,
-        query_vectors: Optional[Union[np.ndarray, List[List[float]]]] = None,
+        query_vectors: Optional[Union[np.ndarray, List[List[float]], List[float]]] = None,
         query_contents: Optional[str] = None,
         top_k: int = 100,
         n_probes: int = 1,
@@ -423,16 +422,34 @@ class EncryptedIndex:
 
             # Determine the correct vector input
             vector_list = None
+            is_single_query = False
 
-            if query_vector is not None or query_contents is not None:
-                if isinstance(query_vector, np.ndarray):
-                    if query_vector.ndim != 1:
-                        raise ValueError("Expected 1D NumPy array for `query_vector`.")
-                    vector_list = query_vector.tolist()
-                elif isinstance(query_vector, list):
-                    if query_vector and isinstance(query_vector[0], (list, np.ndarray)):
-                        raise ValueError("Received nested list in `query_vector`; did you mean to use `query_vectors`?")
-                    vector_list = list(map(float, query_vector))  # Ensure float type
+            if query_vectors is not None:
+                if isinstance(query_vectors, np.ndarray):
+                    if query_vectors.ndim == 1:
+                        # Single vector as 1D NumPy array
+                        is_single_query = True
+                        vector_list = query_vectors.tolist()
+                    elif query_vectors.ndim == 2:
+                        # Batch of vectors as 2D NumPy array
+                        vector_list = query_vectors.tolist()
+                    else:
+                        raise ValueError("Expected 1D or 2D NumPy array for `query_vectors`.")
+                elif isinstance(query_vectors, list):
+                    if not query_vectors:
+                        raise ValueError("Empty list provided for `query_vectors`.")
+                    if isinstance(query_vectors[0], (list, np.ndarray)):
+                        # Batch of vectors as list of lists
+                        vector_list = [list(map(float, v)) if isinstance(v, list) else v.tolist() for v in query_vectors]
+                    else:
+                        # Single vector as flat list
+                        is_single_query = True
+                        vector_list = list(map(float, query_vectors))
+                else:
+                    raise ValueError("Invalid type for `query_vectors`")
+
+            if is_single_query or query_contents is not None:
+                # Use QueryRequest for single vector or content-based query
                 query_request = QueryRequest(
                     index_key=self._key_to_hex(),
                     index_name=self._index_name,
@@ -444,16 +461,8 @@ class EncryptedIndex:
                     filters=filters,
                     include=include,
                 )
-
-            elif query_vectors is not None:
-                if isinstance(query_vectors, list):
-                    query_vectors = np.array(query_vectors, dtype=np.float32)
-                if isinstance(query_vectors, np.ndarray):
-                    if query_vectors.ndim != 2:
-                        raise ValueError("Expected 2D NumPy array or list of lists for `query_vectors`.")
-                    vector_list = query_vectors.tolist()
-                else:
-                    raise ValueError("Invalid type for `query_vectors`")
+            else:
+                # Use BatchQueryRequest for multiple vectors
                 query_request = BatchQueryRequest(
                     index_key=self._key_to_hex(),
                     index_name=self._index_name,
@@ -465,9 +474,6 @@ class EncryptedIndex:
                     filters=filters,
                     include=include,
                 )
-
-            elif query_contents is None:
-                raise ValueError("You must provide `query_vector`, `query_vectors`, or `query_contents`.")
 
             request = Request(query_request)
 
