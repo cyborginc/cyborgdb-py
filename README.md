@@ -1,5 +1,9 @@
 # CyborgDB Python SDK
 
+![PyPI - Version](https://img.shields.io/pypi/v/cyborgdb)
+![PyPI - License](https://img.shields.io/pypi/l/cyborgdb)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/cyborgdb)
+
 The **CyborgDB Python SDK** provides a comprehensive client library for interacting with [CyborgDB](https://www.cyborg.co), the first Confidential Vector Database. This SDK enables you to perform encrypted vector operations including ingestion, search, and retrieval while maintaining end-to-end encryption of your vector embeddings. Built for Python applications, it offers seamless integration into modern Python applications and services.
 
 This SDK provides an interface to `cyborgdb-service` which you will need to separately install and run in order to use the SDK. For more info, please see our [docs](https://docs.cyborg.co)
