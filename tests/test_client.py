@@ -23,17 +23,17 @@ class ClientIntegrationTest(unittest.TestCase):
         # Create real client (no mocking)
         self.client = Client(
             api_url="http://localhost:8000",
-            api_key=os.getenv("TEST_API_KEY")
+            api_key=os.getenv("CYBORGDB_API_KEY", "")
         )
 
         # Create a test key
         self.test_key = generate_key()
         
         # Create a test index
-        index_name = f"test_index_{int(time.time())}"
+        self.index_name = f"test_index_{int(time.time())}"
         self.index_config = IndexIVF(dimension=128, n_lists=10, metric="euclidean")
-        self.index = self.client.create_index(index_name, self.test_key, self.index_config)
-    
+        self.index = self.client.create_index(self.index_name, self.test_key, self.index_config)
+
     def tearDown(self):
         """Clean up after tests."""
         try:
@@ -54,9 +54,27 @@ class ClientIntegrationTest(unittest.TestCase):
         
         # Query a vector
         query_vector = np.random.rand(dimension).astype(np.float32)
-        results = self.index.query(query_vector=query_vector, top_k=10)
+        results = self.index.query(query_vectors=query_vector, top_k=10)
         
         # Check results
         self.assertEqual(len(results[0]), 10)
-        self.assertTrue("id" in results[0])
-        self.assertTrue("distance" in results[0])
+        self.assertTrue("id" in results[0][0])
+        self.assertTrue("distance" in results[0][0])
+
+    def test_health_check(self):
+        """Test the health check endpoint."""
+        health = self.client.get_health()
+        self.assertIsInstance(health, dict)
+        self.assertIn("status", health)
+        self.assertEqual(health["status"], "healthy", "API is not healthy")
+
+    def test_load_index(self):
+        """Test loading an existing index."""
+        # Load the index using the same name and key
+        loaded_index = self.client.load_index(self.index_name, self.test_key)
+        
+        # Check if the loaded index is the same as the original
+        self.assertEqual(loaded_index.index_name, self.index_name)
+
+        # Check if the index type is correct
+        self.assertIsInstance(loaded_index, EncryptedIndex)

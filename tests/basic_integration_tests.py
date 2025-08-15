@@ -137,8 +137,8 @@ class TestUnitFlow(unittest.TestCase):
         # CYBORDB SETUP: Create the index once (shared state).
         cls.index_config = cyborgdb.IndexIVFFlat(dimension=cls.dimension, n_lists=512, metric="euclidean")
         cls.client = cyborgdb.Client(
-            api_url="https://localhost:8000",
-            api_key=os.getenv("CYBORG_API_KEY")
+            api_url="http://localhost:8000",
+            api_key=os.getenv("CYBORGDB_API_KEY", "")
         )
         cls.index_name = "memory_example_index19"
         cls.index_key = cyborgdb. generate_key() #bytes([1] * 32)
@@ -152,6 +152,13 @@ class TestUnitFlow(unittest.TestCase):
                 cls.index.delete_index()
         except Exception as e:
             print(f"Error during index cleanup: {e}")
+
+    def test_00_get_health(self):
+        # Check if the API is healthy.
+        health = self.client.get_health()
+        self.assertIsInstance(health, dict)
+        self.assertIn("status", health)
+        self.assertEqual(health["status"], "healthy", "API is not healthy")
 
     def test_01_untrained_upsert(self):
         # UNTRAINED UPSERT: upsert untrained items.
@@ -363,6 +370,12 @@ class TestUnitFlow(unittest.TestCase):
         self.assertEqual(self.index.index_name, self.index_name, "Index name does not match")
         self.assertIsInstance(self.index.index_config, dict, "Index config is not a dictionary")
         self.assertEqual(self.index.index_type, "ivfflat", "Index type is not IVFFlat")
+
+    def test_15_load_index(self):
+        # Test loading an existing index.
+        loaded_index = self.client.load_index(self.index_name, self.index_key)
+        self.assertIsInstance(loaded_index, cyborgdb.EncryptedIndex)
+        self.assertEqual(loaded_index.index_name, self.index_name)
 
 if __name__ == '__main__':
     unittest.main()
