@@ -7,9 +7,8 @@ from .client.client import (
     Client,
     IndexConfig,
     IndexIVF,
-    IndexIVFPQ, 
-    IndexIVFFlat,
-    generate_key
+    IndexIVFPQ,
+    IndexIVFFlat
 )
 
 # Re-export from encrypted_index.py
@@ -40,6 +39,5 @@ __all__ = [
     "IndexIVF",
     "IndexIVFPQ",
     "IndexIVFFlat",
-    "generate_key",
     "CyborgVectorStore"
 ]

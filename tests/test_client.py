@@ -8,8 +8,7 @@ from cyborgdb import (
     EncryptedIndex,
     IndexIVF, 
     IndexIVFPQ,
-    IndexIVFFlat,
-    generate_key
+    IndexIVFFlat
 )
 
 # Load environment variables from .env.local
@@ -22,12 +21,15 @@ class ClientIntegrationTest(unittest.TestCase):
         """Set up the test environment."""
         # Create real client (no mocking)
         self.client = Client(
-            api_url="http://localhost:8000",
+            base_url="http://localhost:8000",
             api_key=os.getenv("CYBORGDB_API_KEY", "")
         )
 
         # Create a test key
-        self.test_key = generate_key()
+        self.test_key = Client.generate_key()
+        
+        # Create a test key with the client's member function
+        self.test_key = self.client.generate_key()
         
         # Create a test index
         self.index_name = f"test_index_{int(time.time())}"
