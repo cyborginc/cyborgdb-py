@@ -11,12 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     
     services:
-      redis:
-        image: redis:7-alpine
+      postgres:
+        image: postgres:15-alpine
         ports:
-          - 6379:6379
+          - 5432:5432
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cyborgdb
         options: >-
-          --health-cmd "redis-cli ping"
+          --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -51,8 +55,8 @@ jobs:
       - name: Set up environment
         run: |
           echo "CYBORGDB_API_KEY=${{ secrets.CYBORGDB_API_KEY }}" >> $GITHUB_ENV
-          echo "CYBORGDB_DB_TYPE=redis" >> $GITHUB_ENV
-          echo "CYBORGDB_CONNECTION_STRING=host:localhost,port:6379,db:0" >> $GITHUB_ENV
+          echo "CYBORGDB_DB_TYPE=postgres" >> $GITHUB_ENV
+          echo "CYBORGDB_CONNECTION_STRING=host=localhost port=5432 dbname=cyborgdb user=postgres password=postgres" >> $GITHUB_ENV
           
       - name: Start CyborgDB service
         run: |
