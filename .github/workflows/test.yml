@@ -30,11 +30,18 @@ jobs:
         with:
           python-version: '3.11'
           
-      - name: Install cyborgdb-service from main branch
+      - name: Checkout cyborgdb-service repository
+        uses: actions/checkout@v4
+        with:
+          repository: cyborginc/cyborgdb-service
+          ref: main
+          path: cyborgdb-service
+          token: ${{ github.token }}
+          
+      - name: Install cyborgdb-service from source
         run: |
-          # Install the server from the main branch of the service repo
-          # Use GitHub token for private repo access
-          pip install git+https://${{ github.token }}@github.com/cyborginc/cyborgdb-service.git@main
+          # Install the server from the cloned repository
+          pip install ./cyborgdb-service
           
       - name: Install SDK dependencies
         run: |
