@@ -36,7 +36,7 @@ jobs:
           repository: cyborginc/cyborgdb-service
           ref: main
           path: cyborgdb-service
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.CYBORGDB_SERVICE_TOKEN }}
           
       - name: Install cyborgdb-service from source
         run: |
