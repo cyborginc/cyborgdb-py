@@ -33,7 +33,8 @@ jobs:
       - name: Install cyborgdb-service from main branch
         run: |
           # Install the server from the main branch of the service repo
-          pip install git+https://github.com/cyborginc/cyborgdb-service.git@main
+          # Use GitHub token for private repo access
+          pip install git+https://${{ github.token }}@github.com/cyborginc/cyborgdb-service.git@main
           
       - name: Install SDK dependencies
         run: |
