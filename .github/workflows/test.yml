@@ -52,12 +52,13 @@ jobs:
         run: |
           echo "CYBORGDB_API_KEY=${{ secrets.CYBORGDB_API_KEY }}" >> $GITHUB_ENV
           echo "CYBORGDB_DB_TYPE=redis" >> $GITHUB_ENV
-          echo "CYBORGDB_CONNECTION_STRING=redis://localhost:6379" >> $GITHUB_ENV
+          echo "CYBORGDB_CONNECTION_STRING=host:localhost,port:6379,db:0" >> $GITHUB_ENV
           
       - name: Start CyborgDB service
         run: |
-          # Start the service in the background
-          cyborgdb-service &
+          # Start the service in the background using nohup to prevent it from blocking
+          nohup cyborgdb-service > server.log 2>&1 &
+          echo $! > server.pid
           # Wait for the service to be ready with a retry loop (max 30s)
           for i in {1..30}; do
             if curl -fs http://localhost:8000/health > /dev/null; then
@@ -69,6 +70,8 @@ jobs:
           # Final check, fail if not up
           if ! curl -fs http://localhost:8000/health > /dev/null; then
             echo "Service failed to start after waiting 30 seconds"
+            echo "Server logs:"
+            cat server.log
             exit 1
           fi
           
