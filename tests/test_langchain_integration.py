@@ -107,7 +107,7 @@ class TestLangChainIntegration(unittest.TestCase):
         cls.dimension = 384
         cls.base_url = "http://localhost:8000"
         cls.api_key = os.getenv("CYBORGDB_API_KEY")
-        
+
         # Test data
         cls.test_texts = [
             "The quick brown fox jumps over the lazy dog.",
@@ -155,11 +155,8 @@ class TestLangChainIntegration(unittest.TestCase):
         """Clean up after each test."""
         # Clean up any created indexes
         try:
-            client = cyborgdb.Client(
-                base_url=self.base_url,
-                api_key=self.api_key
-            )
-            
+            client = cyborgdb.Client(base_url=self.base_url, api_key=self.api_key)
+
             for index_name in self.index_names_to_cleanup:
                 try:
                     # Create a temporary encrypted index instance to delete it

@@ -3,15 +3,7 @@
 """CyborgDB: A vector database platform."""
 
 # Re-export classes from client module
-from .client.client import (
-    Client,
-    IndexConfig,
-    IndexIVF,
-    IndexIVFPQ,
-    IndexIVFFlat
-    IndexIVFFlat
-
-)
+from .client.client import Client, IndexConfig, IndexIVF, IndexIVFPQ, IndexIVFFlat
 
 # Re-export from encrypted_index.py
 from .client.encrypted_index import EncryptedIndex
@@ -42,5 +34,5 @@ __all__ = [
     "IndexIVF",
     "IndexIVFPQ",
     "IndexIVFFlat",
-    "CyborgVectorStore"
+    "CyborgVectorStore",
 ]

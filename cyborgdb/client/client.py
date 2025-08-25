@@ -44,7 +44,7 @@ __all__ = [
     "IndexConfig",
     "IndexIVF",
     "IndexIVFPQ",
-    "IndexIVFFlat"
+    "IndexIVFFlat",
 ]
 
 # Re-export with friendly names
@@ -61,20 +61,20 @@ class Client:
 
     This class provides methods for creating, loading, and managing encrypted indexes.
     """
-    
+
     def __init__(self, base_url, api_key, verify_ssl=None):
         # If base_url is http, disable SSL verification
-        if base_url.startswith('http://'):
+        if base_url.startswith("http://"):
             verify_ssl = False
 
         # Set up the OpenAPI client configuration
         self.config = Configuration()
         self.config.host = base_url
-        
+
         # Configure SSL verification
         if verify_ssl is None:
             # Auto-detect: disable SSL verification for localhost/127.0.0.1 (development)
-            if 'localhost' in base_url or '127.0.0.1' in base_url:
+            if "localhost" in base_url or "127.0.0.1" in base_url:
                 self.config.verify_ssl = False
                 # Disable SSL warnings for localhost
                 import urllib3
@@ -112,17 +112,17 @@ class Client:
             error_msg = f"Failed to initialize client: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-    
+
     @staticmethod
     def generate_key() -> bytes:
         """
         Generate a secure 32-byte key for use with CyborgDB indexes.
-        
+
         Returns:
             bytes: A cryptographically secure 32-byte key.
         """
         return secrets.token_bytes(32)
-        
+
     def list_indexes(self) -> List[str]:
         """
         Get a list of all encrypted index names accessible via the client.

@@ -21,13 +21,7 @@ try:
     from sentence_transformers import SentenceTransformer
 
     # Import CyborgDB components
-    from cyborgdb import (
-        Client,
-        EncryptedIndex,
-        IndexIVF,
-        IndexIVFPQ, 
-        IndexIVFFlat
-    )
+    from cyborgdb import Client, EncryptedIndex, IndexIVF, IndexIVFPQ, IndexIVFFlat
 
     class CyborgVectorStore(VectorStore):
         """
@@ -52,11 +46,12 @@ try:
         def generate_key() -> bytes:
             """
             Generate a secure 32-byte key for use with CyborgDB indexes.
-            
+
             Returns:
                 bytes: A cryptographically secure 32-byte key.
             """
             import secrets
+
             return secrets.token_bytes(32)
 
         @staticmethod
@@ -89,8 +84,8 @@ try:
             index_key: bytes,
             api_key: str,
             base_url: str,
-            embedding: Union[str, Embeddings, SentenceTransformer], 
-            index_type: str = "ivfflat", 
+            embedding: Union[str, Embeddings, SentenceTransformer],
+            index_type: str = "ivfflat",
             index_config_params: Optional[Dict[str, Any]] = None,
             dimension: Optional[int] = None,
             metric: str = "cosine",
@@ -127,9 +122,7 @@ try:
 
             # Create client
             self.client = Client(
-                base_url=base_url,
-                api_key=api_key,
-                verify_ssl=verify_ssl
+                base_url=base_url, api_key=api_key, verify_ssl=verify_ssl
             )
 
             # Initialize or load index
@@ -808,7 +801,7 @@ try:
             index_key = kwargs.pop("index_key", None)
             api_key = kwargs.pop("api_key", None)
             base_url = kwargs.pop("base_url", "http://localhost:8000")
-            
+
             cls._validate_index_key(index_key)
             if api_key is None:
                 raise ValueError("api_key must be provided for CyborgDB.")
