@@ -4,7 +4,7 @@ import numpy as np
 import time
 import requests
 from dotenv import load_dotenv
-from cyborgdb import Client, IndexIVFFlat, generate_key
+from cyborgdb import Client, IndexIVFFlat
 
 # Load environment variables from .env.local
 load_dotenv(".env.local")
@@ -28,12 +28,12 @@ class ClientLiteIntegrationTest(unittest.TestCase):
         """Set up the test environment."""
         # Create real client (no mocking)
         self.client = Client(
-            api_url="http://localhost:8000",
+            base_url="http://localhost:8000",
             api_key=os.getenv("CYBORGDB_API_KEY", "test-api-key"),
         )
 
         # Create a test key
-        self.test_key = generate_key()
+        self.test_key = self.client.generate_key()
 
         # Create a test index using IndexIVFFlat which should work with both versions
         self.index_name = f"test_index_lite_{int(time.time())}"

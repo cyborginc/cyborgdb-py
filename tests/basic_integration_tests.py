@@ -158,10 +158,10 @@ class TestUnitFlow(unittest.TestCase):
             dimension=cls.dimension, n_lists=512, metric="euclidean"
         )
         cls.client = cyborgdb.Client(
-            api_url="http://localhost:8000", api_key=os.getenv("CYBORGDB_API_KEY", "")
+            base_url="http://localhost:8000", api_key=os.getenv("CYBORGDB_API_KEY", "")
         )
         cls.index_name = "memory_example_index19"
-        cls.index_key = cyborgdb.generate_key()  # bytes([1] * 32)
+        cls.index_key = cyborgdb.Client.generate_key()  # bytes([1] * 32)
         cls.index = cls.client.create_index(
             cls.index_name, cls.index_key, cls.index_config
         )
