@@ -94,6 +94,9 @@ jobs:
 
           # Remove cyborgdb-lite
           pip uninstall -y cyborgdb-lite
+          
+          # Clean up PostgreSQL database to avoid conflicts between lite and standard
+          PGPASSWORD=postgres psql -h localhost -U postgres -d cyborgdb -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 
           sleep 2
           
