@@ -65,14 +65,14 @@ jobs:
           echo $! > server.pid
           # Wait for the service to be ready with a retry loop (max 30s)
           for i in {1..30}; do
-            if curl -fs http://localhost:8000/health > /dev/null; then
+            if curl -fs http://localhost:8000/v1/health > /dev/null; then
               echo "Service is up!"
               break
             fi
             sleep 1
           done
           # Final check, fail if not up
-          if ! curl -fs http://localhost:8000/health > /dev/null; then
+          if ! curl -fs http://localhost:8000/v1/health > /dev/null; then
             echo "Service failed to start after waiting 30 seconds"
             echo "Server logs:"
             cat server.log
