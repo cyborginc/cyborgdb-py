@@ -53,37 +53,77 @@ jobs:
           pip install pytest pytest-cov pytest-asyncio
           # Install optional test dependencies
           pip install langchain langchain-community
+          # Install requests for health checks
+          pip install requests
           
-      - name: Set up environment
+      - name: Test with Lite version
         run: |
-          echo "CYBORGDB_API_KEY=${{ secrets.CYBORGDB_API_KEY }}" >> $GITHUB_ENV
-          echo "CYBORGDB_DB_TYPE=postgres" >> $GITHUB_ENV
-          echo "CYBORGDB_CONNECTION_STRING=host=localhost port=5432 dbname=cyborgdb user=postgres password=postgres" >> $GITHUB_ENV
+          echo "=== Testing with Lite version ==="
+          # Set up environment for Lite
+          export CYBORGDB_API_KEY="${{ secrets.CYBORGDB_FREE_API_KEY }}"
+          export CYBORGDB_DB_TYPE=postgres
+          export CYBORGDB_CONNECTION_STRING="host=localhost port=5432 dbname=cyborgdb user=postgres password=postgres"
+          export CYBORGDB_SERVICE_LOG_LEVEL=DEBUG
           
-      - name: Start CyborgDB service
-        run: |
-          # Start the service in the background using nohup to prevent it from blocking
-          nohup cyborgdb-service > server.log 2>&1 &
-          echo $! > server.pid
-          # Wait for the service to be ready with a retry loop (max 30s)
+          # Start the service with Lite API key
+          nohup cyborgdb-service > server-lite.log 2>&1 &
+          echo $! > server-lite.pid
+          
+          # Wait for service to be ready
           for i in {1..30}; do
             if curl -fs http://localhost:8000/v1/health > /dev/null; then
-              echo "Service is up!"
+              echo "Lite service is up!"
               break
             fi
             sleep 1
           done
-          # Final check, fail if not up
+          
           if ! curl -fs http://localhost:8000/v1/health > /dev/null; then
-            echo "Service failed to start after waiting 30 seconds"
-            echo "Server logs:"
-            cat server.log
+            echo "Lite service failed to start"
+            cat server-lite.log
             exit 1
           fi
           
-      - name: Run tests
+          # Run lite-compatible tests
+          pytest tests/test_client_lite.py tests/test_langchain_integration.py -v --cov=cyborgdb --cov-report=term-missing --cov-append
+          
+          # Stop lite server
+          kill $(cat server-lite.pid) || true
+          sleep 2
+          
+      - name: Test with Standard version
         run: |
-          pytest tests/ -v --cov=cyborgdb --cov-report=term-missing
+          echo "=== Testing with Standard version ==="
+          # Set up environment for Standard
+          export CYBORGDB_API_KEY="${{ secrets.CYBORGDB_STANDARD_API_KEY }}"
+          export CYBORGDB_DB_TYPE=postgres
+          export CYBORGDB_CONNECTION_STRING="host=localhost port=5432 dbname=cyborgdb user=postgres password=postgres"
+          export CYBORGDB_SERVICE_LOG_LEVEL=DEBUG
+          
+          # Start the service with Standard API key
+          nohup cyborgdb-service > server-standard.log 2>&1 &
+          echo $! > server-standard.pid
+          
+          # Wait for service to be ready
+          for i in {1..30}; do
+            if curl -fs http://localhost:8000/v1/health > /dev/null; then
+              echo "Standard service is up!"
+              break
+            fi
+            sleep 1
+          done
+          
+          if ! curl -fs http://localhost:8000/v1/health > /dev/null; then
+            echo "Standard service failed to start"
+            cat server-standard.log
+            exit 1
+          fi
+          
+          # Run all tests (full version tests will run, lite tests will also work)
+          pytest tests/ -v --cov=cyborgdb --cov-report=term-missing --cov-append
+          
+          # Stop standard server
+          kill $(cat server-standard.pid) || true
           
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
