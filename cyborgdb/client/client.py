@@ -4,33 +4,31 @@ CyborgDB REST Client
 This module provides a Python client for interacting with the CyborgDB REST API.
 """
 
-from typing import Dict, List, Optional, Union, Any, Tuple, Callable
-import os
-import json
+from typing import Dict, List, Optional, Union
 import secrets
 import logging
-from enum import Enum
-from pathlib import Path
 import binascii
 from pydantic import ValidationError
+
+# Import from the OpenAPI generated models
+from cyborgdb.openapi_client.models import (
+    IndexIVFModel as _OpenAPIIndexIVFModel,
+    IndexIVFPQModel as _OpenAPIIndexIVFPQModel,
+    IndexIVFFlatModel as _OpenAPIIndexIVFFlatModel,
+    IndexConfig as _OpenAPIIndexConfig,
+    CreateIndexRequest as _OpenAPICreateIndexRequest,
+)
 
 # Import the OpenAPI generated client
 try:
     from cyborgdb.openapi_client.api_client import ApiClient, Configuration
     from cyborgdb.openapi_client.api.default_api import DefaultApi
-    from cyborgdb.openapi_client.models.index_config import IndexConfig as ApiIndexConfig
-    from cyborgdb.openapi_client.models.create_index_request import CreateIndexRequest as IndexCreateRequest
-    from cyborgdb.openapi_client.models.query_request import QueryRequest
-    from cyborgdb.openapi_client.models.batch_query_request import BatchQueryRequest
-    from cyborgdb.openapi_client.models.upsert_request import UpsertRequest
-    from cyborgdb.openapi_client.models.delete_request import DeleteRequest
-    from cyborgdb.openapi_client.models.train_request import TrainRequest
-    from cyborgdb.openapi_client.models.vector_item import VectorItem as Item
+
+    # Note: Model imports removed as they're accessed through the API client
     from cyborgdb.openapi_client.models.index_ivf_flat_model import IndexIVFFlatModel
     from cyborgdb.openapi_client.models.index_ivf_model import IndexIVFModel
     from cyborgdb.openapi_client.models.index_ivfpq_model import IndexIVFPQModel
     from cyborgdb.openapi_client.exceptions import ApiException
-    from cyborgdb.openapi_client.models.query_result_item import QueryResultItem
 except ImportError:
     raise ImportError(
         "Failed to import openapi_client. Make sure the OpenAPI client library is properly installed."
@@ -41,7 +39,7 @@ from cyborgdb.client.encrypted_index import EncryptedIndex
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "Client", 
+    "Client",
     "EncryptedIndex",
     "IndexConfig",
     "IndexIVF",
@@ -49,18 +47,7 @@ __all__ = [
     "IndexIVFFlat"
 ]
 
-
-
-# Import from the OpenAPI generated models
-from cyborgdb.openapi_client.models import (
-    IndexIVFModel as _OpenAPIIndexIVFModel,
-    IndexIVFPQModel as _OpenAPIIndexIVFPQModel,
-    IndexIVFFlatModel as _OpenAPIIndexIVFFlatModel,
-    IndexConfig as _OpenAPIIndexConfig,
-    CreateIndexRequest as _OpenAPICreateIndexRequest
-)
-
-# Re-export with your preferred names
+# Re-export with friendly names
 IndexIVF = _OpenAPIIndexIVFModel
 IndexIVFPQ = _OpenAPIIndexIVFPQModel
 IndexIVFFlat = _OpenAPIIndexIVFFlatModel
@@ -71,7 +58,7 @@ CreateIndexRequest = _OpenAPICreateIndexRequest
 class Client:
     """
     Client for interacting with CyborgDB via REST API.
-    
+
     This class provides methods for creating, loading, and managing encrypted indexes.
     """
     
@@ -79,7 +66,7 @@ class Client:
         # If base_url is http, disable SSL verification
         if base_url.startswith('http://'):
             verify_ssl = False
-        
+
         # Set up the OpenAPI client configuration
         self.config = Configuration()
         self.config.host = base_url
@@ -91,30 +78,36 @@ class Client:
                 self.config.verify_ssl = False
                 # Disable SSL warnings for localhost
                 import urllib3
+
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                logger.info("SSL verification disabled for localhost (development mode)")
+                logger.info(
+                    "SSL verification disabled for localhost (development mode)"
+                )
             else:
                 self.config.verify_ssl = True
         else:
             self.config.verify_ssl = verify_ssl
             if not verify_ssl:
                 import urllib3
+
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                logger.warning("SSL verification is disabled. Not recommended for production.")
-        
+                logger.warning(
+                    "SSL verification is disabled. Not recommended for production."
+                )
+
         # Add authentication if provided
         if api_key:
-            self.config.api_key = {'X-API-Key': api_key}
-        
+            self.config.api_key = {"X-API-Key": api_key}
+
         # Create the API client
         try:
             self.api_client = ApiClient(self.config)
             self.api = DefaultApi(self.api_client)
-            
+
             # If API key was provided, also set it directly in default headers
             if api_key:
-                self.api_client.default_headers['X-API-Key'] = api_key
-            
+                self.api_client.default_headers["X-API-Key"] = api_key
+
         except Exception as e:
             error_msg = f"Failed to initialize client: {e}"
             logger.error(error_msg)
@@ -133,10 +126,10 @@ class Client:
     def list_indexes(self) -> List[str]:
         """
         Get a list of all encrypted index names accessible via the client.
-        
+
         Returns:
             A list of index names.
-            
+
         Raises:
             ValueError: If the list of indexes could not be retrieved.
         """
@@ -147,13 +140,13 @@ class Client:
             error_msg = f"Failed to list indexes: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-    
+
     def create_index(
         self,
         index_name: str,
         index_key: bytes,
         index_config: Union[IndexIVFModel, IndexIVFPQModel, IndexIVFFlatModel],
-        embedding_model: Optional[str] = None
+        embedding_model: Optional[str] = None,
     ) -> EncryptedIndex:
         """
         Create and return a new encrypted index based on the provided configuration.
@@ -164,8 +157,8 @@ class Client:
 
         try:
             # Convert binary key to hex string
-            key_hex = binascii.hexlify(index_key).decode('ascii')
-                
+            key_hex = binascii.hexlify(index_key).decode("ascii")
+
             # Create an IndexConfig instance with the appropriate model
             index_config_obj = IndexConfig(index_config)
 
@@ -174,24 +167,24 @@ class Client:
                 index_name=index_name,
                 index_key=key_hex,
                 index_config=index_config_obj,
-                embedding_model=embedding_model
+                embedding_model=embedding_model,
             )
 
             # Call the generated API method
-            response = self.api.create_index_v1_indexes_create_post(
+            self.api.create_index_v1_indexes_create_post(
                 create_index_request=request,
                 _headers={
-                    'X-API-Key': self.config.api_key['X-API-Key'],
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
+                    "X-API-Key": self.config.api_key["X-API-Key"],
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
             )
-            
+
             return EncryptedIndex(
                 index_name=index_name,
                 index_key=index_key,
                 api=self.api,
-                api_client=self.api_client
+                api_client=self.api_client,
             )
 
         except ApiException as e:
@@ -202,7 +195,7 @@ class Client:
             error_msg = f"Validation error while creating index: {ve}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        
+
     def load_index(self, index_name: str, index_key: bytes) -> EncryptedIndex:
         """
         Load an existing encrypted index by name and key.
@@ -219,16 +212,16 @@ class Client:
                 index_name=index_name,
                 index_key=index_key,
                 api=self.api,
-                api_client=self.api_client
+                api_client=self.api_client,
             )
 
             # Attempt to access index.index_type to validate existence.
             # This will raise an exception if the index does not exist.
             _ = index.index_type  # Access for validation; value not used.
-            
+
             # Create the EncryptedIndex instance
             return index
-        
+
         except ApiException as e:
             error_msg = f"Failed to load index '{index_name}': {e}"
             logger.error(error_msg)
@@ -237,14 +230,14 @@ class Client:
             error_msg = f"Validation error while loading index '{index_name}': {ve}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        
+
     def get_health(self) -> Dict[str, str]:
         """
         Get the health status of the CyborgDB instance.
-        
+
         Returns:
             A dictionary containing health status information.
-            
+
         Raises:
             ValueError: If the health status could not be retrieved.
         """
