@@ -51,6 +51,8 @@ jobs:
         run: |
           pip install -e .
           pip install pytest pytest-cov pytest-asyncio
+          # Install optional test dependencies
+          pip install langchain langchain-community
           
       - name: Set up environment
         run: |
