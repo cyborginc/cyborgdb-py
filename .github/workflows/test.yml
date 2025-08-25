@@ -52,9 +52,7 @@ jobs:
           pip install -e .
           pip install pytest pytest-cov pytest-asyncio
           # Install optional test dependencies
-          pip install langchain langchain-community
-          # Install requests for health checks
-          pip install requests
+          pip install langchain langchain-community langchain-core sentence-transformers requests
           
       - name: Test with Lite version
         run: |
