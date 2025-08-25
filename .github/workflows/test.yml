@@ -89,6 +89,10 @@ jobs:
           
           # Stop lite server
           kill $(cat server-lite.pid) || true
+
+          # Remove cyborgdb-lite
+          pip uninstall -y cyborgdb-lite
+          
           sleep 2
           
       - name: Test with Standard version
@@ -99,6 +103,9 @@ jobs:
           export CYBORGDB_DB_TYPE=postgres
           export CYBORGDB_CONNECTION_STRING="host=localhost port=5432 dbname=cyborgdb user=postgres password=postgres"
           export CYBORGDB_SERVICE_LOG_LEVEL=DEBUG
+
+          # Start the service once to see the logs (debug)
+          cyborgdb-service
           
           # Start the service with Standard API key
           nohup cyborgdb-service > server-standard.log 2>&1 &
