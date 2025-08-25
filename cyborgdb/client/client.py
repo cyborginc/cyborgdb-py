@@ -23,6 +23,7 @@ from cyborgdb.openapi_client.models import (
 try:
     from cyborgdb.openapi_client.api_client import ApiClient, Configuration
     from cyborgdb.openapi_client.api.default_api import DefaultApi
+
     # Note: Model imports removed as they're accessed through the API client
     from cyborgdb.openapi_client.models.index_ivf_flat_model import IndexIVFFlatModel
     from cyborgdb.openapi_client.models.index_ivf_model import IndexIVFModel

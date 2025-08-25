@@ -21,9 +21,11 @@ load_dotenv(".env.local")
 try:
     from langchain_core.documents import Document
     from langchain_core.embeddings import Embeddings
+
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
+
     # Define a dummy Embeddings class if langchain is not available
     class Embeddings:
         pass
@@ -31,6 +33,7 @@ except ImportError:
 
 # Mock embedding class for testing
 if LANGCHAIN_AVAILABLE:
+
     class MockEmbeddings(Embeddings):
         """Mock embeddings for testing that generates semantically meaningful vectors."""
 
@@ -221,9 +224,7 @@ class TestLangChainIntegration(unittest.TestCase):
         test_texts = self.test_texts[:3]
         test_metadatas = self.test_metadata[:3]
 
-        vectorstore.add_texts(
-            texts=test_texts, metadatas=test_metadatas, ids=test_ids
-        )
+        vectorstore.add_texts(texts=test_texts, metadatas=test_metadatas, ids=test_ids)
 
         # Use the underlying index to verify data storage
         raw_items = vectorstore.index.get(test_ids, include=["metadata"])
