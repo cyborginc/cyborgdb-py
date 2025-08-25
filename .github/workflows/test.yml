@@ -51,9 +51,11 @@ jobs:
         run: |
           pip install -e .
           pip install pytest pytest-cov pytest-asyncio
+          # Install CPU-only torch
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
           # Install optional test dependencies
           pip install langchain langchain-community langchain-core sentence-transformers requests
-          
+
       - name: Test with Lite version
         run: |
           echo "=== Testing with Lite version ==="

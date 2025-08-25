@@ -101,7 +101,7 @@ class TestLangChainIntegration(unittest.TestCase):
         # Test parameters
         cls.dimension = 384
         cls.api_url = "http://localhost:8000"
-        cls.api_key = os.getenv("CYBORG_API_KEY")
+        cls.api_key = os.getenv("CYBORGDB_API_KEY")
         
         # Test data
         cls.test_texts = [
