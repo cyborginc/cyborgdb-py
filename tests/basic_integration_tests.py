@@ -141,7 +141,7 @@ class TestUnitFlow(unittest.TestCase):
             api_key=os.getenv("CYBORGDB_API_KEY", "")
         )
         cls.index_name = "memory_example_index19"
-        cls.index_key = cyborgdb.Client.generate_key() #bytes([1] * 32)
+        cls.index_key = cyborgdb.Client.generate_key() # bytes([1] * 32)
         cls.index = cls.client.create_index(cls.index_name, cls.index_key, cls.index_config)
 
     @classmethod
