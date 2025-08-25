@@ -3,12 +3,7 @@ import unittest
 import numpy as np
 import time
 from dotenv import load_dotenv
-from cyborgdb import (
-    Client,
-    EncryptedIndex,
-    IndexIVF,
-    generate_key,
-)
+from cyborgdb import Client, EncryptedIndex, IndexIVF
 
 # Load environment variables from .env.local
 load_dotenv(".env.local")
@@ -21,13 +16,16 @@ class ClientIntegrationTest(unittest.TestCase):
         """Set up the test environment."""
         # Create real client (no mocking)
         self.client = Client(
-            api_url="http://localhost:8000", api_key=os.getenv("CYBORGDB_API_KEY", "")
+            base_url="http://localhost:8000", api_key=os.getenv("CYBORGDB_API_KEY", "")
         )
 
         # Create a test key
-        self.test_key = generate_key()
+        self.test_key = Client.generate_key()
 
-        # Create a test index - try IndexIVF first (full version)
+        # Create a test key with the client's member function
+        self.test_key = self.client.generate_key()
+
+        # Create a test index
         self.index_name = f"test_index_{int(time.time())}"
         self.index_config = IndexIVF(dimension=128, n_lists=10, metric="euclidean")
 

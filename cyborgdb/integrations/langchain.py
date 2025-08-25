@@ -21,13 +21,7 @@ try:
     from sentence_transformers import SentenceTransformer
 
     # Import CyborgDB components
-    from cyborgdb import (
-        Client,
-        EncryptedIndex,
-        IndexIVF,
-        IndexIVFPQ,
-        IndexIVFFlat,
-    )
+    from cyborgdb import Client, EncryptedIndex, IndexIVF, IndexIVFPQ, IndexIVFFlat
 
     class CyborgVectorStore(VectorStore):
         """
@@ -49,6 +43,18 @@ try:
         """
 
         @staticmethod
+        def generate_key() -> bytes:
+            """
+            Generate a secure 32-byte key for use with CyborgDB indexes.
+
+            Returns:
+                bytes: A cryptographically secure 32-byte key.
+            """
+            import secrets
+
+            return secrets.token_bytes(32)
+
+        @staticmethod
         def _validate_index_key(index_key: bytes) -> None:
             """
             Validate that index_key is a proper 32-byte encryption key.
@@ -63,13 +69,13 @@ try:
             if not isinstance(index_key, bytes):
                 raise TypeError(
                     f"index_key must be bytes, got {type(index_key).__name__}. "
-                    f"Use generate_key() to create a secure 32-byte key."
+                    f"Use Client.generate_key() to create a secure 32-byte key."
                 )
 
             if len(index_key) != 32:
                 raise ValueError(
                     f"index_key must be exactly 32 bytes, got {len(index_key)} bytes. "
-                    f"Use generate_key() to create a secure 32-byte key."
+                    f"Use Client.generate_key() to create a secure 32-byte key."
                 )
 
         def __init__(
@@ -77,7 +83,7 @@ try:
             index_name: str,
             index_key: bytes,
             api_key: str,
-            api_url: str,
+            base_url: str,
             embedding: Union[str, Embeddings, SentenceTransformer],
             index_type: str = "ivfflat",
             index_config_params: Optional[Dict[str, Any]] = None,
@@ -92,7 +98,7 @@ try:
                 index_name: Name for the index
                 index_key: 32-byte encryption key for the index
                 api_key: API key for CyborgDB authentication
-                api_url: URL of the CyborgDB API server
+                base_url: URL of the CyborgDB API server
                 embedding: Embedding model - can be:
                     - String model name (for SentenceTransformer)
                     - SentenceTransformer instance
@@ -116,7 +122,7 @@ try:
 
             # Create client
             self.client = Client(
-                api_url=api_url, api_key=api_key, verify_ssl=verify_ssl
+                base_url=base_url, api_key=api_key, verify_ssl=verify_ssl
             )
 
             # Initialize or load index
@@ -777,7 +783,7 @@ try:
                     - index_name: Name for the index
                     - index_key: 32-byte encryption key
                     - api_key: CyborgDB API key
-                    - api_url: CyborgDB API URL
+                    - base_url: CyborgDB API URL
                     - ids: Optional IDs for texts
                     - index_type: Type of index
                     - metric: Distance metric
@@ -794,7 +800,7 @@ try:
             index_name = kwargs.pop("index_name", "langchain_index")
             index_key = kwargs.pop("index_key", None)
             api_key = kwargs.pop("api_key", None)
-            api_url = kwargs.pop("api_url", "https://api.cyborgdb.com")
+            base_url = kwargs.pop("base_url", "http://localhost:8000")
 
             cls._validate_index_key(index_key)
             if api_key is None:
@@ -817,7 +823,7 @@ try:
                 index_name=index_name,
                 index_key=index_key,
                 api_key=api_key,
-                api_url=api_url,
+                base_url=base_url,
                 embedding=embedding,
                 index_type=index_type,
                 index_config_params=index_config_params,

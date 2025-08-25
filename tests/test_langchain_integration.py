@@ -105,7 +105,7 @@ class TestLangChainIntegration(unittest.TestCase):
         """Set up test fixtures."""
         # Test parameters
         cls.dimension = 384
-        cls.api_url = "http://localhost:8000"
+        cls.base_url = "http://localhost:8000"
         cls.api_key = os.getenv("CYBORGDB_API_KEY")
 
         # Test data
@@ -148,14 +148,15 @@ class TestLangChainIntegration(unittest.TestCase):
 
     def setUp(self):
         """Set up for each test."""
-        self.index_key = cyborgdb.generate_key()
+        self.index_key = CyborgVectorStore.generate_key()
         self.index_names_to_cleanup = []
 
     def tearDown(self):
         """Clean up after each test."""
         # Clean up any created indexes
         try:
-            client = cyborgdb.Client(api_url=self.api_url, api_key=self.api_key)
+            client = cyborgdb.Client(base_url=self.base_url, api_key=self.api_key)
+
             for index_name in self.index_names_to_cleanup:
                 try:
                     # Create a temporary encrypted index instance to delete it
@@ -184,7 +185,7 @@ class TestLangChainIntegration(unittest.TestCase):
             index_name=index_name,
             index_key=self.index_key,
             api_key=self.api_key,
-            api_url=self.api_url,
+            base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
             index_type="ivfflat",
             metric="cosine",
@@ -212,7 +213,7 @@ class TestLangChainIntegration(unittest.TestCase):
             index_name=index_name,
             index_key=self.index_key,
             api_key=self.api_key,
-            api_url=self.api_url,
+            base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
             index_type="ivfflat",
             metric="cosine",
@@ -252,7 +253,7 @@ class TestLangChainIntegration(unittest.TestCase):
             index_name=index_name,
             index_key=self.index_key,
             api_key=self.api_key,
-            api_url=self.api_url,
+            base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
             index_type="ivfflat",
         )
@@ -293,7 +294,7 @@ class TestLangChainIntegration(unittest.TestCase):
             index_name=index_name,
             index_key=self.index_key,
             api_key=self.api_key,
-            api_url=self.api_url,
+            base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
             index_type="ivfflat",
             metric="euclidean",
@@ -331,7 +332,7 @@ class TestLangChainIntegration(unittest.TestCase):
             index_name=index_name,
             index_key=self.index_key,
             api_key=self.api_key,
-            api_url=self.api_url,
+            base_url=self.base_url,
             embedding=embeddings,
             index_type="ivfflat",
             metric="cosine",
@@ -361,7 +362,7 @@ class TestLangChainIntegration(unittest.TestCase):
             index_name=index_name,
             index_key=self.index_key,
             api_key=self.api_key,
-            api_url=self.api_url,
+            base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
             index_type="ivfflat",
         )
@@ -395,7 +396,7 @@ class TestLangChainIntegration(unittest.TestCase):
             index_name=index_name,
             index_key=self.index_key,
             api_key=self.api_key,
-            api_url=self.api_url,
+            base_url=self.base_url,
             index_type="ivfflat",
             metric="cosine",
         )
@@ -415,7 +416,7 @@ class TestLangChainIntegration(unittest.TestCase):
             index_name=index_name,
             index_key=self.index_key,
             api_key=self.api_key,
-            api_url=self.api_url,
+            base_url=self.base_url,
             index_type="ivfflat",
             n_lists=10,
         )
@@ -433,7 +434,7 @@ class TestLangChainIntegration(unittest.TestCase):
             index_name=index_name,
             index_key=self.index_key,
             api_key=self.api_key,
-            api_url=self.api_url,
+            base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
             index_type="ivfflat",
         )
@@ -463,7 +464,7 @@ class TestLangChainIntegration(unittest.TestCase):
                 index_name=index_name,
                 index_key=self.index_key,
                 api_key=self.api_key,
-                api_url=self.api_url,
+                base_url=self.base_url,
                 embedding=MockEmbeddings(self.dimension),
                 index_type="ivfflat",
             )
@@ -508,7 +509,7 @@ class TestLangChainIntegration(unittest.TestCase):
             index_name=index_name,
             index_key=self.index_key,
             api_key=self.api_key,
-            api_url=self.api_url,
+            base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
             index_type="ivfflat",
             index_config_params={"n_lists": n_lists},
@@ -542,7 +543,7 @@ class TestLangChainIntegration(unittest.TestCase):
             index_name=index_name,
             index_key=self.index_key,
             api_key=self.api_key,
-            api_url=self.api_url,
+            base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
             index_type="ivfflat",
         )
@@ -576,7 +577,7 @@ class TestLangChainIntegration(unittest.TestCase):
             index_name=index_name,
             index_key=self.index_key,
             api_key=self.api_key,
-            api_url=self.api_url,
+            base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
             index_type="ivfflat",
             metric="cosine",
