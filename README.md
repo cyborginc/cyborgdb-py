@@ -40,7 +40,7 @@ docker pull cyborginc/cyborgdb-service
 pip install cyborgdb
 ```
 
-**Usage**
+### Usage
 
 ```python
 from cyborgdb import Client, IndexIVFFlat
@@ -82,9 +82,9 @@ for result in results.results:
     print(f"ID: {result.id}, Distance: {result.distance}")
 ```
 
-**Advanced Usage**
+### Advanced Usage
 
-**Batch Queries**
+#### Batch Queries
 
 ```python
 # Search with multiple query vectors simultaneously
@@ -96,7 +96,7 @@ query_vectors = [
 batch_results = await index.query(query_vectors, 5)
 ```
 
-**Metadata Filtering**
+#### Metadata Filtering
 
 ```python
 # Search with metadata filters
