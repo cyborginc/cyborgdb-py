@@ -145,8 +145,9 @@ class Client:
         self,
         index_name: str,
         index_key: bytes,
-        index_config: Union[IndexIVFModel, IndexIVFPQModel, IndexIVFFlatModel],
+        index_config: Optional[Union[IndexIVFModel, IndexIVFPQModel, IndexIVFFlatModel]] = None,
         embedding_model: Optional[str] = None,
+        metric: Optional[str] = None
     ) -> EncryptedIndex:
         """
         Create and return a new encrypted index based on the provided configuration.
@@ -168,6 +169,7 @@ class Client:
                 index_key=key_hex,
                 index_config=index_config_obj,
                 embedding_model=embedding_model,
+                metric=metric,
             )
 
             # Call the generated API method

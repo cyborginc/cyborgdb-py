@@ -1,6 +1,6 @@
 # TrainRequest
 
-Request model for training an index.  Attributes:     batch_size (int): Size of each batch for training. Default is 2048.     max_iters (int): Maximum iterations for training. Default is 100.     tolerance (float): Convergence tolerance for training. Default is 1e-6.     max_memory (int): Maximum memory (MB) usage during training. Default is 0 (no limit).
+Request model for training an index.  Attributes:     n_lists (Optional[int]): Number of lists/clusters for the index. Default is auto.     batch_size (Optional[int]): Size of each batch for training. Default is 2048.     max_iters (Optional[int]): Maximum iterations for training. Default is 100.     tolerance (Optional[float]): Convergence tolerance for training. Default is 1e-6.     max_memory (Optional[int]): Maximum memory (MB) usage during training. Default is 0 (no limit).
 
 ## Properties
 
@@ -8,10 +8,11 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **index_key** | **str** | 32-byte encryption key as hex string | 
 **index_name** | **str** | ID name | 
-**batch_size** | **int** |  | [optional] [default to 2048]
-**max_iters** | **int** |  | [optional] [default to 100]
-**tolerance** | **float** |  | [optional] [default to 1.0E-6]
-**max_memory** | **int** |  | [optional] [default to 0]
+**n_lists** | **int** |  | [optional] 
+**batch_size** | **int** |  | [optional] 
+**max_iters** | **int** |  | [optional] 
+**tolerance** | **float** |  | [optional] 
+**max_memory** | **int** |  | [optional] 
 
 ## Example
 

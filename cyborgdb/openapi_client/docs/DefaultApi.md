@@ -9,8 +9,10 @@ Method | HTTP request | Description
 [**delete_vectors_v1_vectors_delete_post**](DefaultApi.md#delete_vectors_v1_vectors_delete_post) | **POST** /v1/vectors/delete | Delete Items from Encrypted Index
 [**get_index_info_v1_indexes_describe_post**](DefaultApi.md#get_index_info_v1_indexes_describe_post) | **POST** /v1/indexes/describe | Describe Encrypted Index
 [**get_index_size_v1_vectors_num_vectors_post**](DefaultApi.md#get_index_size_v1_vectors_num_vectors_post) | **POST** /v1/vectors/num_vectors | Get the number of vectors in an index
+[**get_training_status_v1_indexes_training_status_get**](DefaultApi.md#get_training_status_v1_indexes_training_status_get) | **GET** /v1/indexes/training-status | Get Training Status
 [**get_vectors_v1_vectors_get_post**](DefaultApi.md#get_vectors_v1_vectors_get_post) | **POST** /v1/vectors/get | Get Items from Encrypted Index
 [**health_check_v1_health_get**](DefaultApi.md#health_check_v1_health_get) | **GET** /v1/health | Health check endpoint
+[**list_ids_v1_vectors_list_ids_post**](DefaultApi.md#list_ids_v1_vectors_list_ids_post) | **POST** /v1/vectors/list_ids | List all IDs in an index
 [**list_indexes_v1_indexes_list_get**](DefaultApi.md#list_indexes_v1_indexes_list_get) | **GET** /v1/indexes/list | List Encrypted Indexes
 [**query_vectors_v1_vectors_query_post**](DefaultApi.md#query_vectors_v1_vectors_query_post) | **POST** /v1/vectors/query | Query Encrypted Index
 [**train_index_v1_indexes_train_post**](DefaultApi.md#train_index_v1_indexes_train_post) | **POST** /v1/indexes/train | Train Encrypted index
@@ -435,6 +437,75 @@ Name | Type | Description  | Notes
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
+# **get_training_status_v1_indexes_training_status_get**
+> object get_training_status_v1_indexes_training_status_get()
+
+Get Training Status
+
+Get the current training status including indexes being trained
+and the retrain threshold configuration.
+
+Returns:
+    dict: Training status information including:
+        - training_indexes: List of index names currently being trained
+        - retrain_threshold: The multiplier used for the retraining threshold
+
+### Example
+
+
+```python
+import cyborgdb.openapi_client
+from cyborgdb.openapi_client.rest import ApiException
+from pprint import pprint
+
+# Defining the host is optional and defaults to http://localhost
+# See configuration.py for a list of all supported configuration parameters.
+configuration = cyborgdb.openapi_client.Configuration(
+    host = "http://localhost"
+)
+
+
+# Enter a context with an instance of the API client
+with cyborgdb.openapi_client.ApiClient(configuration) as api_client:
+    # Create an instance of the API class
+    api_instance = cyborgdb.openapi_client.DefaultApi(api_client)
+
+    try:
+        # Get Training Status
+        api_response = api_instance.get_training_status_v1_indexes_training_status_get()
+        print("The response of DefaultApi->get_training_status_v1_indexes_training_status_get:\n")
+        pprint(api_response)
+    except Exception as e:
+        print("Exception when calling DefaultApi->get_training_status_v1_indexes_training_status_get: %s\n" % e)
+```
+
+
+
+### Parameters
+
+This endpoint does not need any parameter.
+
+### Return type
+
+**object**
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+### HTTP response details
+
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+**200** | Successful Response |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
 # **get_vectors_v1_vectors_get_post**
 > GetResponseModel get_vectors_v1_vectors_get_post(get_request)
 
@@ -578,6 +649,89 @@ No authorization required
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 **200** | Successful Response |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **list_ids_v1_vectors_list_ids_post**
+> ListIDsResponse list_ids_v1_vectors_list_ids_post(list_ids_request)
+
+List all IDs in an index
+
+List all item IDs currently stored in the index.
+
+Returns a list of all IDs and the total count.
+
+### Example
+
+* Api Key Authentication (APIKeyHeader):
+
+```python
+import cyborgdb.openapi_client
+from cyborgdb.openapi_client.models.list_ids_request import ListIDsRequest
+from cyborgdb.openapi_client.models.list_ids_response import ListIDsResponse
+from cyborgdb.openapi_client.rest import ApiException
+from pprint import pprint
+
+# Defining the host is optional and defaults to http://localhost
+# See configuration.py for a list of all supported configuration parameters.
+configuration = cyborgdb.openapi_client.Configuration(
+    host = "http://localhost"
+)
+
+# The client must configure the authentication and authorization parameters
+# in accordance with the API server security policy.
+# Examples for each auth method are provided below, use the example that
+# satisfies your auth use case.
+
+# Configure API key authorization: APIKeyHeader
+configuration.api_key['APIKeyHeader'] = os.environ["API_KEY"]
+
+# Uncomment below to setup prefix (e.g. Bearer) for API key, if needed
+# configuration.api_key_prefix['APIKeyHeader'] = 'Bearer'
+
+# Enter a context with an instance of the API client
+with cyborgdb.openapi_client.ApiClient(configuration) as api_client:
+    # Create an instance of the API class
+    api_instance = cyborgdb.openapi_client.DefaultApi(api_client)
+    list_ids_request = cyborgdb.openapi_client.ListIDsRequest() # ListIDsRequest | 
+
+    try:
+        # List all IDs in an index
+        api_response = api_instance.list_ids_v1_vectors_list_ids_post(list_ids_request)
+        print("The response of DefaultApi->list_ids_v1_vectors_list_ids_post:\n")
+        pprint(api_response)
+    except Exception as e:
+        print("Exception when calling DefaultApi->list_ids_v1_vectors_list_ids_post: %s\n" % e)
+```
+
+
+
+### Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **list_ids_request** | [**ListIDsRequest**](ListIDsRequest.md)|  | 
+
+### Return type
+
+[**ListIDsResponse**](ListIDsResponse.md)
+
+### Authorization
+
+[APIKeyHeader](../README.md#APIKeyHeader)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+### HTTP response details
+
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+**200** | Successful Response |  -  |
+**422** | Validation Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
@@ -748,6 +902,9 @@ Train Encrypted index
 
 Train the index for efficient querying.
 
+Note: This endpoint triggers manual training. Automatic training is also
+triggered based on vector count thresholds after upserts.
+
 ### Example
 
 * Api Key Authentication (APIKeyHeader):
@@ -830,6 +987,9 @@ Name | Type | Description  | Notes
 Add Items to Encrypted Index
 
 Add or update vectors in the index.
+
+After upserting, checks if the index needs training/retraining based on the
+number of vectors and triggers automatic training if needed.
 
 ### Example
 

@@ -7,8 +7,6 @@ Model for configuring an IVFFlat (Inverted File with Flat quantization) index.  
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **dimension** | **int** |  | [optional] 
-**n_lists** | **int** |  | 
-**metric** | **str** |  | [optional] 
 **type** | **str** |  | [optional] [default to 'ivfflat']
 
 ## Example

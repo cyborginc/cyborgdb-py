@@ -6,8 +6,6 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **dimension** | **int** |  | [optional] 
-**n_lists** | **int** |  | 
-**metric** | **str** |  | [optional] 
 **type** | **str** |  | [optional] [default to 'ivfflat']
 **pq_dim** | **int** |  | 
 **pq_bits** | **int** |  | 

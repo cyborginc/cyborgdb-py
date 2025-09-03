@@ -1,15 +1,16 @@
 # CreateIndexRequest
 
-Request model for creating a new encrypted index.  Attributes:     index_config (Union[IndexIVFModel, IndexIVFPQModel, IndexIVFFlatModel]):          The configuration model for the index.     index_key (str): A 32-byte encryption key as a hex string.     index_name (str): The name/identifier of the index.     embedding_model (Optional[str]): Optional embedding model name.
+Request model for creating a new encrypted index.  Attributes:     index_config (Optional[Union[IndexIVFModel, IndexIVFPQModel, IndexIVFFlatModel]]):          Optional configuration model for the index.     index_key (str): A 32-byte encryption key as a hex string.     index_name (str): The name/identifier of the index.     embedding_model (Optional[str]): Optional embedding model name.     metric (Optional[str]): Optional distance metric.
 
 ## Properties
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**index_config** | [**IndexConfig**](IndexConfig.md) |  | 
+**index_config** | [**IndexConfig**](IndexConfig.md) |  | [optional] 
 **index_key** | **str** | 32-byte encryption key as hex string | 
 **index_name** | **str** | ID name | 
 **embedding_model** | **str** |  | [optional] 
+**metric** | **str** |  | [optional] 
 
 ## Example
 

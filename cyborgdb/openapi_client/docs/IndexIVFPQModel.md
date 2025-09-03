@@ -7,8 +7,6 @@ Model for configuring an IVFPQ (Inverted File with Product Quantization) index. 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **dimension** | **int** |  | [optional] 
-**n_lists** | **int** |  | 
-**metric** | **str** |  | [optional] 
 **type** | **str** |  | [optional] [default to 'ivfpq']
 **pq_dim** | **int** |  | 
 **pq_bits** | **int** |  | 

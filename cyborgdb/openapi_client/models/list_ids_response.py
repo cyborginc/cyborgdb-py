@@ -17,18 +17,18 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List
-from cyborgdb.openapi_client.models.get_result_item_model import GetResultItemModel
 from typing import Optional, Set
 from typing_extensions import Self
 
-class GetResponseModel(BaseModel):
+class ListIDsResponse(BaseModel):
     """
-    Response model for retrieving multiple encrypted index items.  Attributes:     results (List[GetResultItem]): A list of retrieved items with requested fields.
+    Response model for listing all IDs in the index.  Attributes:     ids (List[str]): List of all item IDs in the index.     count (int): Total number of IDs in the index.
     """ # noqa: E501
-    results: List[GetResultItemModel]
-    __properties: ClassVar[List[str]] = ["results"]
+    ids: List[StrictStr]
+    count: StrictInt
+    __properties: ClassVar[List[str]] = ["ids", "count"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -48,7 +48,7 @@ class GetResponseModel(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of GetResponseModel from a JSON string"""
+        """Create an instance of ListIDsResponse from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -69,18 +69,11 @@ class GetResponseModel(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of each item in results (list)
-        _items = []
-        if self.results:
-            for _item_results in self.results:
-                if _item_results:
-                    _items.append(_item_results.to_dict())
-            _dict['results'] = _items
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of GetResponseModel from a dict"""
+        """Create an instance of ListIDsResponse from a dict"""
         if obj is None:
             return None
 
@@ -88,7 +81,8 @@ class GetResponseModel(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "results": [GetResultItemModel.from_dict(_item) for _item in obj["results"]] if obj.get("results") is not None else None
+            "ids": obj.get("ids"),
+            "count": obj.get("count")
         })
         return _obj
 

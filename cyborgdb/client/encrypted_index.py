@@ -22,6 +22,7 @@ try:
     )
     from cyborgdb.openapi_client.exceptions import ApiException
     from cyborgdb.openapi_client.models.query_request import QueryRequest
+    from cyborgdb.openapi_client.models.list_ids_request import ListIDsRequest
     from cyborgdb.openapi_client.models.request import Request
 except ImportError:
     raise ImportError(
@@ -218,9 +219,10 @@ class EncryptedIndex:
 
     def train(
         self,
-        batch_size: int = 2048,
-        max_iters: int = 100,
-        tolerance: float = 1e-6,
+        n_lists: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        max_iters: Optional[int] = None,
+        tolerance: Optional[float] = None,
     ) -> None:
         """
         Build the index using the specified training configuration.
@@ -229,6 +231,7 @@ class EncryptedIndex:
         After, they will be conducted using encrypted ANN search.
 
         Args:
+            n_lists: Number of inverted lists for the index. Default is auto.
             batch_size: Size of each batch for training. Default is 2048.
             max_iters: Maximum iterations for training. Default is 100.
             tolerance: Convergence tolerance for training. Default is 1e-6.
@@ -243,11 +246,12 @@ class EncryptedIndex:
         """
         try:
             request = TrainRequest(
-                batch_size=batch_size,
+                index_key=self._key_to_hex(),
                 index_name=self._index_name,
+                n_lists=n_lists,
+                batch_size=batch_size,
                 max_iters=max_iters,
                 tolerance=tolerance,
-                index_key=self._key_to_hex(),
             )
 
             self._api.train_index_v1_indexes_train_post(train_request=request)
@@ -397,8 +401,8 @@ class EncryptedIndex:
             Union[np.ndarray, List[List[float]], List[float]]
         ] = None,
         query_contents: Optional[str] = None,
-        top_k: int = 100,
-        n_probes: int = 1,
+        top_k: Optional[int] = None,
+        n_probes: Optional[int] = None,
         filters: Optional[Dict[str, Any]] = None,
         include: List[str] = ["distance", "metadata"],
         greedy: bool = False,
@@ -540,6 +544,27 @@ class EncryptedIndex:
 
             logger.error(traceback.format_exc())
             raise
+
+    def list_ids(self) -> List[str]:
+        """
+        List all document IDs in the index.
+
+        Returns:
+            List of document IDs.
+        """
+        try:
+            list_ids_request = ListIDsRequest(
+                index_key=self._key_to_hex(), index_name=self._index_name
+            )
+            response = self._api.list_ids_v1_vectors_list_ids_post(
+                list_ids_request=list_ids_request
+            )
+
+            return response.ids
+        except ApiException as e:
+            error_msg = f"Failed to list document IDs: {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
     def _key_to_hex(self) -> str:
         """Convert the binary key to a hex string for API calls."""

@@ -27,11 +27,11 @@ class ClientIntegrationTest(unittest.TestCase):
 
         # Create a test index
         self.index_name = f"test_index_{int(time.time())}"
-        self.index_config = IndexIVF(dimension=128, n_lists=10, metric="euclidean")
+        self.index_config = IndexIVF(dimension=128)
 
         try:
             self.index = self.client.create_index(
-                self.index_name, self.test_key, self.index_config
+                self.index_name, self.test_key, self.index_config, metric="euclidean"
             )
         except Exception as e:
             # If IndexIVF fails (likely using lite backend), skip these tests

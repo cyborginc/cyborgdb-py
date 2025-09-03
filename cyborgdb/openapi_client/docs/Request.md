@@ -9,9 +9,9 @@ Name | Type | Description | Notes
 **index_name** | **str** | ID name | 
 **query_vectors** | **List[List[float]]** |  | 
 **query_contents** | **str** |  | [optional] 
-**top_k** | **int** |  | [optional] [default to 100]
-**n_probes** | **int** |  | [optional] [default to 1]
-**greedy** | **bool** |  | [optional] [default to False]
+**top_k** | **int** |  | [optional] 
+**n_probes** | **int** |  | [optional] 
+**greedy** | **bool** |  | [optional] 
 **filters** | **Dict[str, object]** |  | [optional] 
 **include** | **List[str]** |  | [optional] [default to [distance, metadata]]
 
