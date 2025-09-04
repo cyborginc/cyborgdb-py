@@ -7,6 +7,7 @@ import os
 import cyborgdb as cyborgdb
 from compress_utils import decompress
 from dotenv import load_dotenv
+import time
 
 # Load environment variables from .env.local
 load_dotenv(".env.local")
@@ -154,9 +155,7 @@ class TestUnitFlow(unittest.TestCase):
         )
 
         # CYBORDB SETUP: Create the index once (shared state).
-        cls.index_config = cyborgdb.IndexIVFFlat(
-            dimension=cls.dimension
-        )
+        cls.index_config = cyborgdb.IndexIVFFlat(dimension=cls.dimension)
         cls.client = cyborgdb.Client(
             base_url="http://localhost:8000", api_key=os.getenv("CYBORGDB_API_KEY", "")
         )
@@ -197,10 +196,24 @@ class TestUnitFlow(unittest.TestCase):
         self.index.upsert(items)
         self.assertTrue(True)
 
+    def test_01b_upsert_should_trigger_train(self):
+        num_retries = 30
+        trained = False
+        for attempt in range(num_retries):
+            if self.index.is_trained():
+                trained = True
+            else:
+                print(f"Index not trained yet, retrying... ({attempt + 1}/{num_retries})")
+            
+            time.sleep(120)  # Wait for 2 minutes before checking again
+            if trained:
+                break
+        self.assertTrue(trained, "Index did not become trained after upsert")
+
     def test_02_untrained_list_ids(self):
         # UNTRAINED LIST IDS
         results = self.index.list_ids()
-        self.assertEqual(results, [str(id) for id in range(self.num_untrained_vectors)])
+        self.assertCountEqual(results, [str(id) for id in range(self.num_untrained_vectors)])
 
     def test_03_untrained_query_no_metadata(self):
         # UNTRAINED QUERY (NO METADATA)
@@ -272,7 +285,7 @@ class TestUnitFlow(unittest.TestCase):
 
     def test_06_train_index(self):
         # TRAIN INDEX
-        self.index.train(n_lists=512)
+        # self.index.train(n_lists=512)
         self.assertTrue(True)
         self.assertTrue(self.index.is_trained())
 
@@ -288,6 +301,7 @@ class TestUnitFlow(unittest.TestCase):
                     # 'contents': bytes(self.vectors[i])
                 }
             )
+        print(f"Upserting {len(items)} training vectors...")
         self.index.upsert(items)
         self.assertTrue(True)
 

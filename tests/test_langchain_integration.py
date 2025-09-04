@@ -167,7 +167,6 @@ class TestLangChainIntegration(unittest.TestCase):
                         index_key=self.index_key,
                         api=client.api,
                         api_client=client.api_client,
-                        max_cache_size=0,
                     )
                     index.delete_index()
                 except Exception:
@@ -189,7 +188,6 @@ class TestLangChainIntegration(unittest.TestCase):
             embedding=MockEmbeddings(self.dimension),
             index_type="ivfflat",
             metric="cosine",
-            index_config_params={"n_lists": 10},
         )
 
         # Add texts
