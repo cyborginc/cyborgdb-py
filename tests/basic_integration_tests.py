@@ -139,7 +139,8 @@ class TestUnitFlow(unittest.TestCase):
         cls.trained_recall = data.get("trained_recall")
 
         # Set counts and dimension.
-        cls.num_untrained_vectors = cls.untrained_vectors.shape[0]
+        cls.num_pretraining_vectors = 10000 # number of vectors to not trigger auto-training
+        cls.num_untrained_vectors = cls.untrained_vectors.shape[0] - cls.num_pretraining_vectors
         cls.total_num_vectors = (
             cls.untrained_vectors.shape[0] + cls.training_vectors.shape[0]
         )
@@ -159,7 +160,7 @@ class TestUnitFlow(unittest.TestCase):
         cls.client = cyborgdb.Client(
             base_url="http://localhost:8000", api_key=os.getenv("CYBORGDB_API_KEY", "")
         )
-        cls.index_name = "memory_example_index19"
+        cls.index_name = "memory_example_index_" + str(int(time.time()))
         cls.index_key = cyborgdb.Client.generate_key()  # bytes([1] * 32)
         cls.index = cls.client.create_index(
             cls.index_name, cls.index_key, cls.index_config, metric="euclidean"
@@ -184,7 +185,7 @@ class TestUnitFlow(unittest.TestCase):
     def test_01_untrained_upsert(self):
         # UNTRAINED UPSERT: upsert untrained items.
         items = []
-        for i in range(self.num_untrained_vectors):
+        for i in range(self.num_pretraining_vectors):
             items.append(
                 {
                     "id": str(i),
@@ -194,26 +195,13 @@ class TestUnitFlow(unittest.TestCase):
                 }
             )
         self.index.upsert(items)
-        self.assertTrue(True)
-
-    def test_01b_upsert_should_trigger_train(self):
-        num_retries = 30
-        trained = False
-        for attempt in range(num_retries):
-            if self.index.is_trained():
-                trained = True
-            else:
-                print(f"Index not trained yet, retrying... ({attempt + 1}/{num_retries})")
-            
-            time.sleep(120)  # Wait for 2 minutes before checking again
-            if trained:
-                break
-        self.assertTrue(trained, "Index did not become trained after upsert")
+        time.sleep(60)     
+        self.assertFalse(self.index.is_trained(), "Index should not be trained yet")
 
     def test_02_untrained_list_ids(self):
         # UNTRAINED LIST IDS
         results = self.index.list_ids()
-        self.assertCountEqual(results, [str(id) for id in range(self.num_untrained_vectors)])
+        self.assertCountEqual(results, [str(id) for id in range(self.num_pretraining_vectors)])
 
     def test_03_untrained_query_no_metadata(self):
         # UNTRAINED QUERY (NO METADATA)
@@ -259,7 +247,7 @@ class TestUnitFlow(unittest.TestCase):
         # UNTRAINED GET
         num_get = 1000
         get_indices = np.random.choice(
-            self.num_untrained_vectors, num_get, replace=False
+            self.num_pretraining_vectors, num_get, replace=False
         )
         get_indices_str = get_indices.astype(str).tolist()
         get_results = self.index.get(
@@ -283,16 +271,10 @@ class TestUnitFlow(unittest.TestCase):
                 metadata_str, expected_metadata_str, f"Metadata mismatch for index {i}"
             )
 
-    def test_06_train_index(self):
-        # TRAIN INDEX
-        # self.index.train(n_lists=512)
-        self.assertTrue(True)
-        self.assertTrue(self.index.is_trained())
-
-    def test_07_trained_upsert(self):
+    def test_05_upsert_to_trigger_train(self):
         # TRAINED UPSERT: upsert training vectors.
         items = []
-        for i in range(self.num_untrained_vectors, self.total_num_vectors):
+        for i in range(self.num_pretraining_vectors, self.num_untrained_vectors):
             items.append(
                 {
                     "id": str(i),
@@ -305,9 +287,41 @@ class TestUnitFlow(unittest.TestCase):
         self.index.upsert(items)
         self.assertTrue(True)
 
+    def test_06_check_upsert_triggered_train(self):
+        num_retries = 6
+        trained = False
+        for attempt in range(num_retries):
+            time.sleep(20)
+            if self.index.is_trained():
+                trained = True
+                break
+            else:
+                print(f"Index not trained yet, retrying... ({attempt + 1}/{num_retries})")
+
+        self.assertTrue(trained, "Index did not become trained after upsert")
+
+    def test_07_trained_upsert(self):
+        # TRAINED UPSERT: upsert remaining untrained items.
+        items = []
+        for i in range(
+            self.num_untrained_vectors,
+            self.total_num_vectors,
+        ):
+            items.append(
+                {
+                    "id": str(i),
+                    "vector": self.vectors[i],
+                    "metadata": self.metadata[i],
+                    # 'contents': bytes(self.vectors[i])
+                }
+            )
+        print(f"Upserting {len(items)} untrained vectors...")
+        self.index.upsert(items)
+        self.assertTrue(True)
+
     def test_08_trained_query_no_metadata(self):
         # TRAINED QUERY (NO METADATA)
-        results = self.index.query(query_vectors=self.queries, top_k=100, n_probes=24)
+        results = self.index.query(query_vectors=self.queries, top_k=100)
 
         recall = check_query_results(results, self.trained_neighbors, self.num_queries)
         print(
@@ -324,7 +338,6 @@ class TestUnitFlow(unittest.TestCase):
                 self.index.query(
                     query_vectors=self.queries,
                     top_k=100,
-                    n_probes=24,
                     filters=metadata_query,
                 )
             )

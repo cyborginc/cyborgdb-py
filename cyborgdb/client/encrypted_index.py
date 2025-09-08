@@ -450,7 +450,6 @@ class EncryptedIndex:
 
             if is_single_query or query_contents is not None:
                 # Use QueryRequest for single vector or content-based query
-                print("Using QueryRequest")  # Debugging line
                 query_request = QueryRequest(
                     index_key=self._key_to_hex(),
                     index_name=self._index_name,
@@ -464,7 +463,6 @@ class EncryptedIndex:
                 )
             else:
                 # Use BatchQueryRequest for multiple vectors
-                print("Using BatchQueryRequest")  # Debugging line
                 query_request = BatchQueryRequest(
                     index_key=self._key_to_hex(),
                     index_name=self._index_name,
@@ -494,7 +492,6 @@ class EncryptedIndex:
 
                 # Parse raw JSON response manually
                 response_text = raw_response.data.decode("utf-8")
-                print("Raw response text:", response_text)  # Debugging line
                 response_json = json.loads(response_text)
 
                 # Process the results as plain dictionaries
