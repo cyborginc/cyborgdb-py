@@ -6,15 +6,15 @@
 
 The **CyborgDB Python SDK** provides a comprehensive client library for interacting with [CyborgDB](https://docs.cyborg.co), the first Confidential Vector Database. This SDK enables you to perform encrypted vector operations including ingestion, search, and retrieval while maintaining end-to-end encryption of your vector embeddings. Built for Python applications, it offers seamless integration into modern Python applications and services.
 
-This SDK provides an interface to [`cyborgdb-service`](https://pypi.org/project/cyborgdb-service/) which you will need to separately install and run in order to use the SDK. For more info, please see our [docs](https://docs.cyborg.co)
+This SDK provides an interface to [`cyborgdb-service`](https://pypi.org/project/cyborgdb-service/) which you will need to separately install and run in order to use the SDK. For more info, please see our [docs](https://docs.cyborg.co).
 
 ## Key Features
 
-* **End-to-End Encryption**: All vector operations maintain encryption with client-side keys
+- **End-to-End Encryption**: All vector operations maintain encryption with client-side keys
 - **Zero-Trust Design**: Novel architecture keeps confidential inference data secure
 - **High Performance**: GPU-accelerated indexing and retrieval with CUDA support
 - **Familiar API**: Easy integration with existing AI workflows
-* **Flexible Indexing**: Support for multiple index types (IVFFlat, IVFPQ, etc.) with customizable parameters
+- **Flexible Indexing**: Support for multiple index types (IVFFlat, IVFPQ, etc.) with customizable parameters
 
 ## Getting Started
 
@@ -43,17 +43,19 @@ pip install cyborgdb
 ### Usage
 
 ```python
-from cyborgdb import Client, IndexIVFFlat
-import secrets
+from cyborgdb import Client
 
 # Initialize the client
 client = Client('https://localhost:8000', 'your-api-key')
 
 # Generate a 32-byte encryption key
-index_key = secrets.token_bytes(32)
+index_key = client.generate_key()
 
 # Create an encrypted index
-index = await client.create_index('my-index', index_key, IndexIVFFlat(128, 1024))
+index = await client.create_index(
+    index_name='my-index', 
+    index_key=index_key
+)
 
 # Add encrypted vector items
 items = [
@@ -74,7 +76,7 @@ items = [
 await index.upsert(items)
 
 # Query the encrypted index
-query_vector = [0.1, 0.2, 0.3, *([0.0] * 125)]  # 128 dimensions
+query_vector = [0.1, 0.2, 0.3, *([0.0] * 128)]  # 128 dimensions
 results = await index.query(query_vector, 10)
 
 # Print the results
