@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from typing_extensions import Annotated
 
 from pydantic import StrictStr
-from typing import Any, Dict
+from typing import Dict
 from cyborgdb.openapi_client.models.create_index_request import CreateIndexRequest
 from cyborgdb.openapi_client.models.cyborgdb_service_api_schemas_index_success_response_model import CyborgdbServiceApiSchemasIndexSuccessResponseModel
 from cyborgdb.openapi_client.models.cyborgdb_service_api_schemas_vectors_success_response_model import CyborgdbServiceApiSchemasVectorsSuccessResponseModel
@@ -27,6 +27,7 @@ from cyborgdb.openapi_client.models.get_response_model import GetResponseModel
 from cyborgdb.openapi_client.models.index_info_response_model import IndexInfoResponseModel
 from cyborgdb.openapi_client.models.index_list_response_model import IndexListResponseModel
 from cyborgdb.openapi_client.models.index_operation_request import IndexOperationRequest
+from cyborgdb.openapi_client.models.index_training_status_response_model import IndexTrainingStatusResponseModel
 from cyborgdb.openapi_client.models.list_ids_request import ListIDsRequest
 from cyborgdb.openapi_client.models.list_ids_response import ListIDsResponse
 from cyborgdb.openapi_client.models.query_response import QueryResponse
@@ -1491,7 +1492,7 @@ class DefaultApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> object:
+    ) -> IndexTrainingStatusResponseModel:
         """Get Training Status
 
         Get the current training status including indexes being trained and the retrain threshold configuration.  Returns:     dict: Training status information including:         - training_indexes: List of index names currently being trained         - retrain_threshold: The multiplier used for the retraining threshold
@@ -1526,7 +1527,9 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "object",
+            '200': "IndexTrainingStatusResponseModel",
+            '401': "ErrorResponseModel",
+            '500': "ErrorResponseModel",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1554,7 +1557,7 @@ class DefaultApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[object]:
+    ) -> ApiResponse[IndexTrainingStatusResponseModel]:
         """Get Training Status
 
         Get the current training status including indexes being trained and the retrain threshold configuration.  Returns:     dict: Training status information including:         - training_indexes: List of index names currently being trained         - retrain_threshold: The multiplier used for the retraining threshold
@@ -1589,7 +1592,9 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "object",
+            '200': "IndexTrainingStatusResponseModel",
+            '401': "ErrorResponseModel",
+            '500': "ErrorResponseModel",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1652,7 +1657,9 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "object",
+            '200': "IndexTrainingStatusResponseModel",
+            '401': "ErrorResponseModel",
+            '500': "ErrorResponseModel",
         }
         response_data = self.api_client.call_api(
             *_param,

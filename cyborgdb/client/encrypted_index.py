@@ -566,6 +566,26 @@ class EncryptedIndex:
             logger.error(error_msg)
             raise ValueError(error_msg)
 
+    def is_training(self) -> bool:
+        """
+        Get the current training status of the index.
+
+        Returns:
+            A dictionary containing training status information.
+        """
+        try:
+            response = self._api.get_training_status_v1_indexes_training_status_get()
+
+            if self._index_name in response.training_indexes:
+                return True
+
+            return False
+
+        except ApiException as e:
+            error_msg = f"Failed to get index training status: {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
     def _key_to_hex(self) -> str:
         """Convert the binary key to a hex string for API calls."""
         return binascii.hexlify(self._index_key).decode("ascii")

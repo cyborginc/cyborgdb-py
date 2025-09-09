@@ -23,6 +23,7 @@ cyborgdb/openapi_client/docs/IndexIVFPQModel.md
 cyborgdb/openapi_client/docs/IndexInfoResponseModel.md
 cyborgdb/openapi_client/docs/IndexListResponseModel.md
 cyborgdb/openapi_client/docs/IndexOperationRequest.md
+cyborgdb/openapi_client/docs/IndexTrainingStatusResponseModel.md
 cyborgdb/openapi_client/docs/ListIDsRequest.md
 cyborgdb/openapi_client/docs/ListIDsResponse.md
 cyborgdb/openapi_client/docs/QueryRequest.md
@@ -55,6 +56,7 @@ cyborgdb/openapi_client/models/index_ivf_model.py
 cyborgdb/openapi_client/models/index_ivfpq_model.py
 cyborgdb/openapi_client/models/index_list_response_model.py
 cyborgdb/openapi_client/models/index_operation_request.py
+cyborgdb/openapi_client/models/index_training_status_response_model.py
 cyborgdb/openapi_client/models/list_ids_request.py
 cyborgdb/openapi_client/models/list_ids_response.py
 cyborgdb/openapi_client/models/query_request.py
@@ -69,4 +71,5 @@ cyborgdb/openapi_client/models/validation_error_loc_inner.py
 cyborgdb/openapi_client/models/vector_item.py
 cyborgdb/openapi_client/rest.py
 cyborgdb/openapi_client/test/__init__.py
+cyborgdb/openapi_client/test/test_index_training_status_response_model.py
 cyborgdb/openapi_client_README.md

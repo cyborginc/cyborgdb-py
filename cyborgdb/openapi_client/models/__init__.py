@@ -32,6 +32,7 @@ from cyborgdb.openapi_client.models.index_ivfpq_model import IndexIVFPQModel
 from cyborgdb.openapi_client.models.index_info_response_model import IndexInfoResponseModel
 from cyborgdb.openapi_client.models.index_list_response_model import IndexListResponseModel
 from cyborgdb.openapi_client.models.index_operation_request import IndexOperationRequest
+from cyborgdb.openapi_client.models.index_training_status_response_model import IndexTrainingStatusResponseModel
 from cyborgdb.openapi_client.models.list_ids_request import ListIDsRequest
 from cyborgdb.openapi_client.models.list_ids_response import ListIDsResponse
 from cyborgdb.openapi_client.models.query_request import QueryRequest

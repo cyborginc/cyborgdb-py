@@ -109,6 +109,7 @@ Class | Method | HTTP request | Description
  - [IndexInfoResponseModel](cyborgdb/openapi_client/docs/IndexInfoResponseModel.md)
  - [IndexListResponseModel](cyborgdb/openapi_client/docs/IndexListResponseModel.md)
  - [IndexOperationRequest](cyborgdb/openapi_client/docs/IndexOperationRequest.md)
+ - [IndexTrainingStatusResponseModel](cyborgdb/openapi_client/docs/IndexTrainingStatusResponseModel.md)
  - [ListIDsRequest](cyborgdb/openapi_client/docs/ListIDsRequest.md)
  - [ListIDsResponse](cyborgdb/openapi_client/docs/ListIDsResponse.md)
  - [QueryRequest](cyborgdb/openapi_client/docs/QueryRequest.md)

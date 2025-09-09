@@ -288,13 +288,15 @@ class TestUnitFlow(unittest.TestCase):
         self.assertTrue(True)
 
     def test_06_check_upsert_triggered_train(self):
-        num_retries = 6
+        num_retries = 60
         trained = False
         for attempt in range(num_retries):
-            time.sleep(20)
-            if self.index.is_trained():
-                trained = True
-                break
+            time.sleep(2)
+            if not self.index.is_training():
+                trained = self.index.is_trained()
+                if trained:
+                    print("Index is now trained.")
+                    break
             else:
                 print(f"Index not trained yet, retrying... ({attempt + 1}/{num_retries})")
 

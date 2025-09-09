@@ -438,7 +438,7 @@ Name | Type | Description  | Notes
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **get_training_status_v1_indexes_training_status_get**
-> object get_training_status_v1_indexes_training_status_get()
+> IndexTrainingStatusResponseModel get_training_status_v1_indexes_training_status_get()
 
 Get Training Status
 
@@ -455,6 +455,7 @@ Returns:
 
 ```python
 import cyborgdb.openapi_client
+from cyborgdb.openapi_client.models.index_training_status_response_model import IndexTrainingStatusResponseModel
 from cyborgdb.openapi_client.rest import ApiException
 from pprint import pprint
 
@@ -487,7 +488,7 @@ This endpoint does not need any parameter.
 
 ### Return type
 
-**object**
+[**IndexTrainingStatusResponseModel**](IndexTrainingStatusResponseModel.md)
 
 ### Authorization
 
@@ -502,7 +503,9 @@ No authorization required
 
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
-**200** | Successful Response |  -  |
+**200** | Successful response |  -  |
+**401** | Permission denied from license issue |  -  |
+**500** | Unexpected server error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
