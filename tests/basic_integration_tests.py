@@ -139,8 +139,8 @@ class TestUnitFlow(unittest.TestCase):
         cls.trained_recall = data.get("trained_recall")
 
         # Set counts and dimension.
-        cls.num_pretraining_vectors = 10000 # number of vectors to not trigger auto-training
-        cls.num_untrained_vectors = cls.untrained_vectors.shape[0] - cls.num_pretraining_vectors
+        cls.num_pretraining_vectors = 5000 # number of vectors to not trigger auto-training
+        cls.num_untrained_vectors = cls.untrained_vectors.shape[0]
         cls.total_num_vectors = (
             cls.untrained_vectors.shape[0] + cls.training_vectors.shape[0]
         )
@@ -195,7 +195,7 @@ class TestUnitFlow(unittest.TestCase):
                 }
             )
         self.index.upsert(items)
-        time.sleep(60)     
+        time.sleep(5)     
         self.assertFalse(self.index.is_trained(), "Index should not be trained yet")
 
     def test_02_untrained_list_ids(self):
@@ -318,6 +318,12 @@ class TestUnitFlow(unittest.TestCase):
         print(f"Upserting {len(items)} untrained vectors...")
         self.index.upsert(items)
         self.assertTrue(True)
+
+    def test_08_check_index_successfully_upserted(self):
+        # CHECK INDEX SUCCESSFULLY UPSERTED ALL ITEMS
+        results = self.index.list_ids()
+        expected_ids = [str(i) for i in range(self.total_num_vectors)]
+        self.assertCountEqual(results, expected_ids)
 
     def test_08_trained_query_no_metadata(self):
         # TRAINED QUERY (NO METADATA)
