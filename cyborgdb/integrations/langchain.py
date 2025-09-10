@@ -187,7 +187,7 @@ try:
             index_type: str,
             index_config_params: Dict[str, Any],
             dimension: Optional[int],
-            metric: str,
+            metric: Optional[str],
         ) -> None:
             """Create a new index."""
             # Determine embedding dimension
@@ -196,7 +196,7 @@ try:
 
             # Create index configuration
             config = self._create_index_config(
-                index_type, dimension, metric, index_config_params
+                index_type, dimension, index_config_params
             )
 
             # Create the index
@@ -207,6 +207,7 @@ try:
                 embedding_model=self.embedding_model_name
                 if self.embedding_model_name
                 else None,
+                metric=metric
             )
 
         def _detect_embedding_dimension(self) -> int:
@@ -240,26 +241,21 @@ try:
                 )
 
         def _create_index_config(
-            self, index_type: str, dimension: int, metric: str, params: Dict[str, Any]
+            self, index_type: str, dimension: int, params: Dict[str, Any]
         ) -> Union[IndexIVF, IndexIVFPQ, IndexIVFFlat]:
             """Create the appropriate index configuration."""
             if index_type == "ivf":
-                n_lists = params.get("n_lists", 1024)
-                return IndexIVF(dimension=dimension, n_lists=n_lists, metric=metric)
+                return IndexIVF(dimension=dimension)
             elif index_type == "ivfpq":
-                n_lists = params.get("n_lists", 1024)
                 pq_dim = params.get("pq_dim", 8)
                 pq_bits = params.get("pq_bits", 8)
                 return IndexIVFPQ(
                     dimension=dimension,
-                    n_lists=n_lists,
                     pq_dim=pq_dim,
                     pq_bits=pq_bits,
-                    metric=metric,
                 )
             elif index_type == "ivfflat":
-                n_lists = params.get("n_lists", 1024)
-                return IndexIVFFlat(dimension=dimension, n_lists=n_lists, metric=metric)
+                return IndexIVFFlat(dimension=dimension)
             else:
                 raise ValueError(
                     f"Invalid index type: {index_type}. Must be 'ivf', 'ivfpq', or 'ivfflat'"
@@ -467,13 +463,22 @@ try:
                 docs.append(Document(page_content=content, metadata=metadata_copy))
 
             return docs
+        
+        def list_ids(self):
+            """
+            List all document IDs in the vector store.
+
+            Returns:
+                List of document IDs
+            """
+            return self.index.list_ids()
 
         def _execute_query(
             self,
             query: Union[str, List[float]],
             k: int = 4,
             filter: Optional[Dict] = None,
-            n_probes: int = 1,
+            n_probes: Optional[int] = None,
         ) -> List[Dict[str, Any]]:
             """
             Execute a search query.
@@ -534,7 +539,7 @@ try:
             Returns:
                 List of similar documents
             """
-            n_probes = kwargs.get("n_probes", 1)
+            n_probes = kwargs.get("n_probes", None)
             results = self._execute_query(query, k, filter, n_probes)
 
             docs = []
@@ -570,7 +575,7 @@ try:
             Returns:
                 List of (document, score) tuples
             """
-            n_probes = kwargs.get("n_probes", 1)
+            n_probes = kwargs.get("n_probes", None)
             results = self._execute_query(query, k, filter, n_probes)
 
             docs_with_scores = []
@@ -616,7 +621,7 @@ try:
             Returns:
                 List of similar documents
             """
-            n_probes = kwargs.get("n_probes", 1)
+            n_probes = kwargs.get("n_probes", None)
             results = self._execute_query(embedding, k, filter, n_probes)
 
             docs = []
@@ -814,7 +819,7 @@ try:
 
             # Handle index config
             index_config_params = kwargs.pop("index_config_params", {})
-            for key in {"n_lists", "pq_dim", "pq_bits"}:
+            for key in {"pq_dim", "pq_bits"}:
                 if key in kwargs:
                     index_config_params[key] = kwargs.pop(key)
 
@@ -836,13 +841,8 @@ try:
             if texts:
                 store.add_texts(texts, metadatas, ids=ids)
 
-            # Auto-train if enough data
-            n_lists = index_config_params.get("n_lists", 1024)
-            try:
-                if not store.index.is_trained() and len(texts) >= 2 * n_lists:
-                    store.index.train()
-            except Exception as e:
-                warnings.warn(f"Could not train index: {e}")
+            if not store.index.is_trained():
+                warnings.warn("Not enough data to train index.")
 
             return store
 

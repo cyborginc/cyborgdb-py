@@ -7,6 +7,7 @@ import os
 import cyborgdb as cyborgdb
 from compress_utils import decompress
 from dotenv import load_dotenv
+import time
 
 # Load environment variables from .env.local
 load_dotenv(".env.local")
@@ -138,6 +139,7 @@ class TestUnitFlow(unittest.TestCase):
         cls.trained_recall = data.get("trained_recall")
 
         # Set counts and dimension.
+        cls.num_pretraining_vectors = 5000 # number of vectors to not trigger auto-training
         cls.num_untrained_vectors = cls.untrained_vectors.shape[0]
         cls.total_num_vectors = (
             cls.untrained_vectors.shape[0] + cls.training_vectors.shape[0]
@@ -154,16 +156,14 @@ class TestUnitFlow(unittest.TestCase):
         )
 
         # CYBORDB SETUP: Create the index once (shared state).
-        cls.index_config = cyborgdb.IndexIVFFlat(
-            dimension=cls.dimension, n_lists=512, metric="euclidean"
-        )
+        cls.index_config = cyborgdb.IndexIVFFlat(dimension=cls.dimension)
         cls.client = cyborgdb.Client(
             base_url="http://localhost:8000", api_key=os.getenv("CYBORGDB_API_KEY", "")
         )
-        cls.index_name = "memory_example_index19"
+        cls.index_name = "memory_example_index_" + str(int(time.time()))
         cls.index_key = cyborgdb.Client.generate_key()  # bytes([1] * 32)
         cls.index = cls.client.create_index(
-            cls.index_name, cls.index_key, cls.index_config
+            cls.index_name, cls.index_key, cls.index_config, metric="euclidean"
         )
 
     @classmethod
@@ -185,7 +185,7 @@ class TestUnitFlow(unittest.TestCase):
     def test_01_untrained_upsert(self):
         # UNTRAINED UPSERT: upsert untrained items.
         items = []
-        for i in range(self.num_untrained_vectors):
+        for i in range(self.num_pretraining_vectors):
             items.append(
                 {
                     "id": str(i),
@@ -195,9 +195,15 @@ class TestUnitFlow(unittest.TestCase):
                 }
             )
         self.index.upsert(items)
-        self.assertTrue(True)
+        time.sleep(5)     
+        self.assertFalse(self.index.is_trained(), "Index should not be trained yet")
 
-    def test_02_untrained_query_no_metadata(self):
+    def test_02_untrained_list_ids(self):
+        # UNTRAINED LIST IDS
+        results = self.index.list_ids()
+        self.assertCountEqual(results, [str(id) for id in range(self.num_pretraining_vectors)])
+
+    def test_03_untrained_query_no_metadata(self):
         # UNTRAINED QUERY (NO METADATA)
         results = self.index.query(query_vectors=self.queries, top_k=100, n_probes=1)
         recall = check_query_results(
@@ -206,7 +212,7 @@ class TestUnitFlow(unittest.TestCase):
 
         self.assertAlmostEqual(recall.mean(), self.untrained_recall, delta=0.02)
 
-    def test_03_untrained_query_metadata(self):
+    def test_04_untrained_query_metadata(self):
         # UNTRAINED QUERY (METADATA)
         results = []
         for metadata_query in self.metadata_queries:
@@ -241,7 +247,7 @@ class TestUnitFlow(unittest.TestCase):
         # UNTRAINED GET
         num_get = 1000
         get_indices = np.random.choice(
-            self.num_untrained_vectors, num_get, replace=False
+            self.num_pretraining_vectors, num_get, replace=False
         )
         get_indices_str = get_indices.astype(str).tolist()
         get_results = self.index.get(
@@ -265,16 +271,10 @@ class TestUnitFlow(unittest.TestCase):
                 metadata_str, expected_metadata_str, f"Metadata mismatch for index {i}"
             )
 
-    def test_05_train_index(self):
-        # TRAIN INDEX
-        self.index.train()
-        self.assertTrue(True)
-        self.assertTrue(self.index.is_trained())
-
-    def test_06_trained_upsert(self):
+    def test_05_upsert_to_trigger_train(self):
         # TRAINED UPSERT: upsert training vectors.
         items = []
-        for i in range(self.num_untrained_vectors, self.total_num_vectors):
+        for i in range(self.num_pretraining_vectors, self.num_untrained_vectors):
             items.append(
                 {
                     "id": str(i),
@@ -283,12 +283,53 @@ class TestUnitFlow(unittest.TestCase):
                     # 'contents': bytes(self.vectors[i])
                 }
             )
+        print(f"Upserting {len(items)} training vectors...")
         self.index.upsert(items)
         self.assertTrue(True)
 
-    def test_07_trained_query_no_metadata(self):
+    def test_06_check_upsert_triggered_train(self):
+        num_retries = 60
+        trained = False
+        for attempt in range(num_retries):
+            time.sleep(2)
+            if not self.index.is_training():
+                trained = self.index.is_trained()
+                if trained:
+                    print("Index is now trained.")
+                    break
+            else:
+                print(f"Index not trained yet, retrying... ({attempt + 1}/{num_retries})")
+
+        self.assertTrue(trained, "Index did not become trained after upsert")
+
+    def test_07_trained_upsert(self):
+        # TRAINED UPSERT: upsert remaining untrained items.
+        items = []
+        for i in range(
+            self.num_untrained_vectors,
+            self.total_num_vectors,
+        ):
+            items.append(
+                {
+                    "id": str(i),
+                    "vector": self.vectors[i],
+                    "metadata": self.metadata[i],
+                    # 'contents': bytes(self.vectors[i])
+                }
+            )
+        print(f"Upserting {len(items)} untrained vectors...")
+        self.index.upsert(items)
+        self.assertTrue(True)
+
+    def test_08_check_index_successfully_upserted(self):
+        # CHECK INDEX SUCCESSFULLY UPSERTED ALL ITEMS
+        results = self.index.list_ids()
+        expected_ids = [str(i) for i in range(self.total_num_vectors)]
+        self.assertCountEqual(results, expected_ids)
+
+    def test_08_trained_query_no_metadata(self):
         # TRAINED QUERY (NO METADATA)
-        results = self.index.query(query_vectors=self.queries, top_k=100, n_probes=24)
+        results = self.index.query(query_vectors=self.queries, top_k=100)
 
         recall = check_query_results(results, self.trained_neighbors, self.num_queries)
         print(
@@ -297,7 +338,7 @@ class TestUnitFlow(unittest.TestCase):
 
         self.assertAlmostEqual(recall.mean(), self.trained_recall, delta=0.02)
 
-    def test_08_trained_query_metadata(self):
+    def test_09_trained_query_metadata(self):
         # TRAINED QUERY (METADATA)
         results = []
         for metadata_query in self.metadata_queries:
@@ -305,7 +346,6 @@ class TestUnitFlow(unittest.TestCase):
                 self.index.query(
                     query_vectors=self.queries,
                     top_k=100,
-                    n_probes=24,
                     filters=metadata_query,
                 )
             )
@@ -384,7 +424,7 @@ class TestUnitFlow(unittest.TestCase):
                 f"Some recalls are below their thresholds:\n{fail_message}"
             )
 
-    def test_09_trained_get(self):
+    def test_10_trained_get(self):
         # TRAINED GET (using untrained indices as an example)
         num_get = 1000
         get_indices = np.random.choice(
@@ -412,13 +452,13 @@ class TestUnitFlow(unittest.TestCase):
                 metadata_str, expected_metadata_str, f"Metadata mismatch for index {i}"
             )
 
-    def test_10_delete(self):
+    def test_11_delete(self):
         # DELETE ITEMS (using untrained indices as an example)
         ids_to_delete = [str(i) for i in range(self.num_untrained_vectors)]
         self.index.delete(ids_to_delete)
         self.assertTrue(True)
 
-    def test_11_get_deleted(self):
+    def test_12_get_deleted(self):
         # GET DELETED ITEMS
         num_get = 1000
         get_indices = np.random.choice(
@@ -432,7 +472,7 @@ class TestUnitFlow(unittest.TestCase):
         for i, get_result in enumerate(get_results):
             self.assertIsNone(get_result, f"Item {get_indices_str[i]} was not deleted")
 
-    def test_12_query_deleted(self):
+    def test_13_query_deleted(self):
         # QUERY DELETED ITEMS
         results = self.index.query(query_vectors=self.queries, top_k=100, n_probes=24)
 
@@ -442,7 +482,7 @@ class TestUnitFlow(unittest.TestCase):
 
         self.assertTrue(True)
 
-    def test_13_list_indexes(self):
+    def test_14_list_indexes(self):
         # LIST INDEXES
         indexes = self.client.list_indexes()
         self.assertIsInstance(indexes, list)
@@ -455,7 +495,7 @@ class TestUnitFlow(unittest.TestCase):
             f"Index {self.index_name} not found in the list of indexes",
         )
 
-    def test_14_index_properies(self):
+    def test_15_index_properies(self):
         # Check if the index has the expected properties
         self.assertEqual(
             self.index.index_name, self.index_name, "Index name does not match"
@@ -465,7 +505,7 @@ class TestUnitFlow(unittest.TestCase):
         )
         self.assertEqual(self.index.index_type, "ivfflat", "Index type is not IVFFlat")
 
-    def test_15_load_index(self):
+    def test_16_load_index(self):
         # Test loading an existing index.
         loaded_index = self.client.load_index(self.index_name, self.index_key)
         self.assertIsInstance(loaded_index, cyborgdb.EncryptedIndex)
