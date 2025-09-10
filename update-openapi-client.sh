@@ -5,24 +5,24 @@
 
 set -e  # Exit on any error
 
-echo "🔄 Updating OpenAPI Client..."
+echo "🚀✨🦾🤖🔄🛠️📝🧬🦾✨🚀 Updating OpenAPI Client... 🚀✨🦾🤖🔄🛠️📝🧬🦾✨🚀"
 
 # Check if openapi.json exists
 if [ ! -f "openapi.json" ]; then
-    echo "❌ Error: openapi.json not found in current directory"
-    echo "Please make sure you're running this from the project root"
+    echo "❌😱📄🔍🚫🦾🤖❗❗ Error: openapi.json not found in current directory ❌😱📄🔍🚫🦾🤖❗❗"
+    echo "📂🏠🧐🔎🦾🤖⚠️ Please make sure you're running this from the project root 📂🏠🧐🔎🦾🤖⚠️"
     exit 1
 fi
 
 # Check if openapi-generator is installed
 if ! command -v openapi-generator &> /dev/null; then
-    echo "❌ Error: openapi-generator not found"
-    echo "Please install it with: brew install openapi-generator"
+    echo "❌😱🛠️🔍🚫🦾🤖❗❗ Error: openapi-generator not found ❌😱🛠️🔍🚫🦾🤖❗❗"
+    echo "🍺💻🔧🦾🤖⚡ Please install it with: brew install openapi-generator 🍺💻🔧🦾🤖⚡"
     exit 1
 fi
 
 # Generate the client (will overwrite existing files)
-echo "🔧 Generating client..."
+echo "⚡🦾🤖🔄🛠️📝🧬✨🚀 Generating client... ⚡🦾🤖🔄🛠️📝🧬✨🚀"
 openapi-generator generate \
     -i openapi.json \
     -g python \
@@ -30,4 +30,4 @@ openapi-generator generate \
     --package-name cyborgdb.openapi_client \
     --additional-properties=generateSourceCodeOnly=true
 
-echo "✅ OpenAPI client updated successfully!"
+echo "✅🎉🚀🦾🤖✨🛠️📝🧬🌟 OpenAPI client updated successfully! ✅🎉🚀🦾🤖✨🛠️📝🧬🌟"

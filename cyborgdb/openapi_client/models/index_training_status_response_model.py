@@ -17,18 +17,20 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List
-from cyborgdb.openapi_client.models.get_result_item_model import GetResultItemModel
 from typing import Optional, Set
 from typing_extensions import Self
 
-class GetResponseModel(BaseModel):
+class IndexTrainingStatusResponseModel(BaseModel):
     """
-    Response model for retrieving multiple encrypted index items.  Attributes:     results (List[GetResultItem]): A list of retrieved items with requested fields.
+    Response model for retrieving the training status of indexes.  Attributes:     training_indexes (List[str]): List of index names currently being trained.     retrain_threshold (int): The multiplier used for the retraining threshold.
     """ # noqa: E501
-    results: List[GetResultItemModel]
-    __properties: ClassVar[List[str]] = ["results"]
+    training_indexes: List[StrictStr]
+    retrain_threshold: StrictInt
+    worker_pid: StrictInt
+    global_training: Dict[str, Any]
+    __properties: ClassVar[List[str]] = ["training_indexes", "retrain_threshold", "worker_pid", "global_training"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -48,7 +50,7 @@ class GetResponseModel(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of GetResponseModel from a JSON string"""
+        """Create an instance of IndexTrainingStatusResponseModel from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -69,18 +71,11 @@ class GetResponseModel(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of each item in results (list)
-        _items = []
-        if self.results:
-            for _item_results in self.results:
-                if _item_results:
-                    _items.append(_item_results.to_dict())
-            _dict['results'] = _items
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of GetResponseModel from a dict"""
+        """Create an instance of IndexTrainingStatusResponseModel from a dict"""
         if obj is None:
             return None
 
@@ -88,7 +83,10 @@ class GetResponseModel(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "results": [GetResultItemModel.from_dict(_item) for _item in obj["results"]] if obj.get("results") is not None else None
+            "training_indexes": obj.get("training_indexes"),
+            "retrain_threshold": obj.get("retrain_threshold"),
+            "worker_pid": obj.get("worker_pid"),
+            "global_training": obj.get("global_training")
         })
         return _obj
 

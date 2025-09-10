@@ -25,3 +25,9 @@
 # Ignore all files in the client folder
 cyborgdb/client/**
 cyborgdb/__init__.py
+
+# Ignore all test files
+**/test/**
+
+# Ignore documentation files
+**/docs/**
