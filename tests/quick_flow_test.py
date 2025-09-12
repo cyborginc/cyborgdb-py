@@ -6,6 +6,7 @@ import uuid
 import numpy as np
 from dotenv import load_dotenv
 import time
+import hashlib
 
 import cyborgdb as cyborgdb
 
@@ -115,6 +116,17 @@ class TestUnitFlow(unittest.TestCase):
         json_path = os.path.join(test_dir, "constants", "unit_test_flow_data.json")
         with open(json_path, "rb") as f:
             json_data = f.read()
+
+            # Compute the checksum of the file
+            checksum = hashlib.sha256(json_data).hexdigest()
+
+            expected_checksum = "a2989692cb12e8667b22bee4177acb295b72a23be82458ce7dd06e4a901cb04d"
+
+            if checksum != expected_checksum:
+                raise ValueError(
+                    f"Checksum mismatch for {json_path}: expected {expected_checksum}, got {checksum}"
+                )
+
             data = json.loads(json_data)
             
         # Load vectors and neighbors as numpy arrays
@@ -324,7 +336,7 @@ class TestUnitFlow(unittest.TestCase):
             f"Trained Query (No Metadata). Expected recall: {self.trained_recall}, got {recall}"
         )
 
-        self.assertAlmostEqual(recall.mean(), self.trained_recall, delta=0.8)
+        self.assertAlmostEqual(recall.mean(), self.trained_recall, delta=0.08)
 
     def test_10_trained_query_no_metadata_auto_n_probes(self):
         # TRAINED QUERY (NO METADATA) with Auto n_probes
