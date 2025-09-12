@@ -13,14 +13,15 @@ import cyborgdb as cyborgdb
 # Load environment variables from .env.local
 load_dotenv(".env.local")
 
+
 def generate_unique_name(prefix="test_"):
     """
     Generates a unique index name with a given prefix by appending a UUID v4.
     """
     return f"{prefix}{uuid.uuid4()}"
 
-def check_query_results(results, neighbors, num_queries):
 
+def check_query_results(results, neighbors, num_queries):
     # Parse results to extract IDs from the returned dictionaries
     result_ids = [
         [int(res["id"]) for res in query_results] for query_results in results
@@ -40,7 +41,10 @@ def check_query_results(results, neighbors, num_queries):
 
     return recall.mean()
 
-def check_metadata_results(results, metadata_neighors, metadata_candidates, num_queries):
+
+def check_metadata_results(
+    results, metadata_neighors, metadata_candidates, num_queries
+):
     def safe_int(val):
         try:
             return int(val)
@@ -69,13 +73,15 @@ def check_metadata_results(results, metadata_neighors, metadata_candidates, num_
         for i in range(num_queries):
             # Get the groundtruth neighbors for this query
             groundtruth_indices = metadata_neighbors_indices[i]
-            
-            groundtruth_ids = np.array([
-                candidates[int(idx)] 
-                for idx in groundtruth_indices 
-                if idx != -1 and 0 <= idx < len(candidates)
-            ])
-            
+
+            groundtruth_ids = np.array(
+                [
+                    candidates[int(idx)]
+                    for idx in groundtruth_indices
+                    if idx != -1 and 0 <= idx < len(candidates)
+                ]
+            )
+
             # Get the returned neighbors for this query
             returned = np.array(result[i])
 
@@ -107,8 +113,8 @@ def check_metadata_results(results, metadata_neighors, metadata_candidates, num_
 
     return recalls
 
-class TestUnitFlow(unittest.TestCase):
 
+class TestUnitFlow(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Construct the path to the JSON file
@@ -120,7 +126,9 @@ class TestUnitFlow(unittest.TestCase):
             # Compute the checksum of the file
             checksum = hashlib.sha256(json_data).hexdigest()
 
-            expected_checksum = "a2989692cb12e8667b22bee4177acb295b72a23be82458ce7dd06e4a901cb04d"
+            expected_checksum = (
+                "a2989692cb12e8667b22bee4177acb295b72a23be82458ce7dd06e4a901cb04d"
+            )
 
             if checksum != expected_checksum:
                 raise ValueError(
@@ -128,7 +136,7 @@ class TestUnitFlow(unittest.TestCase):
                 )
 
             data = json.loads(json_data)
-            
+
         # Load vectors and neighbors as numpy arrays
         cls.vectors = np.array(data["vectors"], dtype=np.float32)
         cls.queries = np.array(data["queries"], dtype=np.float32)
@@ -153,7 +161,7 @@ class TestUnitFlow(unittest.TestCase):
         cls.num_queries = cls.queries.shape[0]
         cls.dimension = cls.vectors.shape[1]
         cls.n_lists = 100
-        
+
         # CYBORDB SETUP: Create the index once (shared state).
         cls.index_config = cyborgdb.IndexIVFFlat(dimension=cls.dimension)
         cls.client = cyborgdb.Client(
@@ -185,14 +193,16 @@ class TestUnitFlow(unittest.TestCase):
         # UNTRAINED UPSERT: upsert untrained items.
         items = []
         for i in range(self.num_untrained_vectors):
-            items.append({
-                "id": str(i),
-                "vector": self.vectors[i],
-                "metadata": self.metadata[i],
-                # 'contents': bytes(self.vectors[i]) # TODO!!!
-            })
+            items.append(
+                {
+                    "id": str(i),
+                    "vector": self.vectors[i],
+                    "metadata": self.metadata[i],
+                    # 'contents': bytes(self.vectors[i]) # TODO!!!
+                }
+            )
         self.index.upsert(items)
-        
+
         # Wait for 1 second to ensure upsert is processed
         time.sleep(1)
 
@@ -204,9 +214,13 @@ class TestUnitFlow(unittest.TestCase):
     def test_02_untrained_query_no_metadata(self):
         # UNTRAINED QUERY (NO METADATA)
         results = self.index.query(query_vectors=self.queries, top_k=100, n_probes=1)
-        
-        recall = check_query_results(results, self.untrained_neighbors, self.num_queries)
-        print(f"Untrained Query (No Metadata). Expected recall: {self.untrained_recall}, got {recall}")
+
+        recall = check_query_results(
+            results, self.untrained_neighbors, self.num_queries
+        )
+        print(
+            f"Untrained Query (No Metadata). Expected recall: {self.untrained_recall}, got {recall}"
+        )
 
         self.assertAlmostEqual(recall.mean(), self.untrained_recall, delta=0.02)
 
@@ -250,10 +264,14 @@ class TestUnitFlow(unittest.TestCase):
     def test_04_untrained_get(self):
         # UNTRAINED GET
         num_get = 1000
-        get_indices = np.random.choice(self.num_untrained_vectors, num_get, replace=False)
+        get_indices = np.random.choice(
+            self.num_untrained_vectors, num_get, replace=False
+        )
         get_indices_str = get_indices.astype(str).tolist()
-        get_results = self.index.get(ids=get_indices_str, include=["vector", "contents", "metadata"])
-        
+        get_results = self.index.get(
+            ids=get_indices_str, include=["vector", "contents", "metadata"]
+        )
+
         for i, get_result in enumerate(get_results):
             self.assertEqual(
                 get_result["id"],
@@ -265,7 +283,9 @@ class TestUnitFlow(unittest.TestCase):
                 f"Vector mismatch for index {i}",
             )
             metadata_str = json.dumps(get_result["metadata"], sort_keys=True)
-            expected_metadata_str = json.dumps(self.metadata[get_indices[i]], sort_keys=True)
+            expected_metadata_str = json.dumps(
+                self.metadata[get_indices[i]], sort_keys=True
+            )
             self.assertEqual(
                 metadata_str, expected_metadata_str, f"Metadata mismatch for index {i}"
             )
@@ -276,7 +296,9 @@ class TestUnitFlow(unittest.TestCase):
     def test_05_untrained_list_ids(self):
         # UNTRAINED LIST IDS
         results = self.index.list_ids()
-        self.assertCountEqual(results, [str(id) for id in range(self.num_untrained_vectors)])
+        self.assertCountEqual(
+            results, [str(id) for id in range(self.num_untrained_vectors)]
+        )
 
         # Check if index is still untrained
         self.assertFalse(self.index.is_trained(), "Index should still be untrained")
@@ -285,17 +307,19 @@ class TestUnitFlow(unittest.TestCase):
         # TRAINED UPSERT: upsert training vectors.
         items = []
         for i in range(self.num_untrained_vectors, self.total_num_vectors):
-            items.append({
-                "id": str(i),
-                "vector": self.vectors[i],
-                "metadata": self.metadata[i],
-                # "contents": bytes(self.vectors[i]) # TODO!!!
-            })
+            items.append(
+                {
+                    "id": str(i),
+                    "vector": self.vectors[i],
+                    "metadata": self.metadata[i],
+                    # "contents": bytes(self.vectors[i]) # TODO!!!
+                }
+            )
         self.index.upsert(items)
 
         # Wait for 1 second to ensure upsert is processed
         time.sleep(1)
-        
+
         # Check if the index has all IDs
         results = self.index.list_ids()
         expected_ids = [str(i) for i in range(self.total_num_vectors)]
@@ -313,17 +337,23 @@ class TestUnitFlow(unittest.TestCase):
                     print("Index is now trained.")
                     break
             else:
-                print(f"Index not trained yet, retrying... ({attempt + 1}/{num_retries})")
+                print(
+                    f"Index not trained yet, retrying... ({attempt + 1}/{num_retries})"
+                )
 
         self.assertTrue(trained, "Index did not become trained in time")
 
     def test_08_trained_query_should_get_perfect_recall(self):
         # TRAINED QUERY WHERE N_PROBES == N_LISTS
-        results = self.index.query(query_vectors=self.queries, top_k=100, n_probes=self.n_lists)
+        results = self.index.query(
+            query_vectors=self.queries, top_k=100, n_probes=self.n_lists
+        )
 
         recall = check_query_results(results, self.trained_neighbors, self.num_queries)
         expected_recall = 1.0
-        print(f"Trained Query (N_PROBES == N_LISTS). Expected recall: {expected_recall}, got {recall}")
+        print(
+            f"Trained Query (N_PROBES == N_LISTS). Expected recall: {expected_recall}, got {recall}"
+        )
 
         self.assertEqual(recall, expected_recall)
 
@@ -343,11 +373,12 @@ class TestUnitFlow(unittest.TestCase):
         results = self.index.query(self.queries, top_k=100)
 
         recall = check_query_results(results, self.trained_neighbors, self.num_queries)
-        print(f"Trained Query (No Metadata, Auto n_probes). Expected recall: {self.trained_recall}, got {recall}")
+        print(
+            f"Trained Query (No Metadata, Auto n_probes). Expected recall: {self.trained_recall}, got {recall}"
+        )
 
         # recall should be ~90% give or take 2%
-        self.assertGreaterEqual(recall.mean(),
-                                0.9 - 0.02)
+        self.assertGreaterEqual(recall.mean(), 0.9 - 0.02)
 
     def test_11_trained_query_metadata(self):
         # TRAINED QUERY (METADATA)
@@ -374,12 +405,12 @@ class TestUnitFlow(unittest.TestCase):
 
         base_thresholds = [
             94.04,  # Query #1
-            100.00, # Query #2
+            100.00,  # Query #2
             91.05,  # Query #3
             88.24,  # Query #4
-            100.00, # Query #5
+            100.00,  # Query #5
             78.88,  # Query #6
-            100.00, # Query #7
+            100.00,  # Query #7
             92.35,  # Query #8
             91.66,  # Query #9
             88.38,  # Query #10
@@ -387,7 +418,7 @@ class TestUnitFlow(unittest.TestCase):
             94.04,  # Query #12
             90.05,  # Query #13
             74.09,  # Query #14
-            9.00,   # Query #15
+            9.00,  # Query #15
         ]
 
         # For the additional 2 recalls, we'll use a default threshold of 70%
@@ -440,21 +471,28 @@ class TestUnitFlow(unittest.TestCase):
         # TRAINED QUERY (METADATA)
         results = []
         for metadata_query in self.metadata_queries:
-            results.append(self.index.query(self.queries, top_k=100, filters=metadata_query))
-        self.metadata_queries[6] = {'number': 0}
+            results.append(
+                self.index.query(self.queries, top_k=100, filters=metadata_query)
+            )
+        self.metadata_queries[6] = {"number": 0}
 
-        recalls = check_metadata_results(results, self.trained_metadata_neighbors, self.trained_metadata_matches, self.num_queries)
+        recalls = check_metadata_results(
+            results,
+            self.trained_metadata_neighbors,
+            self.trained_metadata_matches,
+            self.num_queries,
+        )
 
         print(f"Number of recall values: {len(recalls)}")
 
         base_thresholds = [
             94.04,  # Query #1
-            100.00, # Query #2
+            100.00,  # Query #2
             91.05,  # Query #3
             88.24,  # Query #4
-            100.00, # Query #5
+            100.00,  # Query #5
             78.88,  # Query #6
-            100.00, # Query #7
+            100.00,  # Query #7
             92.35,  # Query #8
             91.66,  # Query #9
             88.38,  # Query #10
@@ -462,7 +500,7 @@ class TestUnitFlow(unittest.TestCase):
             94.04,  # Query #12
             90.05,  # Query #13
             74.09,  # Query #14
-            9.00,   # Query #15
+            9.00,  # Query #15
         ]
 
         # For the additional 2 recalls, we'll use a default threshold of 70%
@@ -472,8 +510,9 @@ class TestUnitFlow(unittest.TestCase):
         # Apply a 10% reduction to the base thresholds
         expected_thresholds = [threshold * 0.90 for threshold in base_thresholds]
 
-        assert len(recalls) == len(expected_thresholds), \
+        assert len(recalls) == len(expected_thresholds), (
             f"Mismatch in number of recalls ({len(recalls)}) and thresholds ({len(expected_thresholds)})"
+        )
 
         # Check each recall against its threshold
         failing_recalls = []
@@ -484,26 +523,32 @@ class TestUnitFlow(unittest.TestCase):
 
             if idx < 15:
                 print()
-                print(f"Metadata Query #{idx+1}")
+                print(f"Metadata Query #{idx + 1}")
                 print(f"Metadata filters: {self.metadata_queries[idx]}")
-                print(f"Number of candidates: {len(self.trained_metadata_neighbors[idx])} / {self.total_num_vectors}")
+                print(
+                    f"Number of candidates: {len(self.trained_metadata_neighbors[idx])} / {self.total_num_vectors}"
+                )
                 print(f"Mean recall: {recall_percentage:.2f}%")
                 print(f"Expected threshold: {threshold:.2f}%")
             else:
                 print()
-                print(f"Additional Query #{idx+1}")
+                print(f"Additional Query #{idx + 1}")
                 print(f"Mean recall: {recall_percentage:.2f}%")
                 print(f"Expected threshold: {threshold:.2f}%")
 
             if recall_percentage < threshold:
-                failing_recalls.append((idx+1, recall_percentage, threshold))
+                failing_recalls.append((idx + 1, recall_percentage, threshold))
 
         if failing_recalls:
-            fail_message = "\n".join([
-                f"Query #{idx}: recall {actual:.2f}% < threshold {expected:.2f}%"
-                for idx, actual, expected in failing_recalls
-            ])
-            assert not failing_recalls, f"Some recalls are below their thresholds:\n{fail_message}"
+            fail_message = "\n".join(
+                [
+                    f"Query #{idx}: recall {actual:.2f}% < threshold {expected:.2f}%"
+                    for idx, actual, expected in failing_recalls
+                ]
+            )
+            assert not failing_recalls, (
+                f"Some recalls are below their thresholds:\n{fail_message}"
+            )
 
     def test_13_trained_get(self):
         # TRAINED GET (using untrained indices as an example)
