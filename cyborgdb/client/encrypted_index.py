@@ -404,8 +404,8 @@ class EncryptedIndex:
         top_k: Optional[int] = None,
         n_probes: Optional[int] = None,
         filters: Optional[Dict[str, Any]] = None,
-        include: List[str] = ["distance", "metadata"],
-        greedy: bool = False,
+        include: Optional[List[str]] = None,
+        greedy: Optional[bool] = None,
     ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
         """
         Retrieve the nearest neighbors for given query vectors.
@@ -506,9 +506,9 @@ class EncryptedIndex:
                             query_items = []
                             for item in query_result:
                                 result_item = {"id": item["id"]}
-                                if "distance" in include and "distance" in item:
+                                if "distance" in item:
                                     result_item["distance"] = item["distance"]
-                                if "metadata" in include and "metadata" in item:
+                                if "metadata" in item:
                                     result_item["metadata"] = item["metadata"]
                                 query_items.append(result_item)
                             results.append(query_items)
@@ -517,9 +517,9 @@ class EncryptedIndex:
                         query_items = []
                         for item in response_json["results"]:
                             result_item = {"id": item["id"]}
-                            if "distance" in include and "distance" in item:
+                            if "distance" in item:
                                 result_item["distance"] = item["distance"]
-                            if "metadata" in include and "metadata" in item:
+                            if "metadata" in item:
                                 result_item["metadata"] = item["metadata"]
                             query_items.append(result_item)
                         results.append(query_items)

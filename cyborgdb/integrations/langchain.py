@@ -476,7 +476,7 @@ try:
         def _execute_query(
             self,
             query: Union[str, List[float]],
-            k: int = 4,
+            k: Optional[int] = None,
             filter: Optional[Dict] = None,
             n_probes: Optional[int] = None,
         ) -> List[Dict[str, Any]]:
@@ -503,6 +503,7 @@ try:
                     n_probes=n_probes,
                     filters=filter,
                     include=["distance", "metadata"],
+                    greedy=False,
                 )
             else:
                 # Vector query
@@ -512,6 +513,7 @@ try:
                     n_probes=n_probes,
                     filters=filter,
                     include=["distance", "metadata"],
+                    greedy=False,
                 )
 
             # Handle batch query results
@@ -525,7 +527,7 @@ try:
             return results if results else []
 
         def similarity_search(
-            self, query: str, k: int = 4, filter: Optional[Dict] = None, **kwargs
+            self, query: str, k: Optional[int] = None, filter: Optional[Dict] = None, **kwargs
         ) -> List[Document]:
             """
             Search for documents similar to the query.
@@ -561,7 +563,7 @@ try:
             return docs
 
         def similarity_search_with_score(
-            self, query: str, k: int = 4, filter: Optional[Dict] = None, **kwargs
+            self, query: str, k: Optional[int] = None, filter: Optional[Dict] = None, **kwargs
         ) -> List[Tuple[Document, float]]:
             """
             Search for documents with similarity scores.
@@ -605,7 +607,7 @@ try:
         def similarity_search_by_vector(
             self,
             embedding: List[float],
-            k: int = 4,
+            k: Optional[int] = None,
             filter: Optional[Dict] = None,
             **kwargs,
         ) -> List[Document]:
@@ -736,7 +738,7 @@ try:
             )
 
         async def asimilarity_search(
-            self, query: str, k: int = 4, filter: Optional[Dict] = None, **kwargs
+            self, query: str, k: Optional[int] = None, filter: Optional[Dict] = None, **kwargs
         ) -> List[Document]:
             """Async version of similarity_search."""
             import asyncio
@@ -746,7 +748,7 @@ try:
             )
 
         async def asimilarity_search_with_score(
-            self, query: str, k: int = 4, filter: Optional[Dict] = None, **kwargs
+            self, query: str, k: Optional[int] = None, filter: Optional[Dict] = None, **kwargs
         ) -> List[Tuple[Document, float]]:
             """Async version of similarity_search_with_score."""
             import asyncio
@@ -758,7 +760,7 @@ try:
         async def asimilarity_search_by_vector(
             self,
             embedding: List[float],
-            k: int = 4,
+            k: Optional[int] = None,
             filter: Optional[Dict] = None,
             **kwargs,
         ) -> List[Document]:
