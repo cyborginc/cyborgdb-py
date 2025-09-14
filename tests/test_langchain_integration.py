@@ -415,7 +415,7 @@ class TestLangChainIntegration(unittest.TestCase):
             index_key=self.index_key,
             api_key=self.api_key,
             base_url=self.base_url,
-            index_type="ivfflat"
+            index_type="ivfflat",
         )
 
         # Verify the store was created and populated
