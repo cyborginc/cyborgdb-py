@@ -145,9 +145,11 @@ class Client:
         self,
         index_name: str,
         index_key: bytes,
-        index_config: Optional[Union[IndexIVFModel, IndexIVFPQModel, IndexIVFFlatModel]] = None,
+        index_config: Optional[
+            Union[IndexIVFModel, IndexIVFPQModel, IndexIVFFlatModel]
+        ] = None,
         embedding_model: Optional[str] = None,
-        metric: Optional[str] = None
+        metric: Optional[str] = None,
     ) -> EncryptedIndex:
         """
         Create and return a new encrypted index based on the provided configuration.

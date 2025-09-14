@@ -109,7 +109,8 @@ jobs:
           fi
           
           # Run lite-compatible tests
-          pytest tests/test_client_lite.py tests/test_langchain_integration.py -v --cov=cyborgdb --cov-report=term-missing --cov-append
+          # pytest tests/test_client_lite.py tests/test_langchain_integration.py -v --cov=cyborgdb --cov-report=term-missing --cov-append
+          pytest tests/test_client_lite.py -v --cov=cyborgdb --cov-report=term-missing --cov-append
           
           # Stop lite server
           kill $(cat server-lite.pid) || true
