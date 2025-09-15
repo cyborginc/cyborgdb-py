@@ -28,6 +28,13 @@ jobs:
           echo "Checking code formatting..."
           ruff format --check .
 
+      - name: Check API Contract
+        run: |
+          echo "Running API Contract Test..."
+          pip install -e .
+          pip install pytest numpy
+          python -m pytest tests/test_api_contract.py -v
+
   test:
     runs-on: ubuntu-latest
     needs: lint
