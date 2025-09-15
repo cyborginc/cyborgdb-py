@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.13"]
 
     steps:
       - uses: actions/checkout@v4
@@ -33,10 +33,10 @@ jobs:
         id: contract_test
         run: |
           # Save the test output
-          python -m pytest tests/test_api_contract.py::test_api_contract -v > contract_output.txt 2>&1 || true
+          python -m pytest tests/test_api_contract.py -v > contract_output.txt 2>&1 || true
 
           # Check if test passed
-          if python -m pytest tests/test_api_contract.py::test_api_contract -v; then
+          if python -m pytest tests/test_api_contract.py -v; then
             echo "contract_status=passed" >> $GITHUB_OUTPUT
           else
             echo "contract_status=failed" >> $GITHUB_OUTPUT
