@@ -325,13 +325,14 @@ try:
                 texts: Texts to add
                 metadatas: Optional metadata for each text
                 ids: Optional IDs for each text (generated if not provided)
-                **kwargs: Additional arguments (unused)
+                **kwargs: Additional arguments:
+                    - vectors: Optional pre-computed embeddings (List or array of shape [num_texts, embedding_dim])
 
             Returns:
                 List of IDs for the added texts
 
             Raises:
-                ValueError: If lengths of texts, metadatas, or ids don't match
+                ValueError: If lengths of texts, metadatas, ids, or vectors don't match
             """
             texts_list = list(texts)
             num_texts = len(texts_list)
@@ -351,8 +352,17 @@ try:
             if metadatas is not None and len(metadatas) != num_texts:
                 raise ValueError("Length of metadatas must match length of texts")
 
-            # Generate embeddings
-            embeddings = self.get_embeddings(texts_list)
+            # Generate or use provided embeddings
+            if kwargs.get("vectors", None) is not None:
+                embeddings = kwargs["vectors"]
+                # Validate vectors shape/length
+                if hasattr(embeddings, "__len__"):
+                    if len(embeddings) != num_texts:
+                        raise ValueError(f"Length of vectors ({len(embeddings)}) must match length of texts ({num_texts})")
+                else:
+                    raise ValueError("vectors must be a list or array-like object")
+            else:
+                embeddings = self.get_embeddings(texts_list)
 
             # Build items for upsert
             items = []
