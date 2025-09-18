@@ -150,10 +150,10 @@ try:
 
         def _initialize_index(
             self,
-            index_type: str,
-            index_config_params: Dict[str, Any],
-            dimension: Optional[int],
-            metric: str,
+            index_type: Optional[str] = None,
+            index_config_params: Optional[Dict[str, Any]] = None,
+            dimension: Optional[int] = None,
+            metric: Optional[str] = None,
         ) -> None:
             """Initialize or load the CyborgDB index."""
             # Check if index already exists
@@ -184,10 +184,10 @@ try:
 
         def _create_new_index(
             self,
-            index_type: str,
-            index_config_params: Dict[str, Any],
-            dimension: Optional[int],
-            metric: Optional[str],
+            index_type: Optional[str] = None,
+            index_config_params: Optional[Dict[str, Any]] = None,
+            dimension: Optional[int] = None,
+            metric: Optional[str] = None,
         ) -> None:
             """Create a new index."""
             # Determine embedding dimension
@@ -195,9 +195,12 @@ try:
                 dimension = self._detect_embedding_dimension()
 
             # Create index configuration
-            config = self._create_index_config(
-                index_type, dimension, index_config_params
-            )
+            if index_type is not None:
+                config = self._create_index_config(
+                    index_type, dimension, index_config_params or {}
+                )
+            else:
+                config = None
 
             # Create the index
             self.index = self.client.create_index(
@@ -409,6 +412,7 @@ try:
                 documents: Documents to add
                 ids: Optional IDs for documents
                 **kwargs: Additional arguments
+                    - vectors: Optional pre-computed embeddings (List or array of shape [num_texts, embedding_dim])
 
             Returns:
                 List of IDs for the added documents
