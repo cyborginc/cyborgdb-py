@@ -24,9 +24,7 @@ jobs:
         id: check_changes
         run: |
           # Check if the API contract test file was modified
-          git diff --name-only ${{ github.event.pull_request.base.sha }}..HEAD | grep -q "tests/test_api_contract.py"
-
-          if [ $? -eq 0 ]; then
+          if git diff --name-only ${{ github.event.pull_request.base.sha }}..HEAD | grep -q "tests/test_api_contract.py"; then
             echo "contract_changed=true" >> $GITHUB_OUTPUT
             echo "API contract test file was modified in this PR"
           else
