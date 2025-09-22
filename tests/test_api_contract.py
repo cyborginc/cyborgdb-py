@@ -109,7 +109,7 @@ class TestAPIContract(unittest.TestCase):
         """Set up test resources."""
         cls.base_url = os.getenv("CYBORGDB_BASE_URL", "http://localhost:8000")
         cls.api_key = os.getenv("CYBORGDB_API_KEY", "")
-        cls.dimension = 128
+        cls.dimension = 384  # Use dimension matching embedding model
         cls.test_vectors = generate_test_vectors(10, cls.dimension)
         cls.test_metadata = generate_test_metadata(10)
         cls.index_name = f"test_contract_{uuid.uuid4().hex[:8]}"
@@ -317,25 +317,89 @@ class TestAPIContract(unittest.TestCase):
             self.index_key,
             index_config,
             None,  # embedding_model
-            "euclidean"  # metric
+            "cosine"  # metric - different from default
         )
         self.assertIsInstance(index, cyborgdb.EncryptedIndex)
+
+        # Check index config
+        created_config = index.index_config
+        print(f"Created config: {created_config}")
+        self.assertEqual(index.index_name, self.index_name)
+        self.assertEqual(created_config.get("dimension"), self.dimension)
+        self.assertEqual(created_config.get("index_type"), "ivfflat")
+        self.assertEqual(created_config.get("metric"), "cosine")
 
         # Clean up this index
         index.delete_index()
         time.sleep(1)
 
-        # Test with positional arguments (with config to avoid API error)
-        index_name2 = f"test_contract_{uuid.uuid4().hex[:8]}"
+        # Create new index config
+        index_config = cyborgdb.IndexIVF()
+
+        # Test with keyword arguments
         index = self.client.create_index(
-            index_name2,
-            self.index_key,
-            index_config  # Include config to avoid 400 error
+            index_name=self.index_name,
+            index_key=self.index_key,
+            index_config=index_config,
+            metric="squared_euclidean"
+        )
+
+        self.assertIsInstance(index, cyborgdb.EncryptedIndex)
+
+        # Check index config
+        created_config = index.index_config
+        print(f"Created config: {created_config}")
+        self.assertEqual(index.index_name, self.index_name)
+        self.assertEqual(created_config.get("dimension"), 0)
+        self.assertEqual(created_config.get("index_type"), "ivf")
+        self.assertEqual(created_config.get("metric"), "squared_euclidean")
+
+        # Clean up this index
+        index.delete_index()
+        time.sleep(1)
+
+        # Create new index config
+        index_config = cyborgdb.IndexIVFPQ(pq_dim=32, pq_bits=8)
+
+        # Test with IVFPQ
+        index = self.client.create_index(
+            index_name=self.index_name,
+            index_key=self.index_key,
+            index_config=index_config
+        )
+
+        # Check index config
+        created_config = index.index_config
+        print(f"Created config: {created_config}")
+        self.assertEqual(index.index_name, self.index_name)
+        self.assertEqual(created_config.get("dimension"), 0)
+        self.assertEqual(created_config.get("index_type"), "ivfpq")
+        self.assertEqual(created_config.get("metric"), "euclidean")
+        self.assertEqual(created_config.get("pq_dim"), 32)
+        self.assertEqual(created_config.get("pq_bits"), 8)
+
+        # Clean up this index
+        index.delete_index()
+        time.sleep(1)
+
+        # Test with all defaults + embedding model
+        index = self.client.create_index(
+            index_name=self.index_name,
+            index_key=self.index_key,
+            embedding_model="all-MiniLM-L6-v2"
         )
         self.assertIsInstance(index, cyborgdb.EncryptedIndex)
 
+        # Check index config
+        created_config = index.index_config
+        print(f"Created config: {created_config}")
+        self.assertEqual(index.index_name, self.index_name)
+        self.assertEqual(created_config.get("dimension"), 384) # all-MiniLM-L6-v2 dimension
+        self.assertEqual(created_config.get("index_type"), "ivfflat")
+        self.assertEqual(created_config.get("metric"), "euclidean")
+
         # Store this one for later tests
-        self.__class__.index_name = index_name2
+        self.__class__.index_name = self.index_name
 
         # Store for later tests
         self.__class__.index = index
@@ -476,12 +540,11 @@ class TestAPIContract(unittest.TestCase):
 
         time.sleep(1)
 
-        # Test 2: Prepare test data with contents as strings (should also work)
+        # Test 2: Prepare test data with contents as strings with no vectors (auto-embed)
         items_strings = []
         for i in range(2, 5):
             item = {
                 "id": str(i),
-                "vector": self.test_vectors[i],
                 "metadata": self.test_metadata[i],
                 "contents": f"test content {i}"
             }
@@ -493,19 +556,28 @@ class TestAPIContract(unittest.TestCase):
 
         time.sleep(1)
 
-        # Test 3: Two argument format (this API doesn't support dict format, only list of dicts)
-        # Create list of dict items instead
+        # Test 4: Additional items using dict format
         items_remaining = []
         for i in range(5, 10):
             item = {
                 "id": str(i),
-                "vector": self.test_vectors[i],
-                "metadata": self.test_metadata[i],
+                "vector": self.test_vectors[i % len(self.test_vectors)],
+                "metadata": self.test_metadata[i % len(self.test_metadata)],
                 "contents": f"test content {i}".encode('utf-8')
             }
             items_remaining.append(item)
 
         result = self.index.upsert(items_remaining)
+        self.assertIsNone(result, "upsert must return None")
+
+        time.sleep(1)
+
+        # Test 3: Separate arrays format (documented as: upsert(ids, vectors))
+        ids_array = [str(i) for i in range(10, 15)]
+        vectors_array = self.test_vectors[5:10]
+
+        # Test the documented separate arrays format
+        result = self.index.upsert(ids_array, vectors_array)
         self.assertIsNone(result, "upsert must return None")
 
         time.sleep(1)
@@ -518,6 +590,10 @@ class TestAPIContract(unittest.TestCase):
         self.assertIsInstance(ids, list)
         for id_val in ids:
             self.assertIsInstance(id_val, str, "Each ID must be a string")
+
+        # IDs should match what we upserted
+        expected_ids = {str(i) for i in range(15)}
+        self.assertEqual(set(ids), expected_ids, "list_ids returned unexpected IDs")
 
         # Should accept no arguments
         with self.assertRaises(TypeError):
@@ -542,6 +618,32 @@ class TestAPIContract(unittest.TestCase):
                 {"id", "vector", "metadata", "contents"},
                 "get() result with default include"
             )
+
+            # Validate the data matches what we upserted
+            id_val = result["id"]
+            id_int = int(id_val)
+
+            # Check vector dimensions and type
+            self.assertIsInstance(result["vector"], (list, np.ndarray))
+            vector = np.array(result["vector"]) if isinstance(result["vector"], list) else result["vector"]
+            self.assertEqual(len(vector), self.dimension,
+                           f"Vector dimension mismatch for ID {id_val}")
+
+            # If the ID > 10, it was upserted without metadata/content
+            if id_int >= 10:
+                self.assertIsNone(result.get("metadata"), f"Metadata for ID {id_val} should be None")
+                self.assertIsNone(result.get("contents"), f"Contents for ID {id_val} should be None")
+                continue
+
+            # Check metadata matches
+            self.assertIsInstance(result["metadata"], dict)
+            expected_metadata = self.test_metadata[id_int % len(self.test_metadata)]
+            self.assertEqual(result["metadata"], expected_metadata,
+                           f"Metadata for ID {id_val} doesn't match upserted data")
+
+            # Check contents format (should be string, even if we uploaded bytes)
+            self.assertIsInstance(result["contents"], str)
+            # Contents may be base64 encoded or decoded depending on server handling
 
         # Test with specific include parameter
         results = self.index.get(ids_to_get, include=["metadata"])
@@ -575,6 +677,7 @@ class TestAPIContract(unittest.TestCase):
 
         query_results = results[0]
         self.assertIsInstance(query_results, list)
+        self.assertGreater(len(query_results), 0, "Query should return at least one result")
 
         # Check exact structure with default include - id is always included, plus distance and metadata by default
         for result in query_results:
@@ -585,24 +688,49 @@ class TestAPIContract(unittest.TestCase):
                 "query() result with default include"
             )
 
-        # Test with specific include=["vector", "metadata"]
+            # Validate result data
+            self.assertIsInstance(result["id"], str)
+            self.assertIsInstance(result["distance"], (int, float))
+            self.assertGreaterEqual(result["distance"], 0, "Distance should be non-negative")
+
+            # If querying with same vector that was upserted, check for exact match
+            if result["id"] == "0":  # ID 0 corresponds to test_vectors[0]
+                self.assertAlmostEqual(result["distance"], 0.0, places=5,
+                                     msg="Distance should be ~0 for exact match")
+
+            # Check metadata format and content
+            self.assertIsInstance(result["metadata"], dict)
+            id_int = int(result["id"])
+            if id_int < len(self.test_metadata):
+                expected_metadata = self.test_metadata[id_int]
+                self.assertEqual(result["metadata"], expected_metadata,
+                               f"Metadata for ID {result['id']} doesn't match upserted data")
+
+        # Test with specific include=["metadata"] only (distance is always included)
         results = self.index.query(
             query_vectors=[query_vector],
             top_k=5,
-            include=["vector", "metadata"]
+            include=["metadata"]
         )
 
         for result in results[0]:
             validate_exact_keys(
                 result,
-                {"id", "distance", "vector", "metadata"},
-                "query() result with include=['vector','metadata']"
+                {"id", "distance", "metadata"},
+                "query() result with include=['metadata']"
             )
+
+            # Validate metadata matches
+            id_int = int(result["id"])
+            if id_int < len(self.test_metadata):
+                expected_metadata = self.test_metadata[id_int]
+                self.assertEqual(result["metadata"], expected_metadata,
+                               f"Metadata doesn't match for ID {result['id']}")
 
         # Test with empty include (should only have id and distance)
         results = self.index.query(
             query_vectors=[query_vector],
-            include=[]
+            include=["distance"]
         )
 
         for result in results[0]:
@@ -612,43 +740,131 @@ class TestAPIContract(unittest.TestCase):
                 "query() result with include=[]"
             )
 
-        # Test with filters and include=["metadata"]
+        # Test with filters and default include
         results = self.index.query(
             query_vectors=[query_vector],
             filters={"category": "cat_0"},
-            include=["metadata"]
+            top_k=20
         )
 
-        # Results should have id, distance (always included), and metadata (requested)
+        # Results should have id, distance, and metadata (default include)
         for result in results[0]:
             validate_exact_keys(
                 result,
                 {"id", "distance", "metadata"},
-                "query() result with filters and include=['metadata']"
+                "query() result with filters and default include"
             )
 
-    def test_16_encrypted_index_train(self):
+            # All filtered results should have category="cat_0"
+            self.assertEqual(result["metadata"]["category"], "cat_0",
+                           f"Filter not applied correctly for ID {result['id']}")
+
+    def test_16_encrypted_index_query_patterns(self):
+        """Test different query patterns: single vs batch queries."""
+        # Test Pattern 1: Single vector as flat list -> flat list return
+        single_vector = self.test_vectors[0].tolist()  # Convert to list
+        results = self.index.query(query_vectors=single_vector, top_k=3)
+
+        # Single query should return a flat list of results
+        self.assertIsInstance(results, list)
+        self.assertGreater(len(results), 0)
+        # Check that first element is a dict (result), not a list
+        if len(results) > 0:
+            self.assertIsInstance(results[0], dict, "Single vector query should return flat list of dicts")
+            self.assertIn("id", results[0])
+            self.assertIn("distance", results[0])
+
+        # Test Pattern 2: Single vector in nested list -> nested list return
+        single_vector_nested = [self.test_vectors[1].tolist()]
+        results = self.index.query(query_vectors=single_vector_nested, top_k=3)
+
+        # Should return list of lists (batch format)
+        self.assertIsInstance(results, list)
+        self.assertEqual(len(results), 1, "Should have 1 result list for 1 query")
+        self.assertIsInstance(results[0], list, "Batch query should return nested lists")
+        if len(results[0]) > 0:
+            self.assertIsInstance(results[0][0], dict, "Each result should be a dict")
+            self.assertIn("id", results[0][0])
+            self.assertIn("distance", results[0][0])
+
+        # Test Pattern 3: Multiple vectors -> multiple result lists
+        multiple_vectors = [
+            self.test_vectors[2].tolist(),
+            self.test_vectors[3].tolist(),
+            self.test_vectors[4].tolist()
+        ]
+        results = self.index.query(query_vectors=multiple_vectors, top_k=2)
+
+        # Should return list of lists, one for each query
+        self.assertIsInstance(results, list)
+        self.assertEqual(len(results), 3, "Should have 3 result lists for 3 queries")
+
+        for i, query_results in enumerate(results):
+            self.assertIsInstance(query_results, list, f"Query {i} should return a list")
+            self.assertLessEqual(len(query_results), 2, f"Query {i} should return at most top_k=2 results")
+
+            for result in query_results:
+                self.assertIsInstance(result, dict)
+                validate_exact_keys(
+                    result,
+                    {"id", "distance", "metadata"},
+                    f"Query {i} result structure"
+                )
+
+        # Test Pattern 4: Numpy array input (2D array)
+        numpy_batch = np.array([
+            self.test_vectors[5],
+            self.test_vectors[6]
+        ])
+        results = self.index.query(query_vectors=numpy_batch, top_k=4)
+
+        self.assertIsInstance(results, list)
+        self.assertEqual(len(results), 2, "Should have 2 result lists for 2D numpy array")
+
+        for i, query_results in enumerate(results):
+            self.assertIsInstance(query_results, list)
+            self.assertLessEqual(len(query_results), 4, f"Query {i} should return at most top_k=4 results")
+
+        # Test Pattern 5: Single numpy vector (1D array)
+        numpy_single = self.test_vectors[7]
+        results = self.index.query(query_vectors=numpy_single, top_k=5)
+
+        # Single numpy vector should return flat list
+        self.assertIsInstance(results, list)
+        if len(results) > 0:
+            self.assertIsInstance(results[0], dict, "Single numpy vector should return flat list of dicts")
+
+        # Verify consistency: same query vector should return same top result
+        query_vec = self.test_vectors[8]
+        results1 = self.index.query(query_vectors=query_vec, top_k=1)
+        results2 = self.index.query(query_vectors=query_vec, top_k=1)
+
+        if len(results1) > 0 and len(results2) > 0:
+            self.assertEqual(results1[0]["id"], results2[0]["id"],
+                           "Same query should return same top result")
+
+    def test_17_encrypted_index_train(self):
         """Test EncryptedIndex.train() parameter validation."""
-        # Test with no arguments (all defaults)
+        # Test with no arguments (should use documented defaults)
         result = self.index.train()
         self.assertIsNone(result, "train must return None")
 
-        # Test with all arguments
+        # Test with all keyword arguments (matching documented parameters)
         result = self.index.train(
             n_lists=10,
-            batch_size=100,
-            max_iters=10,
-            tolerance=0.01
+            batch_size=512,  # Different from default 2048
+            max_iters=50,    # Different from default 100
+            tolerance=1e-5   # Different from default 1e-6
         )
         self.assertIsNone(result, "train must return None")
 
-        # Test positional argument order
-        result = self.index.train(10, 100, 10, 0.01)
+        # Test with only some parameters (others should use defaults)
+        result = self.index.train(n_lists=5, batch_size=1024)
         self.assertIsNone(result, "train must return None")
 
         time.sleep(2)
 
-    def test_17_encrypted_index_delete(self):
+    def test_18_encrypted_index_delete(self):
         """Test EncryptedIndex.delete() exact behavior."""
         ids_to_delete = ["0", "5"]
 
@@ -667,7 +883,7 @@ class TestAPIContract(unittest.TestCase):
         for deleted_id in ["0", "5", "9"]:
             self.assertNotIn(deleted_id, remaining)
 
-    def test_18_client_load_index(self):
+    def test_19_client_load_index(self):
         """Test Client.load_index() exact behavior."""
         # Test positional arguments
         loaded = self.client.load_index(self.index_name, self.index_key)
@@ -691,7 +907,7 @@ class TestAPIContract(unittest.TestCase):
                 "unexpected_arg"
             )
 
-    def test_19_encrypted_index_delete_index(self):
+    def test_20_encrypted_index_delete_index(self):
         """Test EncryptedIndex.delete_index() exact behavior."""
         # Should accept no arguments
         result = self.index.delete_index()
