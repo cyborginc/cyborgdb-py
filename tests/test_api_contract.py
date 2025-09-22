@@ -843,6 +843,47 @@ class TestAPIContract(unittest.TestCase):
             self.assertEqual(results1[0]["id"], results2[0]["id"],
                            "Same query should return same top result")
 
+        # Test Pattern 6: Text-based query with query_contents
+        # Single text query
+        text_query = "test content for similarity search"
+        results = self.index.query(query_contents=text_query, top_k=3)
+
+        # Should return flat list for single text query
+        self.assertIsInstance(results, list)
+        if len(results) > 0:
+            self.assertIsInstance(results[0], dict, "Text query should return flat list of dicts")
+            self.assertIn("id", results[0])
+            self.assertIn("distance", results[0])
+            self.assertIn("metadata", results[0])
+
+        # Test text query with specific include parameter
+        results = self.index.query(
+            query_contents="another test query",
+            top_k=5,
+            include=["metadata"]
+        )
+
+        self.assertIsInstance(results, list)
+        for result in results:
+            validate_exact_keys(
+                result,
+                {"id", "distance", "metadata"},
+                "Text query result with include=['metadata']"
+            )
+
+        # Test text query with filters
+        results = self.index.query(
+            query_contents="search for specific category",
+            top_k=10,
+            filters={"category": "cat_1"}
+        )
+
+        # Verify all results match the filter
+        for result in results:
+            if "metadata" in result and result["metadata"]:
+                self.assertEqual(result["metadata"].get("category"), "cat_1",
+                                f"Filter not applied correctly for text query ID {result['id']}")
+
     def test_17_encrypted_index_train(self):
         """Test EncryptedIndex.train() parameter validation."""
         # Test with no arguments (should use documented defaults)
