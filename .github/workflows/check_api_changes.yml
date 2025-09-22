@@ -1,0 +1,67 @@
+name: API Contract Test
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+jobs:
+  test-contract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for git diff
+
+      - name: Check for Contract Changes
+        if: github.event_name == 'pull_request'
+        id: check_changes
+        run: |
+          # Check if the API contract test file was modified
+          git diff --name-only ${{ github.event.pull_request.base.sha }}..HEAD | grep -q "tests/test_api_contract.py"
+
+          if [ $? -eq 0 ]; then
+            echo "contract_changed=true" >> $GITHUB_OUTPUT
+            echo "API contract test file was modified in this PR"
+          else
+            echo "contract_changed=false" >> $GITHUB_OUTPUT
+            echo "API contract test file was not modified"
+          fi
+
+      - name: Comment on PR if Contract Changed
+        if: github.event_name == 'pull_request' && steps.check_changes.outputs.contract_changed == 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = `## ⚠️ API Contract Change Detected
+
+            This PR modifies the public API contract of the CyborgDB Python SDK.
+
+            **Please provide an explanation for this change:**
+            - Why is this change necessary?
+            - Is this a breaking change or backward compatible?
+            - Have you updated the documentation?`;
+
+            // Check if we already commented
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('API Contract Change Detected')
+            );
+
+            if (!botComment) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
