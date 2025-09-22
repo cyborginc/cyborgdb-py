@@ -162,7 +162,7 @@ class Client:
             # Convert binary key to hex string
             key_hex = binascii.hexlify(index_key).decode("ascii")
 
-            if (index_config is None):
+            if index_config is None:
                 index_config = IndexIVFFlatModel()  # Default config
 
             # Create an IndexConfig instance with the appropriate model
