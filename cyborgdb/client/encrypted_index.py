@@ -4,11 +4,12 @@ EncryptedIndex class for CyborgDB
 This module provides the EncryptedIndex class for interacting with encrypted vector indexes in CyborgDB.
 """
 
+import base64
+import binascii
+import logging
 from typing import Dict, List, Optional, Union, Any
 import json
 import numpy as np
-import logging
-import binascii
 
 # Import the OpenAPI generated client
 try:
@@ -24,6 +25,7 @@ try:
     from cyborgdb.openapi_client.models.query_request import QueryRequest
     from cyborgdb.openapi_client.models.list_ids_request import ListIDsRequest
     from cyborgdb.openapi_client.models.request import Request
+    from cyborgdb.openapi_client.models import Contents
 except ImportError:
     raise ImportError(
         "Failed to import openapi_client. Make sure the OpenAPI client library is properly installed."
@@ -312,7 +314,23 @@ class EncryptedIndex:
                         item["vector"] = item_dict["vector"]
 
                     if "contents" in item_dict:
-                        item["contents"] = item_dict["contents"]
+                        contents_value = item_dict["contents"]
+
+                        # Convert bytes to base64 string for JSON serialization
+                        if isinstance(contents_value, bytes):
+                            # Convert bytes to base64 string
+                            contents_value = base64.b64encode(contents_value).decode(
+                                "utf-8"
+                            )
+                        elif isinstance(contents_value, bytearray):
+                            # Convert bytearray to base64 string
+                            contents_value = base64.b64encode(
+                                bytes(contents_value)
+                            ).decode("utf-8")
+                        # If it's already a string, use as-is
+
+                        # Contents model accepts string or bytearray
+                        item["contents"] = Contents(contents_value)
 
                     if "metadata" in item_dict:
                         # Convert dict metadata to JSON string if needed
@@ -494,6 +512,12 @@ class EncryptedIndex:
                 response_text = raw_response.data.decode("utf-8")
                 response_json = json.loads(response_text)
 
+                # Determine include filtering strategy
+                include_all = (
+                    include is None
+                )  # None means include everything server returns
+                include_set = set(include) if include else set()
+
                 # Process the results as plain dictionaries
                 results = []
                 if "results" in response_json:
@@ -506,10 +530,17 @@ class EncryptedIndex:
                             query_items = []
                             for item in query_result:
                                 result_item = {"id": item["id"]}
+
+                                # Always include distance if present (core part of query results)
                                 if "distance" in item:
                                     result_item["distance"] = item["distance"]
-                                if "metadata" in item:
+
+                                # Check metadata against include list
+                                if "metadata" in item and (
+                                    include_all or "metadata" in include_set
+                                ):
                                     result_item["metadata"] = item["metadata"]
+
                                 query_items.append(result_item)
                             results.append(query_items)
                     else:
@@ -517,12 +548,19 @@ class EncryptedIndex:
                         query_items = []
                         for item in response_json["results"]:
                             result_item = {"id": item["id"]}
+
+                            # Always include distance if present (core part of query results)
                             if "distance" in item:
                                 result_item["distance"] = item["distance"]
-                            if "metadata" in item:
+
+                            # Check metadata against include list
+                            if "metadata" in item and (
+                                include_all or "metadata" in include_set
+                            ):
                                 result_item["metadata"] = item["metadata"]
+
                             query_items.append(result_item)
-                        results.append(query_items)
+                        results = query_items
 
                 return results
             except Exception as e:
