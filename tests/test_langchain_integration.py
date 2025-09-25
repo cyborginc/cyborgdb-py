@@ -613,6 +613,214 @@ class TestLangChainIntegration(unittest.TestCase):
         self.assertEqual(doc.metadata["topic"], "blockchain")
         self.assertIsInstance(score, float)
 
+    def test_14_add_texts_with_precomputed_embeddings(self):
+        """Test adding texts with pre-computed embeddings."""
+        index_name = "langchain_test_precomputed_embeddings"
+        self.index_names_to_cleanup.append(index_name)
+
+        # Generate pre-computed embeddings
+        mock_embedder = MockEmbeddings(self.dimension)
+        test_texts = ["First text about science.", "Second text about technology.", "Third text about mathematics."]
+        test_metadata = [{"id": 1}, {"id": 2}, {"id": 3}]
+        
+        # Pre-compute the embeddings
+        precomputed_embeddings = mock_embedder.embed_documents(test_texts)
+        
+        vectorstore = CyborgVectorStore(
+            index_name=index_name,
+            index_key=self.index_key,
+            api_key=self.api_key,
+            base_url=self.base_url,
+            embedding=mock_embedder,  # Still needed for queries
+            index_type="ivfflat",
+            metric="cosine",
+        )
+
+        # Add texts with pre-computed embeddings
+        ids = vectorstore.add_texts(
+            texts=test_texts,
+            metadatas=test_metadata,
+            embeddings=precomputed_embeddings  # Use pre-computed embeddings
+        )
+        
+        self.assertEqual(len(ids), 3)
+        
+        # Verify the texts can be searched
+        results = vectorstore.similarity_search("technology", k=1)
+        self.assertEqual(len(results), 1)
+        self.assertIn("technology", results[0].page_content.lower())
+
+    def test_15_add_texts_with_numpy_embeddings(self):
+        """Test adding texts with pre-computed numpy array embeddings."""
+        index_name = "langchain_test_numpy_embeddings"
+        self.index_names_to_cleanup.append(index_name)
+
+        test_texts = ["Numpy vector test one.", "Numpy vector test two.", "Numpy vector test three."]
+        test_metadata = [{"idx": 1}, {"idx": 2}, {"idx": 3}]
+        
+        # Create numpy array of embeddings
+        precomputed_embeddings = np.random.randn(3, self.dimension).astype(np.float32)
+        # Normalize for cosine similarity
+        precomputed_embeddings = precomputed_embeddings / np.linalg.norm(precomputed_embeddings, axis=1, keepdims=True)
+        
+        vectorstore = CyborgVectorStore(
+            index_name=index_name,
+            index_key=self.index_key,
+            api_key=self.api_key,
+            base_url=self.base_url,
+            embedding=MockEmbeddings(self.dimension),
+            index_type="ivfflat",
+            metric="cosine",
+        )
+
+        # Add texts with numpy embeddings
+        ids = vectorstore.add_texts(
+            texts=test_texts,
+            metadatas=test_metadata,
+            embeddings=precomputed_embeddings
+        )
+        
+        self.assertEqual(len(ids), 3)
+        
+        # Verify documents were added
+        retrieved_docs = vectorstore.get(ids[:2])
+        self.assertEqual(len(retrieved_docs), 2)
+
+    def test_16_add_documents_with_embeddings(self):
+        """Test adding documents with pre-computed embeddings."""
+        index_name = "langchain_test_docs_with_embeddings"
+        self.index_names_to_cleanup.append(index_name)
+
+        # Create test documents
+        test_docs = [
+            Document(page_content="Document about physics.", metadata={"subject": "physics"}),
+            Document(page_content="Document about chemistry.", metadata={"subject": "chemistry"}),
+            Document(page_content="Document about biology.", metadata={"subject": "biology"}),
+        ]
+        
+        # Pre-compute embeddings
+        mock_embedder = MockEmbeddings(self.dimension)
+        texts = [doc.page_content for doc in test_docs]
+        precomputed_embeddings = mock_embedder.embed_documents(texts)
+        
+        vectorstore = CyborgVectorStore(
+            index_name=index_name,
+            index_key=self.index_key,
+            api_key=self.api_key,
+            base_url=self.base_url,
+            embedding=mock_embedder,
+            index_type="ivfflat",
+            metric="cosine",
+        )
+
+        # Add documents with pre-computed embeddings
+        ids = vectorstore.add_documents(
+            documents=test_docs,
+            embeddings=precomputed_embeddings
+        )
+        
+        self.assertEqual(len(ids), 3)
+        
+        # Search and verify
+        results = vectorstore.similarity_search("chemistry", k=1)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].metadata["subject"], "chemistry")
+
+    def test_17_from_texts_with_embeddings(self):
+        """Test creating vector store from texts with pre-computed embeddings."""
+        index_name = "langchain_test_from_texts_embeddings"
+        self.index_names_to_cleanup.append(index_name)
+
+        test_texts = ["Create from texts one.", "Create from texts two.", "Create from texts three."]
+        test_metadata = [{"num": 1}, {"num": 2}, {"num": 3}]
+        
+        # Pre-compute embeddings
+        mock_embedder = MockEmbeddings(self.dimension)
+        precomputed_embeddings = mock_embedder.embed_documents(test_texts)
+        
+        # Create vector store with pre-computed embeddings
+        vectorstore = CyborgVectorStore.from_texts(
+            texts=test_texts,
+            embedding=mock_embedder,
+            metadatas=test_metadata,
+            embeddings=precomputed_embeddings,  # Pass pre-computed embeddings
+            index_name=index_name,
+            index_key=self.index_key,
+            api_key=self.api_key,
+            base_url=self.base_url,
+            index_type="ivfflat",
+            metric="cosine",
+        )
+        
+        # Verify the store was created and populated
+        results = vectorstore.similarity_search("Create from texts", k=3)
+        self.assertEqual(len(results), 3)
+
+    def test_18_embeddings_validation(self):
+        """Test validation of pre-computed embeddings."""
+        index_name = "langchain_test_embeddings_validation"
+        self.index_names_to_cleanup.append(index_name)
+
+        vectorstore = CyborgVectorStore(
+            index_name=index_name,
+            index_key=self.index_key,
+            api_key=self.api_key,
+            base_url=self.base_url,
+            embedding=MockEmbeddings(self.dimension),
+            index_type="ivfflat",
+            metric="cosine",
+        )
+
+        test_texts = ["Text one.", "Text two.", "Text three."]
+        
+        # Test mismatched number of embeddings
+        wrong_size_embeddings = [[0.1] * self.dimension, [0.2] * self.dimension]  # Only 2 embeddings for 3 texts
+        
+        with self.assertRaises(ValueError) as context:
+            vectorstore.add_texts(
+                texts=test_texts,
+                embeddings=wrong_size_embeddings
+            )
+        
+        self.assertIn("must match number of texts", str(context.exception))
+
+    def test_19_async_with_embeddings(self):
+        """Test async operations with pre-computed embeddings."""
+        index_name = "langchain_test_async_embeddings"
+        self.index_names_to_cleanup.append(index_name)
+
+        async def run_async_tests():
+            mock_embedder = MockEmbeddings(self.dimension)
+            test_texts = ["Async text one.", "Async text two.", "Async text three."]
+            precomputed_embeddings = mock_embedder.embed_documents(test_texts)
+            
+            vectorstore = CyborgVectorStore(
+                index_name=index_name,
+                index_key=self.index_key,
+                api_key=self.api_key,
+                base_url=self.base_url,
+                embedding=mock_embedder,
+                index_type="ivfflat",
+            )
+
+            # Async add texts with pre-computed embeddings
+            ids = await vectorstore.aadd_texts(
+                texts=test_texts,
+                embeddings=precomputed_embeddings
+            )
+            self.assertEqual(len(ids), 3)
+
+            # Async add documents with embeddings
+            test_docs = [Document(page_content=text) for text in test_texts]
+            doc_ids = await vectorstore.aadd_documents(
+                documents=test_docs,
+                embeddings=precomputed_embeddings
+            )
+            self.assertEqual(len(doc_ids), 3)
+
+        # Run async tests
+        asyncio.run(run_async_tests())
+
 
 if __name__ == "__main__":
     unittest.main()
