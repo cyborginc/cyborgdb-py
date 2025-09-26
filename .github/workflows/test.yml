@@ -1,4 +1,6 @@
 name: Test CyborgDB Python SDK
+permissions:
+  contents: read
 
 on:
   pull_request:
@@ -152,10 +154,25 @@ jobs:
           fi
           
           # Run all tests (full version tests will run, lite tests will also work)
-          pytest tests/ -v --cov=cyborgdb --cov-report=term-missing --cov-append
+            pytest tests/ -v --cov=cyborgdb --cov-report=term-missing --cov-append --ignore=tests/test_api_contract.py
           
-          # Stop standard server
-          kill $(cat server-standard.pid) || true
+          # Store the server pid for later cleanup
+          echo "Standard server PID: $(cat server-standard.pid)"
+
+      - name: Check API Contract
+        run: |
+          echo "=== Checking API Contract ==="
+          # Run the API contract test separately to avoid affecting coverage of other tests
+          pytest tests/test_api_contract.py -v
+
+      - name: Kill Server
+        run: |
+          if [ -f server-lite.pid ]; then
+            kill $(cat server-lite.pid) || true
+          fi
+          if [ -f server-standard.pid ]; then
+            kill $(cat server-standard.pid) || true
+          fi
           
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
