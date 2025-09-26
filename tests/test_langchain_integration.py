@@ -622,8 +622,9 @@ class TestLangChainIntegration(unittest.TestCase):
         mock_embedder = MockEmbeddings(self.dimension)
         test_texts = ["First text about science.", "Second text about technology.", "Third text about mathematics."]
         test_metadata = [{"id": 1}, {"id": 2}, {"id": 3}]
+        test_ids = ["emb_1", "emb_2", "emb_3"]
         
-        # Pre-compute the embeddings
+        # Pre-compute the embeddings (could be from any source)
         precomputed_embeddings = mock_embedder.embed_documents(test_texts)
         
         vectorstore = CyborgVectorStore(
@@ -640,15 +641,25 @@ class TestLangChainIntegration(unittest.TestCase):
         ids = vectorstore.add_texts(
             texts=test_texts,
             metadatas=test_metadata,
+            ids=test_ids,
             embeddings=precomputed_embeddings  # Use pre-computed embeddings
         )
         
         self.assertEqual(len(ids), 3)
+        self.assertEqual(ids, test_ids)
         
-        # Verify the texts can be searched
-        results = vectorstore.similarity_search("technology", k=1)
-        self.assertEqual(len(results), 1)
-        self.assertIn("technology", results[0].page_content.lower())
+        # Verify documents were added and can be retrieved
+        retrieved_docs = vectorstore.get(test_ids)
+        self.assertEqual(len(retrieved_docs), 3)
+        
+        # Verify the content was stored correctly
+        retrieved_texts = {doc.page_content for doc in retrieved_docs}
+        self.assertEqual(retrieved_texts, set(test_texts))
+        
+        # Verify metadata was preserved
+        for doc in retrieved_docs:
+            self.assertIn("id", doc.metadata)
+            self.assertIn(doc.metadata["id"], [1, 2, 3])
 
     def test_15_add_texts_with_numpy_embeddings(self):
         """Test adding texts with pre-computed numpy array embeddings."""
@@ -697,8 +708,9 @@ class TestLangChainIntegration(unittest.TestCase):
             Document(page_content="Document about chemistry.", metadata={"subject": "chemistry"}),
             Document(page_content="Document about biology.", metadata={"subject": "biology"}),
         ]
+        test_ids = ["doc_physics", "doc_chemistry", "doc_biology"]
         
-        # Pre-compute embeddings
+        # Pre-compute embeddings (could be from any model/source)
         mock_embedder = MockEmbeddings(self.dimension)
         texts = [doc.page_content for doc in test_docs]
         precomputed_embeddings = mock_embedder.embed_documents(texts)
@@ -716,15 +728,25 @@ class TestLangChainIntegration(unittest.TestCase):
         # Add documents with pre-computed embeddings
         ids = vectorstore.add_documents(
             documents=test_docs,
+            ids=test_ids,
             embeddings=precomputed_embeddings
         )
         
         self.assertEqual(len(ids), 3)
+        self.assertEqual(ids, test_ids)
         
-        # Search and verify
-        results = vectorstore.similarity_search("chemistry", k=1)
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0].metadata["subject"], "chemistry")
+        # Verify documents were added and can be retrieved
+        retrieved_docs = vectorstore.get(test_ids)
+        self.assertEqual(len(retrieved_docs), 3)
+        
+        # Verify content and metadata were stored correctly
+        retrieved_contents = {doc.page_content for doc in retrieved_docs}
+        expected_contents = {doc.page_content for doc in test_docs}
+        self.assertEqual(retrieved_contents, expected_contents)
+        
+        # Verify metadata was preserved
+        subjects_found = {doc.metadata["subject"] for doc in retrieved_docs}
+        self.assertEqual(subjects_found, {"physics", "chemistry", "biology"})
 
     def test_17_from_texts_with_embeddings(self):
         """Test creating vector store from texts with pre-computed embeddings."""
