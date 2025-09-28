@@ -49,9 +49,9 @@ def create_client():
                 api_key=api_key,
                 verify_ssl=False  # Disable for localhost (likely self-signed)
             )
-        except:
+        except Exception:
             ssl_sock.close()
-    except:
+    except Exception:
         pass
     
     # Fallback to HTTP on port 8000
