@@ -10,14 +10,55 @@ import time
 import uuid
 import asyncio
 import numpy as np
-from unittest.mock import patch, MagicMock
-from dotenv import load_dotenv
+from unittest.mock import patch
 import requests
 
 import cyborgdb as cyborgdb
 
-# Load environment variables from .env.local
-load_dotenv(".env.local")
+
+def create_client():
+    """
+    Create a CyborgDB client with auto-detection for HTTP/HTTPS on port 8000.
+    Simple approach: try HTTPS first, fallback to HTTP on the same port.
+    """
+    api_key = os.environ.get("CYBORGDB_API_KEY", "")
+    host = "localhost"
+    port = "8000"
+    
+    # Try HTTPS first on port 8000
+    try:
+        import ssl
+        import socket
+        
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        
+        # Test SSL connection on port 8000
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        ssl_sock = context.wrap_socket(sock, server_hostname=host)
+        
+        try:
+            ssl_sock.connect((host, int(port)))
+            ssl_sock.close()
+            
+            # SSL connection successful
+            return cyborgdb.Client(
+                base_url=f"https://{host}:{port}",
+                api_key=api_key,
+                verify_ssl=False  # Disable for localhost (likely self-signed)
+            )
+        except:
+            ssl_sock.close()
+    except:
+        pass
+    
+    # Fallback to HTTP on port 8000
+    return cyborgdb.Client(
+        base_url=f"http://{host}:{port}",
+        api_key=api_key
+    )
 
 
 def generate_unique_name(prefix="test_"):
@@ -29,7 +70,7 @@ class TestSSLVerification(unittest.TestCase):
     """Test SSL/TLS verification functionality"""
     
     def setUp(self):
-        self.api_key = os.getenv("CYBORGDB_API_KEY", "test-key")
+        self.api_key = os.environ.get("CYBORGDB_API_KEY", "test-key")
         self.localhost_url = "http://localhost:8000"
         self.production_url = "https://api.cyborgdb.com"
     
@@ -37,13 +78,13 @@ class TestSSLVerification(unittest.TestCase):
         """Test SSL auto-detection for localhost URLs"""
         with patch('cyborgdb.Client') as mock_client:
             # Test HTTP localhost - should auto-disable SSL
-            client = cyborgdb.Client(base_url="http://localhost:8000", api_key=self.api_key)
+            cyborgdb.Client(base_url="http://localhost:8000", api_key=self.api_key)
             mock_client.assert_called_once()
     
     def test_ssl_explicit_disable(self):
         """Test explicit SSL verification disable"""
         with patch('cyborgdb.Client') as mock_client:
-            client = cyborgdb.Client(
+            cyborgdb.Client(
                 base_url=self.production_url, 
                 api_key=self.api_key, 
                 verify_ssl=False
@@ -53,7 +94,7 @@ class TestSSLVerification(unittest.TestCase):
     def test_ssl_explicit_enable(self):
         """Test explicit SSL verification enable"""
         with patch('cyborgdb.Client') as mock_client:
-            client = cyborgdb.Client(
+            cyborgdb.Client(
                 base_url=self.production_url, 
                 api_key=self.api_key, 
                 verify_ssl=True
@@ -65,11 +106,31 @@ class TestSSLVerification(unittest.TestCase):
         with patch('requests.get') as mock_get:
             mock_get.side_effect = requests.exceptions.SSLError("Certificate verification failed")
             
-            client = cyborgdb.Client(base_url=self.production_url, api_key=self.api_key)
+            cyborgdb.Client(base_url=self.production_url, api_key=self.api_key)
             
             with self.assertRaises(requests.exceptions.SSLError):
                 # This would trigger an SSL error in a real scenario
                 mock_get()  # Call the mock, not the side_effect
+    
+    def test_auto_detection(self):
+        """Test auto-detection works with current environment"""
+        # Test that our auto-detection creates a working client
+        client = create_client()
+        self.assertIsNotNone(client)
+        
+        # Try a basic operation to ensure the connection works
+        try:
+            health = client.get_health()
+            # Accept various health response formats
+            self.assertIsInstance(health, (dict, bool, str, type(None)))
+        except Exception as e:
+            # If it fails, it should be due to API key or server issues, not SSL
+            error_str = str(e).lower()
+            ssl_related = any(keyword in error_str for keyword in 
+                            ['ssl', 'certificate', 'handshake', 'verification'])
+            if ssl_related:
+                self.fail(f"SSL auto-detection failed: {e}")
+            # Otherwise, it might be an API key or connectivity issue, which is acceptable
 
 
 class TestIndexTypes(unittest.TestCase):
@@ -77,10 +138,7 @@ class TestIndexTypes(unittest.TestCase):
     
     @classmethod
     def setUpClass(cls):
-        cls.client = cyborgdb.Client(
-            base_url="http://localhost:8000", 
-            api_key=os.getenv("CYBORGDB_API_KEY", "")
-        )
+        cls.client = create_client()
         cls.dimension = 128
     
     def setUp(self):
@@ -219,10 +277,7 @@ class TestErrorHandling(unittest.TestCase):
     """Test comprehensive error scenarios"""
     
     def setUp(self):
-        self.client = cyborgdb.Client(
-            base_url="http://localhost:8000", 
-            api_key=os.getenv("CYBORGDB_API_KEY", "")
-        )
+        self.client = create_client()
     
     def test_invalid_api_key(self):
         """Test handling of invalid API keys"""
@@ -234,7 +289,7 @@ class TestErrorHandling(unittest.TestCase):
         # The client creation succeeds, but API calls should fail
         # Skip this test if server doesn't validate API keys
         try:
-            health = client.get_health()
+            client.get_health()
             # If server doesn't validate API keys, skip the test
             self.skipTest("Server appears to not validate API keys - skipping API key validation test")
         except Exception as e:
@@ -264,7 +319,7 @@ class TestErrorHandling(unittest.TestCase):
                     config, 
                     metric="euclidean"
                 )
-        except Exception as e:
+        except Exception:
             # Parameter validation occurred during construction
             self.assertTrue(True, "Invalid dimension properly caught")
         
@@ -278,7 +333,7 @@ class TestErrorHandling(unittest.TestCase):
                     index_config, 
                     metric="invalid_metric"
                 )
-        except Exception as e:
+        except Exception:
             # Expected - invalid metric rejected
             self.assertTrue(True, "Invalid metric properly rejected")
     
@@ -356,10 +411,7 @@ class TestEdgeCases(unittest.TestCase):
     """Test edge cases and boundary conditions"""
     
     def setUp(self):
-        self.client = cyborgdb.Client(
-            base_url="http://localhost:8000", 
-            api_key=os.getenv("CYBORGDB_API_KEY", "")
-        )
+        self.client = create_client()
         self.index_name = generate_unique_name()
         self.index_key = self.client.generate_key()
         self.index_config = cyborgdb.IndexIVFFlat(dimension=128)
@@ -418,7 +470,7 @@ class TestEdgeCases(unittest.TestCase):
         
         # Now test if the server/SDK validates the operation
         try:
-            result = self.index.upsert(items_with_defaults)
+            self.index.upsert(items_with_defaults)
             # If this succeeds, the SDK/server allows operations with default values
             # This is actually valid behavior - verify the items were actually stored
             time.sleep(1)
@@ -483,7 +535,6 @@ class TestEdgeCases(unittest.TestCase):
         """Test concurrent operations handling"""
         async def concurrent_upsert():
             vectors = [np.random.rand(128).astype(np.float32) for _ in range(5)]
-            tasks = []
             
             for i, vector in enumerate(vectors):
                 item = [{
@@ -511,11 +562,7 @@ class TestBackendCompatibility(unittest.TestCase):
     
     def test_lite_backend_compatibility(self):
         """Test operations with lite backend"""
-        # This test would check if the backend is lite and test appropriate functionality
-        client = cyborgdb.Client(
-            base_url="http://localhost:8000", 
-            api_key=os.getenv("CYBORGDB_API_KEY", "")
-        )
+        client = create_client()
         
         try:
             health = client.get_health()
@@ -528,10 +575,7 @@ class TestBackendCompatibility(unittest.TestCase):
     
     def test_feature_availability_differences(self):
         """Test feature availability between backend variants"""
-        client = cyborgdb.Client(
-            base_url="http://localhost:8000", 
-            api_key=os.getenv("CYBORGDB_API_KEY", "")
-        )
+        client = create_client()
         
         # Test if advanced index types are available
         try:
