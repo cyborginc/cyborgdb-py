@@ -360,12 +360,16 @@ try:
                 # Validate provided embeddings
                 if isinstance(embeddings, np.ndarray):
                     if embeddings.shape[0] != num_texts:
-                        raise ValueError(f"Number of embeddings ({embeddings.shape[0]}) must match number of texts ({num_texts})")
+                        raise ValueError(
+                            f"Number of embeddings ({embeddings.shape[0]}) must match number of texts ({num_texts})"
+                        )
                     vectors = embeddings
                 else:
                     # Assume it's a list of lists
                     if len(embeddings) != num_texts:
-                        raise ValueError(f"Number of embeddings ({len(embeddings)}) must match number of texts ({num_texts})")
+                        raise ValueError(
+                            f"Number of embeddings ({len(embeddings)}) must match number of texts ({num_texts})"
+                        )
                     vectors = np.array(embeddings, dtype=np.float32)
             else:
                 # Generate embeddings from texts
@@ -384,9 +388,7 @@ try:
                 else:
                     # vectors is likely a list of lists or a list
                     vector = (
-                        vectors[i]
-                        if isinstance(vectors[i], list)
-                        else [vectors[i]]
+                        vectors[i] if isinstance(vectors[i], list) else [vectors[i]]
                     )
                 item = {"id": id_list[i], "vector": vector}
 
@@ -407,11 +409,11 @@ try:
             return id_list
 
         def add_documents(
-            self, 
-            documents: List[Document], 
+            self,
+            documents: List[Document],
             ids: Optional[List[str]] = None,
             embeddings: Optional[Union[List[List[float]], np.ndarray]] = None,
-            **kwargs
+            **kwargs,
         ) -> List[str]:
             """
             Add documents to the vector store.
@@ -429,7 +431,9 @@ try:
             """
             texts = [doc.page_content for doc in documents]
             metadatas = [doc.metadata for doc in documents]
-            return self.add_texts(texts, metadatas, ids=ids, embeddings=embeddings, **kwargs)
+            return self.add_texts(
+                texts, metadatas, ids=ids, embeddings=embeddings, **kwargs
+            )
 
         def delete(
             self, ids: Optional[List[str]] = None, delete_index: bool = False
@@ -747,15 +751,20 @@ try:
             import asyncio
 
             return await asyncio.to_thread(
-                self.add_texts, texts, metadatas=metadatas, ids=ids, embeddings=embeddings, **kwargs
+                self.add_texts,
+                texts,
+                metadatas=metadatas,
+                ids=ids,
+                embeddings=embeddings,
+                **kwargs,
             )
 
         async def aadd_documents(
-            self, 
-            documents: List[Document], 
+            self,
+            documents: List[Document],
             ids: Optional[List[str]] = None,
             embeddings: Optional[Union[List[List[float]], np.ndarray]] = None,
-            **kwargs
+            **kwargs,
         ) -> List[str]:
             """Async version of add_documents with optional pre-computed embeddings."""
             import asyncio
@@ -877,9 +886,15 @@ try:
             # If embeddings are provided and dimension is not, infer it
             if embeddings is not None and dimension is None:
                 if isinstance(embeddings, np.ndarray):
-                    dimension = embeddings.shape[1] if len(embeddings.shape) > 1 else len(embeddings)
+                    dimension = (
+                        embeddings.shape[1]
+                        if len(embeddings.shape) > 1
+                        else len(embeddings)
+                    )
                 elif isinstance(embeddings, list) and len(embeddings) > 0:
-                    dimension = len(embeddings[0]) if isinstance(embeddings[0], list) else 1
+                    dimension = (
+                        len(embeddings[0]) if isinstance(embeddings[0], list) else 1
+                    )
 
             # Create vector store
             store = cls(
@@ -928,7 +943,9 @@ try:
             """
             texts = [doc.page_content for doc in documents]
             metadatas = [doc.metadata for doc in documents]
-            return cls.from_texts(texts, embedding, metadatas, embeddings=embeddings, **kwargs)
+            return cls.from_texts(
+                texts, embedding, metadatas, embeddings=embeddings, **kwargs
+            )
 
     __all__ = ["CyborgVectorStore"]
 
