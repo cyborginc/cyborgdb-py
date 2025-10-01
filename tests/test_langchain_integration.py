@@ -456,6 +456,22 @@ class TestLangChainIntegration(unittest.TestCase):
         index_name = "langchain_test_async"
         self.index_names_to_cleanup.append(index_name)
 
+        # Use base test data without replication for this test
+        base_texts = [
+            "The quick brown fox jumps over the lazy dog.",
+            "Machine learning is a subset of artificial intelligence.",
+            "Python is a popular programming language for data science.",
+            "Natural language processing enables computers to understand human language.",
+            "Deep learning models require large amounts of training data.",
+        ]
+        base_metadata = [
+            {"category": "animals", "source": "proverb"},
+            {"category": "AI", "source": "textbook"},
+            {"category": "programming", "source": "tutorial"},
+            {"category": "AI", "source": "research"},
+            {"category": "AI", "source": "textbook"},
+        ]
+
         async def run_async_tests():
             vectorstore = CyborgVectorStore(
                 index_name=index_name,
@@ -468,7 +484,7 @@ class TestLangChainIntegration(unittest.TestCase):
 
             # Async add texts
             ids = await vectorstore.aadd_texts(
-                texts=self.test_texts[:5], metadatas=self.test_metadata[:5]
+                texts=base_texts, metadatas=base_metadata
             )
             self.assertEqual(len(ids), 5)
 
