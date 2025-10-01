@@ -490,6 +490,8 @@ class TestLangChainIntegration(unittest.TestCase):
 
             # Async similarity search
             results = await vectorstore.asimilarity_search("machine learning", k=3)
+            print(f"DEBUG async search: Number of results: {len(results)}")
+            print(f"DEBUG async search: Results: {results}")
             self.assertEqual(len(results), 3)
 
             # Async similarity search with score

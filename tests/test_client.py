@@ -63,10 +63,10 @@ class ClientIntegrationTest(unittest.TestCase):
         query_vector = np.random.rand(dimension).astype(np.float32)
         results = self.index.query(query_vectors=query_vector, top_k=10)
 
-        # Check results
-        self.assertEqual(len(results[0]), 10)
-        self.assertTrue("id" in results[0][0])
-        self.assertTrue("distance" in results[0][0])
+        # Check results - results is a flat list, not nested
+        self.assertEqual(len(results), 10)
+        self.assertTrue("id" in results[0])
+        self.assertTrue("distance" in results[0])
 
     def test_health_check(self):
         """Test the health check endpoint."""
