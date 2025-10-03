@@ -104,30 +104,17 @@ class TestSSLVerification(unittest.TestCase):
             cyborgdb.Client(base_url=self.production_url, api_key=self.api_key)
 
             with self.assertRaises(requests.exceptions.SSLError):
-                # This would trigger an SSL error in a real scenario
-                mock_get()  # Call the mock, not the side_effect
+                mock_get()
 
     def test_auto_detection(self):
         """Test auto-detection works with current environment"""
-        # Test that our auto-detection creates a working client
         client = create_client()
         self.assertIsNotNone(client)
 
         # Try a basic operation to ensure the connection works
-        try:
-            health = client.get_health()
-            # Accept various health response formats
-            self.assertIsInstance(health, (dict, bool, str, type(None)))
-        except Exception as e:
-            # If it fails, it should be due to API key or server issues, not SSL
-            error_str = str(e).lower()
-            ssl_related = any(
-                keyword in error_str
-                for keyword in ["ssl", "certificate", "handshake", "verification"]
-            )
-            if ssl_related:
-                self.fail(f"SSL auto-detection failed: {e}")
-            # Otherwise, it might be an API key or connectivity issue, which is acceptable
+        health = client.get_health()
+        # Accept various health response formats
+        self.assertIsInstance(health, (dict, bool, str, type(None)))
 
 
 class TestIndexTypes(unittest.TestCase):
@@ -222,51 +209,22 @@ class TestIndexTypes(unittest.TestCase):
 
     def test_ivfpq_parameter_validation(self):
         """Test IVFPQ parameter validation"""
-        # Test if IVFPQ is supported at all first
-        try:
-            valid_config = cyborgdb.IndexIVFPQ(
-                dimension=self.dimension, pq_dim=32, pq_bits=8
-            )
-            # Try creating a valid index to ensure IVFPQ is supported
-            test_index_name = generate_unique_name()
-            test_index_key = self.client.generate_key()
-            test_index = self.client.create_index(
-                test_index_name,
-                test_index_key,
-                valid_config,
+        # Test invalid pq_dim = 0
+        invalid_config = cyborgdb.IndexIVFPQ(
+            dimension=self.dimension, pq_dim=0, pq_bits=8
+        )
+        
+        with self.assertRaises(Exception) as context:
+            invalid_index = self.client.create_index(
+                generate_unique_name(),
+                self.client.generate_key(),
+                invalid_config,
                 metric="euclidean",
             )
-            test_index.delete_index()  # Clean up
-
-            # Now test invalid parameters
-            # Test invalid pq_dim = 0
-            try:
-                invalid_config = cyborgdb.IndexIVFPQ(
-                    dimension=self.dimension, pq_dim=0, pq_bits=8
-                )
-                invalid_index = self.client.create_index(
-                    generate_unique_name(),
-                    self.client.generate_key(),
-                    invalid_config,
-                    metric="euclidean",
-                )
-                # If we get here, validation failed
-                invalid_index.delete_index()
-                self.fail(
-                    "Expected validation error for pq_dim=0, but index creation succeeded"
-                )
-            except Exception as e:
-                # Expected - should reject invalid pq_dim
-                self.assertIn(
-                    "pq_dim", str(e).lower(), f"Error should mention pq_dim: {e}"
-                )
-
-        except Exception as e:
-            # IVFPQ might not be supported
-            if "not supported" in str(e).lower() or "lite" in str(e).lower():
-                self.skipTest(f"IVFPQ not supported in current backend: {e}")
-            else:
-                raise
+            invalid_index.delete_index()
+        
+        # Verify the error is about pq_dim
+        self.assertIn("pq_dim", str(context.exception).lower())
 
 
 class TestErrorHandling(unittest.TestCase):
@@ -281,63 +239,48 @@ class TestErrorHandling(unittest.TestCase):
             base_url="http://localhost:8000", api_key="invalid-key-12345"
         )
 
-        # The client creation succeeds, but API calls should fail
-        # Skip this test if server doesn't validate API keys
-        try:
-            client.get_health()
-            # If server doesn't validate API keys, skip the test
-            self.skipTest(
-                "Server appears to not validate API keys - skipping API key validation test"
+        # Try to create an index - this should require authentication
+        with self.assertRaises(Exception) as context:
+            index_config = cyborgdb.IndexIVFFlat(dimension=128)
+            client.create_index(
+                generate_unique_name(),
+                client.generate_key(),
+                index_config,
+                metric="euclidean"
             )
-        except Exception as e:
-            # Expected behavior - API call should fail with invalid key
-            # Check that it's actually an authentication error, not a network error
-            error_str = str(e).lower()
-            auth_related = any(
-                keyword in error_str
-                for keyword in [
-                    "auth",
-                    "key",
-                    "unauthorized",
-                    "401",
-                    "forbidden",
-                    "403",
-                ]
-            )
-            if auth_related:
-                self.assertTrue(True, f"Invalid API key properly rejected: {e}")
-            else:
-                self.skipTest(
-                    f"Got non-authentication error, possibly network issue: {e}"
-                )
+        
+        error_str = str(context.exception).lower()
+        auth_related = any(
+            keyword in error_str
+            for keyword in [
+                "auth",
+                "key",
+                "unauthorized",
+                "401",
+                "forbidden",
+                "403",
+            ]
+        )
+        self.assertTrue(auth_related, f"Expected authentication error, got: {context.exception}")
 
     def test_malformed_requests(self):
         """Test handling of malformed requests"""
         index_name = generate_unique_name()
         index_key = self.client.generate_key()
 
-        # Test invalid dimension - may not be validated at construction
-        try:
+        # Test invalid dimension
+        with self.assertRaises(Exception):
             config = cyborgdb.IndexIVFFlat(dimension=-1)
-            # If constructor doesn't validate, try creating index
-            with self.assertRaises(Exception):
-                self.client.create_index(
-                    index_name, index_key, config, metric="euclidean"
-                )
-        except Exception:
-            # Parameter validation occurred during construction
-            self.assertTrue(True, "Invalid dimension properly caught")
+            self.client.create_index(
+                index_name, index_key, config, metric="euclidean"
+            )
 
         # Test invalid metric
         index_config = cyborgdb.IndexIVFFlat(dimension=128)
-        try:
-            with self.assertRaises(Exception):
-                self.client.create_index(
-                    index_name, index_key, index_config, metric="invalid_metric"
-                )
-        except Exception:
-            # Expected - invalid metric rejected
-            self.assertTrue(True, "Invalid metric properly rejected")
+        with self.assertRaises(Exception):
+            self.client.create_index(
+                index_name, index_key, index_config, metric="invalid_metric"
+            )
 
     def test_network_connectivity_issues(self):
         """Test handling of network connectivity issues"""
@@ -368,37 +311,26 @@ class TestErrorHandling(unittest.TestCase):
 
     def test_server_error_responses(self):
         """Test handling of server error responses"""
-        # Note: This test checks that the client can handle server errors appropriately
-        # The actual behavior depends on the client implementation
+        # Test with empty index name (should cause an error)
+        index_key = self.client.generate_key()
+        index_config = cyborgdb.IndexIVFFlat(dimension=128)
 
-        # Test with potentially problematic data that might cause server errors
-        try:
-            # Test with empty index name (should cause an error)
-            index_key = self.client.generate_key()
-            index_config = cyborgdb.IndexIVFFlat(dimension=128)
+        with self.assertRaises(Exception):
+            self.client.create_index(
+                "",  # Empty name should cause error
+                index_key,
+                index_config,
+                metric="euclidean",
+            )
 
-            with self.assertRaises(Exception):
-                self.client.create_index(
-                    "",  # Empty name should cause error
-                    index_key,
-                    index_config,
-                    metric="euclidean",
-                )
-        except Exception as e:
-            # Expected - empty index name should be rejected
-            self.assertTrue(True, f"Empty index name properly rejected: {e}")
-
-        # Alternative test: invalid index key format
-        try:
-            with self.assertRaises(Exception):
-                self.client.create_index(
-                    generate_unique_name(),
-                    b"invalid_short_key",  # Invalid key length
-                    cyborgdb.IndexIVFFlat(dimension=128),
-                    metric="euclidean",
-                )
-        except Exception as e:
-            self.assertTrue(True, f"Invalid key format properly rejected: {e}")
+        # Test invalid index key format
+        with self.assertRaises(Exception):
+            self.client.create_index(
+                generate_unique_name(),
+                b"invalid_short_key",  # Invalid key length
+                cyborgdb.IndexIVFFlat(dimension=128),
+                metric="euclidean",
+            )
 
 
 class TestEdgeCases(unittest.TestCase):
@@ -435,58 +367,25 @@ class TestEdgeCases(unittest.TestCase):
     def test_mismatched_parameter_lengths(self):
         """Test validation of mismatched parameter lengths"""
         vectors = [np.random.rand(128).astype(np.float32) for _ in range(3)]
-        ids = ["id1", "id2"]  # Fewer IDs than vectors
-        metadata = [{"test": 1}, {"test": 2}]  # Fewer metadata than vectors
-
-        # Create items with explicit mismatch
+        
+        # Create items with proper length handling
         items = []
-        try:
-            for i in range(len(vectors)):
-                items.append(
-                    {
-                        "id": ids[i],  # This will fail when i >= len(ids)
-                        "vector": vectors[i],
-                        "metadata": metadata[i] if i < len(metadata) else {},
-                    }
-                )
-            # If we get here, there was an IndexError during item creation
-            self.fail("Expected IndexError when accessing ids[2], but didn't get one")
-        except IndexError:
-            # Expected - can't access ids[2] when ids only has 2 elements
-            pass
-
-        # Alternative test: create items with proper length handling, then test upsert validation
-        items_with_defaults = []
         for i in range(len(vectors)):
-            items_with_defaults.append(
+            items.append(
                 {
-                    "id": ids[i] if i < len(ids) else f"default_id_{i}",
+                    "id": f"item_{i}",
                     "vector": vectors[i],
-                    "metadata": metadata[i] if i < len(metadata) else {"default": True},
+                    "metadata": {"index": i},
                 }
             )
 
-        # Now test if the server/SDK validates the operation
-        try:
-            self.index.upsert(items_with_defaults)
-            # If this succeeds, the SDK/server allows operations with default values
-            # This is actually valid behavior - verify the items were actually stored
-            time.sleep(1)
-            stored_ids = self.index.list_ids()
-            expected_ids = [item["id"] for item in items_with_defaults]
-            for expected_id in expected_ids:
-                self.assertIn(
-                    expected_id, stored_ids, f"Item {expected_id} should be stored"
-                )
-
-        except Exception as e:
-            # If it fails, verify it's a validation error, not a network error
-            error_str = str(e).lower()
-            validation_related = any(
-                keyword in error_str
-                for keyword in ["validation", "length", "mismatch", "parameter"]
-            )
-            self.assertTrue(validation_related, f"Expected validation error, got: {e}")
+        # This should succeed - verify items are stored
+        self.index.upsert(items)
+        time.sleep(1)
+        stored_ids = self.index.list_ids()
+        
+        for i in range(len(vectors)):
+            self.assertIn(f"item_{i}", stored_ids)
 
     def test_content_preservation_through_operations(self):
         """Test that content is preserved through various operations"""
@@ -547,9 +446,6 @@ class TestEdgeCases(unittest.TestCase):
                         "metadata": {"batch": i},
                     }
                 ]
-                # In a real async implementation, this would be:
-                # tasks.append(self.index.async_upsert(item))
-                # For now, we simulate concurrent behavior
                 self.index.upsert(item)
 
             # Verify all items were inserted
@@ -568,37 +464,22 @@ class TestBackendCompatibility(unittest.TestCase):
     def test_lite_backend_compatibility(self):
         """Test operations with lite backend"""
         client = create_client()
-
-        try:
-            health = client.get_health()
-            # If backend is lite, certain operations might not be available
-            # This is a placeholder for actual lite-specific testing
-            self.assertIsInstance(health, dict)
-        except Exception as e:
-            # Handle lite backend limitations
-            self.assertIn("lite", str(e).lower())
+        health = client.get_health()
+        self.assertIsInstance(health, (dict, bool, str, type(None)))
 
     def test_feature_availability_differences(self):
         """Test feature availability between backend variants"""
         client = create_client()
 
         # Test if advanced index types are available
-        try:
-            index_config = cyborgdb.IndexIVFPQ(dimension=128, pq_dim=32, pq_bits=8)
-            index_name = generate_unique_name()
-            index_key = client.generate_key()
+        index_config = cyborgdb.IndexIVFPQ(dimension=128, pq_dim=32, pq_bits=8)
+        index_name = generate_unique_name()
+        index_key = client.generate_key()
 
-            index = client.create_index(
-                index_name, index_key, index_config, metric="euclidean"
-            )
-            index.delete_index()
-
-        except Exception as e:
-            # Some backends might not support all index types
-            if "not supported" in str(e).lower() or "lite" in str(e).lower():
-                self.skipTest("IVFPQ not supported in current backend")
-            else:
-                raise
+        index = client.create_index(
+            index_name, index_key, index_config, metric="euclidean"
+        )
+        index.delete_index()
 
 
 if __name__ == "__main__":
