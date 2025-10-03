@@ -488,6 +488,34 @@ class TestBackendCompatibility(unittest.TestCase):
         )
         index.delete_index()
 
+    def test_large_metadata_handling(self):
+        """Test handling of large metadata objects"""
+        test_cases = [
+            {"name": "Large string", "metadata": {"description": "A" * 1000}},
+            {"name": "Deep nesting", "metadata": self._create_deep_nested_metadata(5)},
+            {"name": "Large array", "metadata": {"array": list(range(50))}},
+        ]
+
+        for tc in test_cases:
+            with self.subTest(tc["name"]):
+                vector = np.random.rand(128).astype(np.float32)
+                item_id = f"metadata_{tc['name'].replace(' ', '_')}"
+
+                items = [{"id": item_id, "vector": vector, "metadata": tc["metadata"]}]
+
+                self.index.upsert(items)
+                time.sleep(2)
+
+                results = self.index.get([item_id], include=["metadata"])
+                self.assertEqual(len(results), 1)
+                self.assertEqual(results[0]["id"], item_id)
+
+    def _create_deep_nested_metadata(self, depth):
+        """Helper to create deeply nested metadata"""
+        if depth <= 0:
+            return {"value": "leaf"}
+        return {"nested": self._create_deep_nested_metadata(depth - 1), "level": depth}
+
 
 if __name__ == "__main__":
     unittest.main()
