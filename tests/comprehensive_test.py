@@ -368,24 +368,31 @@ class TestEdgeCases(unittest.TestCase):
         """Test validation of mismatched parameter lengths"""
         vectors = [np.random.rand(128).astype(np.float32) for _ in range(3)]
         
-        # Create items with proper length handling
-        items = []
-        for i in range(len(vectors)):
-            items.append(
+        # Test with missing required fields - should fail
+        with self.assertRaises(Exception):
+            # Missing 'id' field
+            items_missing_id = [
                 {
-                    "id": f"item_{i}",
-                    "vector": vectors[i],
-                    "metadata": {"index": i},
+                    "vector": vectors[0],
+                    "metadata": {"index": 0},
                 }
-            )
-
-        # This should succeed - verify items are stored
-        self.index.upsert(items)
-        time.sleep(1)
-        stored_ids = self.index.list_ids()
+            ]
+            self.index.upsert(items_missing_id)
         
-        for i in range(len(vectors)):
-            self.assertIn(f"item_{i}", stored_ids)
+        # Test with missing vector - should fail
+        with self.assertRaises(Exception):
+            items_missing_vector = [
+                {
+                    "id": "test_id",
+                    "metadata": {"index": 0},
+                }
+            ]
+            self.index.upsert(items_missing_vector)
+        
+        # Test with empty items list
+        result = self.index.upsert([])
+        # Empty upsert should succeed but insert nothing
+        self.assertIsNotNone(result)
 
     def test_content_preservation_through_operations(self):
         """Test that content is preserved through various operations"""
