@@ -213,7 +213,7 @@ class TestIndexTypes(unittest.TestCase):
         invalid_config = cyborgdb.IndexIVFPQ(
             dimension=self.dimension, pq_dim=0, pq_bits=8
         )
-        
+
         with self.assertRaises(Exception) as context:
             invalid_index = self.client.create_index(
                 generate_unique_name(),
@@ -222,7 +222,7 @@ class TestIndexTypes(unittest.TestCase):
                 metric="euclidean",
             )
             invalid_index.delete_index()
-        
+
         # Verify the error is about pq_dim
         self.assertIn("pq_dim", str(context.exception).lower())
 
@@ -246,9 +246,9 @@ class TestErrorHandling(unittest.TestCase):
                 generate_unique_name(),
                 client.generate_key(),
                 index_config,
-                metric="euclidean"
+                metric="euclidean",
             )
-        
+
         error_str = str(context.exception).lower()
         auth_related = any(
             keyword in error_str
@@ -261,7 +261,9 @@ class TestErrorHandling(unittest.TestCase):
                 "403",
             ]
         )
-        self.assertTrue(auth_related, f"Expected authentication error, got: {context.exception}")
+        self.assertTrue(
+            auth_related, f"Expected authentication error, got: {context.exception}"
+        )
 
     def test_malformed_requests(self):
         """Test handling of malformed requests"""
@@ -271,9 +273,7 @@ class TestErrorHandling(unittest.TestCase):
         # Test invalid dimension
         with self.assertRaises(Exception):
             config = cyborgdb.IndexIVFFlat(dimension=-1)
-            self.client.create_index(
-                index_name, index_key, config, metric="euclidean"
-            )
+            self.client.create_index(index_name, index_key, config, metric="euclidean")
 
         # Test invalid metric
         index_config = cyborgdb.IndexIVFFlat(dimension=128)
@@ -367,7 +367,7 @@ class TestEdgeCases(unittest.TestCase):
     def test_mismatched_parameter_lengths(self):
         """Test validation of mismatched parameter lengths"""
         vectors = [np.random.rand(128).astype(np.float32) for _ in range(3)]
-        
+
         # Test with missing required fields - should fail
         with self.assertRaises(Exception):
             # Missing 'id' field
@@ -378,7 +378,7 @@ class TestEdgeCases(unittest.TestCase):
                 }
             ]
             self.index.upsert(items_missing_id)
-        
+
         # Test with missing vector - should fail
         with self.assertRaises(Exception):
             items_missing_vector = [
@@ -388,7 +388,7 @@ class TestEdgeCases(unittest.TestCase):
                 }
             ]
             self.index.upsert(items_missing_vector)
-        
+
         # Test with empty items list
         result = self.index.upsert([])
         # Empty upsert should succeed but insert nothing
