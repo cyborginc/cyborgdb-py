@@ -316,7 +316,6 @@ try:
             texts: Iterable[str],
             metadatas: Optional[List[dict]] = None,
             ids: Optional[List[str]] = None,
-            embeddings: Optional[Union[List[List[float]], np.ndarray]] = None,
             **kwargs,
         ) -> List[str]:
             """
@@ -326,10 +325,10 @@ try:
                 texts: Texts to add
                 metadatas: Optional metadata for each text
                 ids: Optional IDs for each text (generated if not provided)
-                embeddings: Optional pre-computed embeddings for each text. If provided,
-                    skips embedding generation. Should be a list of vectors or numpy array
-                    with shape (num_texts, dimension)
-                **kwargs: Additional arguments (unused)
+                **kwargs: Additional arguments including:
+                    - embeddings: Optional pre-computed embeddings for each text. If provided,
+                      skips embedding generation. Should be a list of vectors or numpy array
+                      with shape (num_texts, dimension)
 
             Returns:
                 List of IDs for the added texts
@@ -356,6 +355,7 @@ try:
                 raise ValueError("Length of metadatas must match length of texts")
 
             # Handle embeddings - either use provided vectors or generate them
+            embeddings = kwargs.get('embeddings', None)
             if embeddings is not None:
                 # Validate provided embeddings
                 if isinstance(embeddings, np.ndarray):
@@ -412,7 +412,6 @@ try:
             self,
             documents: List[Document],
             ids: Optional[List[str]] = None,
-            embeddings: Optional[Union[List[List[float]], np.ndarray]] = None,
             **kwargs,
         ) -> List[str]:
             """
@@ -421,10 +420,10 @@ try:
             Args:
                 documents: Documents to add
                 ids: Optional IDs for documents
-                embeddings: Optional pre-computed embeddings for each document. If provided,
-                    skips embedding generation. Should be a list of vectors or numpy array
-                    with shape (num_documents, dimension)
-                **kwargs: Additional arguments
+                **kwargs: Additional arguments including:
+                    - embeddings: Optional pre-computed embeddings for each document. If provided,
+                      skips embedding generation. Should be a list of vectors or numpy array
+                      with shape (num_documents, dimension)
 
             Returns:
                 List of IDs for the added documents
@@ -432,7 +431,7 @@ try:
             texts = [doc.page_content for doc in documents]
             metadatas = [doc.metadata for doc in documents]
             return self.add_texts(
-                texts, metadatas, ids=ids, embeddings=embeddings, **kwargs
+                texts, metadatas, ids=ids, **kwargs
             )
 
         def delete(
@@ -744,7 +743,6 @@ try:
             texts: Iterable[str],
             metadatas: Optional[List[dict]] = None,
             ids: Optional[List[str]] = None,
-            embeddings: Optional[Union[List[List[float]], np.ndarray]] = None,
             **kwargs,
         ) -> List[str]:
             """Async version of add_texts with optional pre-computed embeddings."""
@@ -755,7 +753,6 @@ try:
                 texts,
                 metadatas=metadatas,
                 ids=ids,
-                embeddings=embeddings,
                 **kwargs,
             )
 
@@ -763,14 +760,13 @@ try:
             self,
             documents: List[Document],
             ids: Optional[List[str]] = None,
-            embeddings: Optional[Union[List[List[float]], np.ndarray]] = None,
             **kwargs,
         ) -> List[str]:
             """Async version of add_documents with optional pre-computed embeddings."""
             import asyncio
 
             return await asyncio.to_thread(
-                self.add_documents, documents, ids=ids, embeddings=embeddings, **kwargs
+                self.add_documents, documents, ids=ids, **kwargs
             )
 
         async def adelete(
@@ -912,7 +908,10 @@ try:
 
             # Add texts if provided
             if texts:
-                store.add_texts(texts, metadatas, ids=ids, embeddings=embeddings)
+                if embeddings is not None:
+                    store.add_texts(texts, metadatas, ids=ids, embeddings=embeddings)
+                else:
+                    store.add_texts(texts, metadatas, ids=ids)
 
             if not store.index.is_trained():
                 warnings.warn("Not enough data to train index.")
@@ -924,7 +923,6 @@ try:
             cls,
             documents: List[Document],
             embedding: Union[str, Embeddings, SentenceTransformer],
-            embeddings: Optional[Union[List[List[float]], np.ndarray]] = None,
             **kwargs,
         ) -> "CyborgVectorStore":
             """
@@ -933,10 +931,11 @@ try:
             Args:
                 documents: List of documents to add
                 embedding: Embedding model
-                embeddings: Optional pre-computed embeddings for each document. If provided,
-                    skips embedding generation. Should be a list of vectors or numpy array
-                    with shape (num_documents, dimension)
-                **kwargs: Additional arguments (see from_texts)
+                **kwargs: Additional arguments including:
+                    - embeddings: Optional pre-computed embeddings for each document. If provided,
+                      skips embedding generation. Should be a list of vectors or numpy array
+                      with shape (num_documents, dimension)
+                    - Other arguments (see from_texts)
 
             Returns:
                 CyborgVectorStore instance
@@ -944,7 +943,7 @@ try:
             texts = [doc.page_content for doc in documents]
             metadatas = [doc.metadata for doc in documents]
             return cls.from_texts(
-                texts, embedding, metadatas, embeddings=embeddings, **kwargs
+                texts, embedding, metadatas, **kwargs
             )
 
     __all__ = ["CyborgVectorStore"]
