@@ -8,20 +8,21 @@ Requirements:
     pip install cyborgdb-py[langchain]
 """
 
-import uuid
 import json
+import uuid
 import warnings
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+
 import numpy as np
-from typing import List, Dict, Any, Optional, Tuple, Union, Iterable
 
 try:
-    from langchain_core.vectorstores import VectorStore, VectorStoreRetriever
     from langchain_core.documents import Document
     from langchain_core.embeddings import Embeddings
+    from langchain_core.vectorstores import VectorStore, VectorStoreRetriever
     from sentence_transformers import SentenceTransformer
 
     # Import CyborgDB components
-    from cyborgdb import Client, EncryptedIndex, IndexIVF, IndexIVFPQ, IndexIVFFlat
+    from cyborgdb import Client, EncryptedIndex, IndexIVF, IndexIVFFlat, IndexIVFPQ
 
     class CyborgVectorStore(VectorStore):
         """
@@ -355,7 +356,7 @@ try:
                 raise ValueError("Length of metadatas must match length of texts")
 
             # Handle embeddings - either use provided vectors or generate them
-            embeddings = kwargs.get('embeddings', None)
+            embeddings = kwargs.get("embeddings", None)
             if embeddings is not None:
                 # Validate provided embeddings
                 if isinstance(embeddings, np.ndarray):
@@ -430,9 +431,7 @@ try:
             """
             texts = [doc.page_content for doc in documents]
             metadatas = [doc.metadata for doc in documents]
-            return self.add_texts(
-                texts, metadatas, ids=ids, **kwargs
-            )
+            return self.add_texts(texts, metadatas, ids=ids, **kwargs)
 
         def delete(
             self, ids: Optional[List[str]] = None, delete_index: bool = False
@@ -942,9 +941,7 @@ try:
             """
             texts = [doc.page_content for doc in documents]
             metadatas = [doc.metadata for doc in documents]
-            return cls.from_texts(
-                texts, embedding, metadatas, **kwargs
-            )
+            return cls.from_texts(texts, embedding, metadatas, **kwargs)
 
     __all__ = ["CyborgVectorStore"]
 
