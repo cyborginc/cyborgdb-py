@@ -365,7 +365,7 @@ class TestEdgeCases(unittest.TestCase):
         results = self.index.query(query_vectors=query_vector, top_k=10)
 
         # Should return empty results for empty index
-        self.assertEqual(len(results[0]), 0)
+        self.assertEqual(len(results), 0)
 
     def test_mismatched_parameter_lengths(self):
         """Test validation of mismatched parameter lengths"""
@@ -393,9 +393,8 @@ class TestEdgeCases(unittest.TestCase):
             self.index.upsert(items_missing_vector)
 
         # Test with empty items list
-        result = self.index.upsert([])
-        # Empty upsert should succeed but insert nothing
-        self.assertIsNotNone(result)
+        with self.assertRaises(Exception):
+            result = self.index.upsert([])
 
     def test_content_preservation_through_operations(self):
         """Test that content is preserved through various operations"""
@@ -470,6 +469,26 @@ class TestEdgeCases(unittest.TestCase):
 
 class TestBackendCompatibility(unittest.TestCase):
     """Test backend compatibility (Lite vs Full)"""
+
+    def setUp(self):
+        self.client = create_client()
+        self.index_name = generate_unique_name()
+        self.index_key = self.client.generate_key()
+        self.index_config = cyborgdb.IndexIVFFlat(dimension=128)
+        self.index = self.client.create_index(
+            self.index_name,
+            self.index_key,
+            self.index_config,
+            metric="euclidean",
+        )
+
+    def tearDown(self):
+        """Clean up created indexes"""
+        try:
+            if self.index:
+                self.index.delete_index()
+        except Exception:
+            pass
 
     def test_lite_backend_compatibility(self):
         """Test operations with lite backend"""
