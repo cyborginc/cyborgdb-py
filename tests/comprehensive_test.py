@@ -172,7 +172,7 @@ class TestIndexTypes(unittest.TestCase):
         results = self.index.query(query_vectors=[query_vector], top_k=5)
 
         self.assertGreater(len(results[0]), 0)
-        self.assertTrue("id" in results[0][0])
+        self.assertTrue("id" in results[0])
 
     def test_ivfpq_index_creation_and_operations(self):
         """Test IVFPQ index creation with PQ parameters"""
@@ -205,8 +205,10 @@ class TestIndexTypes(unittest.TestCase):
         query_vector = self.test_vectors[0]
         results = self.index.query(query_vectors=[query_vector], top_k=5)
 
+        
+
         self.assertGreater(len(results[0]), 0)
-        self.assertTrue("id" in results[0][0])
+        self.assertTrue("id" in results[0])
 
     def test_ivfpq_parameter_validation(self):
         """Test IVFPQ parameter validation"""
@@ -360,7 +362,7 @@ class TestEdgeCases(unittest.TestCase):
     def test_empty_query_results(self):
         """Test handling of empty query results"""
         query_vector = np.random.rand(128).astype(np.float32)
-        results = self.index.query(query_vectors=[query_vector], top_k=10)
+        results = self.index.query(query_vectors=query_vector, top_k=10)
 
         # Should return empty results for empty index
         self.assertEqual(len(results[0]), 0)
