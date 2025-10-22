@@ -703,19 +703,17 @@ class TestAPIContract(unittest.TestCase):
         query_vector = self.test_vectors[0]
 
         # Test query with default include (should be ["distance", "metadata"])
+        # Single query now returns results directly (not wrapped in a list)
         results = self.index.query(query_vectors=[query_vector])
 
         self.assertIsInstance(results, list)
-        self.assertEqual(len(results), 1, "Should have 1 result for 1 query")
-
-        query_results = results[0]
-        self.assertIsInstance(query_results, list)
+        # Single query returns flat list of results
         self.assertGreater(
-            len(query_results), 0, "Query should return at least one result"
+            len(results), 0, "Query should return at least one result"
         )
 
         # Check exact structure with default include - id is always included, plus distance and metadata by default
-        for result in query_results:
+        for result in results:
             self.assertIsInstance(result, dict)
             validate_exact_keys(
                 result,
@@ -755,7 +753,7 @@ class TestAPIContract(unittest.TestCase):
             query_vectors=[query_vector], top_k=5, include=["metadata"]
         )
 
-        for result in results[0]:
+        for result in results:
             validate_exact_keys(
                 result,
                 {"id", "distance", "metadata"},
@@ -775,7 +773,7 @@ class TestAPIContract(unittest.TestCase):
         # Test with empty include (should only have id and distance)
         results = self.index.query(query_vectors=[query_vector], include=["distance"])
 
-        for result in results[0]:
+        for result in results:
             validate_exact_keys(
                 result, {"id", "distance"}, "query() result with include=[]"
             )
@@ -786,7 +784,7 @@ class TestAPIContract(unittest.TestCase):
         )
 
         # Results should have id, distance, and metadata (default include)
-        for result in results[0]:
+        for result in results:
             validate_exact_keys(
                 result,
                 {"id", "distance", "metadata"},
@@ -817,20 +815,17 @@ class TestAPIContract(unittest.TestCase):
             self.assertIn("id", results[0])
             self.assertIn("distance", results[0])
 
-        # Test Pattern 2: Single vector in nested list -> nested list return
+        # Test Pattern 2: Single vector in nested list -> flat list return (API update)
         single_vector_nested = [self.test_vectors[1].tolist()]
         results = self.index.query(query_vectors=single_vector_nested, top_k=3)
 
-        # Should return list of lists (batch format)
+        # Single query now returns flat list of results directly
         self.assertIsInstance(results, list)
-        self.assertEqual(len(results), 1, "Should have 1 result list for 1 query")
-        self.assertIsInstance(
-            results[0], list, "Batch query should return nested lists"
-        )
-        if len(results[0]) > 0:
-            self.assertIsInstance(results[0][0], dict, "Each result should be a dict")
-            self.assertIn("id", results[0][0])
-            self.assertIn("distance", results[0][0])
+        self.assertGreater(len(results), 0, "Should have results for single query")
+        if len(results) > 0:
+            self.assertIsInstance(results[0], dict, "Single query should return flat list of dicts")
+            self.assertIn("id", results[0])
+            self.assertIn("distance", results[0])
 
         # Test Pattern 3: Multiple vectors -> multiple result lists
         multiple_vectors = [
@@ -903,7 +898,7 @@ class TestAPIContract(unittest.TestCase):
             )
 
         # Test Pattern 6: Text-based query with query_contents
-        # Single text query
+        # Single text query (returns flat list directly)
         text_query = "test content for similarity search"
         results = self.index.query(query_contents=text_query, top_k=3)
 
