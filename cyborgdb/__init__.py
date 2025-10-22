@@ -8,6 +8,9 @@ from .client.client import Client, IndexConfig, IndexIVF, IndexIVFPQ, IndexIVFFl
 # Re-export from encrypted_index.py
 from .client.encrypted_index import EncryptedIndex
 
+# Re-export demo functionality
+from .demo import get_demo_api_key
+
 # Try to import LangChain integration (optional dependency)
 try:
     from .integrations.langchain import CyborgVectorStore
@@ -35,4 +38,5 @@ __all__ = [
     "IndexIVFPQ",
     "IndexIVFFlat",
     "CyborgVectorStore",
+    "get_demo_api_key",
 ]
