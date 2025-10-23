@@ -1,11 +1,11 @@
 """
-LangChain integration for CyborgDB-py REST API.
+LangChain integration for CyborgDB Python SDK.
 
 This module provides a LangChain VectorStore implementation for CyborgDB,
 enabling seamless integration with LangChain applications.
 
 Requirements:
-    pip install cyborgdb-py[langchain]
+    pip install cyborgdb[langchain]
 """
 
 import json
@@ -954,8 +954,8 @@ except ImportError as e:
 
     def _missing_dependency_error():
         raise ImportError(
-            f"To use the LangChain integration with cyborgdb-py, "
-            f"please install the required dependencies: pip install cyborgdb-py[langchain]\n"
+            f"To use the LangChain integration with cyborgdb, "
+            f"please install the required dependencies: pip install cyborgdb[langchain]\n"
             f"Original error: {_original_error}"
         )
 
