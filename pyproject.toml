@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Python Client SDK for CyborgDB: The Confidential Vector Database"
 readme = "README.md"
 requires-python = ">= 3.10"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
     {name = "Cyborg Inc."}
 ]
@@ -53,6 +53,25 @@ langchain = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["cyborgdb*"]
+exclude = ["tests*", "*.tests*", "*.tests"]
+
+[tool.setuptools]
+# Exclude files from source distribution
+include-package-data = false
+
+[tool.setuptools.package-data]
+cyborgdb = ["py.typed"]
+
+[tool.setuptools.exclude-package-data]
+"*" = [
+    "tests/*",
+    ".github/*",
+    ".openapi-generator/*",
+    "*.json",
+    "*.sh",
+    ".gitignore",
+    "CODEOWNERS",
+]
 
 [tool.setuptools_scm]
 version_scheme = "guess-next-dev"
