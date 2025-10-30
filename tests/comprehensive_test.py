@@ -205,8 +205,6 @@ class TestIndexTypes(unittest.TestCase):
         query_vector = self.test_vectors[0]
         results = self.index.query(query_vectors=[query_vector], top_k=5)
 
-        
-
         self.assertGreater(len(results[0]), 0)
         self.assertTrue("id" in results[0])
 
@@ -394,7 +392,7 @@ class TestEdgeCases(unittest.TestCase):
 
         # Test with empty items list
         with self.assertRaises(Exception):
-            result = self.index.upsert([])
+            self.index.upsert([])
 
     def test_content_preservation_through_operations(self):
         """Test that content is preserved through various operations"""

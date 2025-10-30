@@ -708,9 +708,7 @@ class TestAPIContract(unittest.TestCase):
 
         self.assertIsInstance(results, list)
         # Single query returns flat list of results
-        self.assertGreater(
-            len(results), 0, "Query should return at least one result"
-        )
+        self.assertGreater(len(results), 0, "Query should return at least one result")
 
         # Check exact structure with default include - id is always included, plus distance and metadata by default
         for result in results:
@@ -823,7 +821,9 @@ class TestAPIContract(unittest.TestCase):
         self.assertIsInstance(results, list)
         self.assertGreater(len(results), 0, "Should have results for single query")
         if len(results) > 0:
-            self.assertIsInstance(results[0], dict, "Single query should return flat list of dicts")
+            self.assertIsInstance(
+                results[0], dict, "Single query should return flat list of dicts"
+            )
             self.assertIn("id", results[0])
             self.assertIn("distance", results[0])
 
