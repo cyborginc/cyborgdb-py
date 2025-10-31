@@ -111,7 +111,11 @@ jobs:
           fi
           
           # Run all tests
-          pytest tests/ -v --cov=cyborgdb --cov-report=term-missing --cov-append --ignore=tests/test_api_contract.py
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            pytest tests/test_quick_flow.py -v --cov=cyborgdb --cov-report=term-missing --cov-append
+          else
+            pytest tests/ -v --cov=cyborgdb --cov-report=term-missing --cov-append --ignore=tests/test_api_contract.py
+          fi
           
           # Store the server pid for later cleanup
           echo "Standard server PID: $(cat server-standard.pid)"
