@@ -79,13 +79,16 @@ jobs:
           pip install '.[langchain]'
           pip install pytest pytest-cov pytest-asyncio
 
-      - name: Load API key from 1Password
-        uses: 1password/load-secrets-action@v2
-        with:
-          export-env: true
-        env:
-          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_TOKEN }}
-          CYBORGDB_API_KEY: "op://CyborgDB/CyborgDB Prod/CYBORGDB_API_KEY"
+      - name: Load Demo API Key
+        run: |
+          echo "=== Loading Demo API Key ==="
+          CYBORGDB_API_KEY=$(python -c "from cyborgdb import get_demo_api_key; print(get_demo_api_key())")
+          if [ -z "$CYBORGDB_API_KEY" ]; then
+            echo "Failed to generate demo API key"
+            exit 1
+          fi
+          echo "CYBORGDB_API_KEY=${CYBORGDB_API_KEY}" >> $GITHUB_ENV
+          echo "Demo API key loaded successfully"
 
       - name: Test
         run: |
