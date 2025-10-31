@@ -69,10 +69,17 @@ jobs:
           fetch-depth: 0  # Get full history for version detection
           fetch-tags: true  # Fetch all tags
           
+      - name: Install service dependencies
+        run: |
+          # Install CPU-only torch
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          # Install optional test dependencies
+          pip install sentence-transformers
+          
       - name: Install cyborgdb-service from source
         run: |
           # Install the server from the cloned repository
-          pip install './cyborgdb-service[embeddings]'
+          pip install ./cyborgdb-service
           
       - name: Install SDK and test dependencies
         run: |
