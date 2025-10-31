@@ -78,11 +78,18 @@ jobs:
           pip install '.[langchain]'
           pip install pytest pytest-cov pytest-asyncio
 
+      - name: Load API key from 1Password
+        uses: 1password/load-secrets-action@v2
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_TOKEN }}
+          CYBORGDB_API_KEY: "op://CyborgDB/CyborgDB Prod/CYBORGDB_API_KEY"
+
       - name: Test
         run: |
           echo "=== Testing with Standard version ==="
           # Set up environment for Standard
-          export CYBORGDB_API_KEY="${{ secrets.CYBORGDB_API_KEY }}"
           export CYBORGDB_DB_TYPE=postgres
           export CYBORGDB_CONNECTION_STRING="host=localhost port=5432 dbname=cyborgdb user=postgres password=postgres"
           export CYBORGDB_SERVICE_LOG_LEVEL=DEBUG
