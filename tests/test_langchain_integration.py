@@ -23,17 +23,8 @@ try:
     from langchain_core.embeddings import Embeddings
 
     LANGCHAIN_AVAILABLE = True
-except ImportError:
-    LANGCHAIN_AVAILABLE = False
-
-    # Define a dummy Embeddings class if langchain is not available
-    class Embeddings:
-        pass
-
-
-# Mock embedding class for testing
-if LANGCHAIN_AVAILABLE:
-
+    
+    # Define MockEmbeddings inside the try block where Embeddings is available
     class MockEmbeddings(Embeddings):
         """Mock embeddings for testing that generates semantically meaningful vectors."""
 
@@ -94,6 +85,17 @@ if LANGCHAIN_AVAILABLE:
         def embed_query(self, text: str) -> List[float]:
             """Generate embedding for a single query."""
             return self._text_to_vector(text)
+
+except ImportError:
+    LANGCHAIN_AVAILABLE = False
+
+    # Define a dummy Embeddings class if langchain is not available
+    class Embeddings:
+        pass
+    
+    # Define a dummy MockEmbeddings that won't be used
+    class MockEmbeddings:
+        pass
 
 
 @unittest.skipUnless(LANGCHAIN_AVAILABLE, "LangChain dependencies not available")
