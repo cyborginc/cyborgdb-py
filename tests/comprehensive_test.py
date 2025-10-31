@@ -466,7 +466,7 @@ class TestEdgeCases(unittest.TestCase):
 
 
 class TestBackendCompatibility(unittest.TestCase):
-    """Test backend compatibility (Lite vs Full)"""
+    """Test backend compatibility"""
 
     def setUp(self):
         self.client = create_client()
@@ -487,12 +487,6 @@ class TestBackendCompatibility(unittest.TestCase):
                 self.index.delete_index()
         except Exception:
             pass
-
-    def test_lite_backend_compatibility(self):
-        """Test operations with lite backend"""
-        client = create_client()
-        health = client.get_health()
-        self.assertIsInstance(health, (dict, bool, str, type(None)))
 
     def test_feature_availability_differences(self):
         """Test feature availability between backend variants"""
