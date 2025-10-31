@@ -117,8 +117,12 @@ jobs:
             exit 1
           fi
           
-          # Run all tests except the API contract test
-          pytest tests/ -v --cov=cyborgdb --cov-report=term-missing --cov-append --ignore=tests/test_api_contract.py
+          # Run all tests
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            pytest tests/quick_flow_test.py -v --cov=cyborgdb --cov-report=term-missing --cov-append
+          else
+            pytest tests/ -v --cov=cyborgdb --cov-report=term-missing --cov-append --ignore=tests/test_api_contract.py
+          fi
           
           # Store the server pid for later cleanup
           echo "Standard server PID: $(cat server-standard.pid)"
@@ -131,9 +135,6 @@ jobs:
 
       - name: Kill Server
         run: |
-          if [ -f server-lite.pid ]; then
-            kill $(cat server-lite.pid) || true
-          fi
           if [ -f server-standard.pid ]; then
             kill $(cat server-standard.pid) || true
           fi

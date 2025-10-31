@@ -1,0 +1,15 @@
+include README.md LICENSE pyproject.toml
+recursive-include cyborgdb *.py py.typed
+
+# Exclude everything else
+prune tests
+prune .github
+prune .openapi-generator
+global-exclude .gitignore
+global-exclude CODEOWNERS
+global-exclude *.json
+global-exclude *.sh
+exclude .openapi-generator-ignore
+exclude openapi.json
+exclude update-openapi-client.sh
+exclude CODEOWNERS
