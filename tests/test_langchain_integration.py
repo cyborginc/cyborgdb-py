@@ -23,7 +23,7 @@ try:
     from langchain_core.embeddings import Embeddings
 
     LANGCHAIN_AVAILABLE = True
-    
+
     # Define MockEmbeddings inside the try block where Embeddings is available
     class MockEmbeddings(Embeddings):
         """Mock embeddings for testing that generates semantically meaningful vectors."""
@@ -92,7 +92,7 @@ except ImportError:
     # Define a dummy Embeddings class if langchain is not available
     class Embeddings:
         pass
-    
+
     # Define a dummy MockEmbeddings that won't be used
     class MockEmbeddings:
         pass
