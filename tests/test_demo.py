@@ -159,9 +159,7 @@ class TestGetDemoApiKey(unittest.TestCase):
         # Mock connection error
         import requests
 
-        mock_post.side_effect = requests.exceptions.ConnectionError(
-            "Failed to connect"
-        )
+        mock_post.side_effect = requests.exceptions.ConnectionError("Failed to connect")
 
         # Call the function and expect ValueError
         with self.assertRaises(ValueError) as context:
