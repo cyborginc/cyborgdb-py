@@ -394,7 +394,7 @@ class TestEdgeCases(unittest.TestCase):
 
         # Test with empty items list
         with self.assertRaises(Exception):
-            result = self.index.upsert([])
+            self.index.upsert([])
 
     def test_content_preservation_through_operations(self):
         """Test that content is preserved through various operations"""
