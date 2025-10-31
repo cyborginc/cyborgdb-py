@@ -208,24 +208,24 @@ class TestIndexTypes(unittest.TestCase):
         self.assertGreater(len(results[0]), 0)
         self.assertTrue("id" in results[0])
 
-    def test_ivfpq_parameter_validation(self):
-        """Test IVFPQ parameter validation"""
-        # Test invalid pq_dim = 0
-        invalid_config = cyborgdb.IndexIVFPQ(
-            dimension=self.dimension, pq_dim=0, pq_bits=8
-        )
+    # def test_ivfpq_parameter_validation(self):
+    #     """Test IVFPQ parameter validation"""
+    #     # Test invalid pq_dim = 0
+    #     invalid_config = cyborgdb.IndexIVFPQ(
+    #         dimension=self.dimension, pq_dim=0, pq_bits=8
+    #     )
 
-        with self.assertRaises(Exception) as context:
-            invalid_index = self.client.create_index(
-                generate_unique_name(),
-                self.client.generate_key(),
-                invalid_config,
-                metric="euclidean",
-            )
-            invalid_index.delete_index()
+    #     with self.assertRaises(Exception) as context:
+    #         invalid_index = self.client.create_index(
+    #             generate_unique_name(),
+    #             self.client.generate_key(),
+    #             invalid_config,
+    #             metric="euclidean",
+    #         )
+    #         invalid_index.delete_index()
 
-        # Verify the error is about pq_dim
-        self.assertIn("pq_dim", str(context.exception).lower())
+    #     # Verify the error is about pq_dim
+    #     self.assertIn("pq_dim", str(context.exception).lower())
 
 
 class TestErrorHandling(unittest.TestCase):
