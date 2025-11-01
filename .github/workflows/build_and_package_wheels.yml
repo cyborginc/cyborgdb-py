@@ -7,7 +7,148 @@ on:
       - "v*"
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Run linting
+        run: |
+          echo "Running Ruff linter..."
+          ruff check . --output-format=github
+          echo "Checking code formatting..."
+          ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cyborgdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout SDK code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Checkout cyborgdb-service repository
+        uses: actions/checkout@v4
+        with:
+          repository: cyborginc/cyborgdb-service
+          ref: main
+          path: cyborgdb-service
+          token: ${{ secrets.CYBORGDB_SERVICE_TOKEN }}
+          fetch-depth: 0  # Get full history for version detection
+          fetch-tags: true  # Fetch all tags
+
+      - name: Install service dependencies
+        run: |
+          # Install CPU-only torch
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          # Install optional test dependencies
+          pip install sentence-transformers
+
+      - name: Install cyborgdb-service from source
+        run: |
+          # Install the server from the cloned repository
+          pip install ./cyborgdb-service
+
+      - name: Install SDK and test dependencies
+        run: |
+          pip install '.[langchain]'
+          pip install pytest pytest-cov pytest-asyncio
+
+      - name: Load Demo API Key
+        run: |
+          echo "=== Loading Demo API Key ==="
+          CYBORGDB_API_KEY=$(python -c "from cyborgdb import get_demo_api_key; print(get_demo_api_key())")
+          if [ -z "$CYBORGDB_API_KEY" ]; then
+            echo "Failed to generate demo API key"
+            exit 1
+          fi
+          echo "CYBORGDB_API_KEY=${CYBORGDB_API_KEY}" >> $GITHUB_ENV
+          echo "Demo API key loaded successfully"
+
+      - name: Test
+        run: |
+          echo "=== Running Tests with local CyborgDB Service ==="
+          # Set up environment for Standard
+          export CYBORGDB_DB_TYPE=postgres
+          export CYBORGDB_CONNECTION_STRING="host=localhost port=5432 dbname=cyborgdb user=postgres password=postgres"
+          export CYBORGDB_SERVICE_LOG_LEVEL=DEBUG
+
+          # Start the service
+          nohup cyborgdb-service > server-standard.log 2>&1 &
+          echo $! > server-standard.pid
+
+          # Wait for service to be ready
+          for i in {1..30}; do
+            if curl -fs http://localhost:8000/v1/health > /dev/null; then
+              echo "Standard service is up!"
+              break
+            fi
+            sleep 1
+          done
+
+          if ! curl -fs http://localhost:8000/v1/health > /dev/null; then
+            echo "Standard service failed to start"
+            cat server-standard.log
+            exit 1
+          fi
+
+          # Run all tests
+          pytest tests/ -v --cov=cyborgdb --cov-report=term-missing --cov-append --ignore=tests/test_api_contract.py
+
+          # Store the server pid for later cleanup
+          echo "Standard server PID: $(cat server-standard.pid)"
+
+      - name: Check API Contract
+        run: |
+          echo "=== Checking API Contract ==="
+          # Run the API contract test separately to avoid affecting coverage of other tests
+          pytest tests/test_api_contract.py -v
+
+      - name: Kill Server
+        run: |
+          if [ -f server-standard.pid ]; then
+            kill $(cat server-standard.pid) || true
+          fi
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+        continue-on-error: true
+
   build_distributions:
+    needs: [test]
     runs-on: ubuntu-latest
     permissions:
       contents: read
