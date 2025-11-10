@@ -87,29 +87,38 @@ for result in results:
 ### Advanced Usage
 
 #### Batch Queries
-
 ```python
 # Search with multiple query vectors simultaneously
 query_vectors = [
-    [0.1, 0.2, 0.3, *([0.0] * 125)],
-    [0.4, 0.5, 0.6, *([0.0] * 125)]
+    [0.1] * 128,
+    [0.2] * 128
 ]
 
-batch_results = await index.query(query_vectors, 5)
+batch_results = index.query(query_vectors=query_vectors, top_k=5)
+
+# Print the results (batch queries return list of lists)
+for i, query_results in enumerate(batch_results):
+    print(f"\nResults for query {i}:")
+    for result in query_results:
+        print(f"  ID: {result['id']}, Distance: {result['distance']}")
 ```
 
 #### Metadata Filtering
-
 ```python
 # Search with metadata filters
-results = await index.query(
-    query_vector,
-    10,      # top_k
-    1,       # n_probes
-    False,   # greedy
-    {'category': 'greeting', 'language': 'en'},  # filters
-    ['distance', 'metadata', 'contents']         # include
+query_vector = [0.1] * 128
+results = index.query(
+    query_vectors=query_vector,
+    top_k=10,
+    n_probes=1,
+    greedy=False,
+    filters={'category': 'greeting', 'language': 'en'},
+    include=['distance', 'metadata', 'contents']
 )
+
+# Print the results
+for result in results:
+    print(f"ID: {result['id']}, Distance: {result['distance']}, Metadata: {result['metadata']}")
 ```
 
 ## Documentation
