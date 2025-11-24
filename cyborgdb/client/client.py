@@ -115,7 +115,7 @@ class Client:
             raise ValueError(error_msg)
 
     @staticmethod
-    def generate_key(save: bool=False) -> bytes:
+    def generate_key(save: bool = False) -> bytes:
         """
         Generate a secure 32-byte key for use with CyborgDB indexes.
 
@@ -127,18 +127,22 @@ class Client:
         """
         if not save:
             return secrets.token_bytes(32)
-        
+
         key_path = Path.home() / ".cyborgdb" / "index_key"
         key_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         if key_path.exists():
             if key_path.stat().st_size == 32:
-                logger.warning(f"Loading existing index key from '{key_path}'.\nSaving keys is not recommended for production use.")
+                logger.warning(
+                    f"Loading existing index key from '{key_path}'.\nSaving keys is not recommended for production use."
+                )
                 return key_path.read_bytes()
-        
+
         key = secrets.token_bytes(32)
         key_path.write_bytes(key)
-        logger.warning(f"Generated new index key and saved to '{key_path}'.\nSaving keys is not recommended for production use.")
+        logger.warning(
+            f"Generated new index key and saved to '{key_path}'.\nSaving keys is not recommended for production use."
+        )
         return key
 
     def list_indexes(self) -> List[str]:
