@@ -115,10 +115,13 @@ class Client:
             raise ValueError(error_msg)
 
     @staticmethod
-    def generate_key(save=False) -> bytes:
+    def generate_key(save: bool=False) -> bytes:
         """
         Generate a secure 32-byte key for use with CyborgDB indexes.
 
+        Args:
+            save (bool): If True, save the key to a file in the user's home directory
+                         for reuse. Not recommended for production use.
         Returns:
             bytes: A cryptographically secure 32-byte key.
         """
