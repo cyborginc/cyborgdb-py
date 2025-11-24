@@ -4,6 +4,7 @@ CyborgDB REST Client
 This module provides a Python client for interacting with the CyborgDB REST API.
 """
 
+from pathlib import Path
 from typing import Dict, List, Optional, Union
 import secrets
 import logging
@@ -114,14 +115,27 @@ class Client:
             raise ValueError(error_msg)
 
     @staticmethod
-    def generate_key() -> bytes:
+    def generate_key(save=False) -> bytes:
         """
         Generate a secure 32-byte key for use with CyborgDB indexes.
 
         Returns:
             bytes: A cryptographically secure 32-byte key.
         """
-        return secrets.token_bytes(32)
+        if not save:
+            return secrets.token_bytes(32)
+        
+        key_path = Path.home() / ".cyborgdb" / "index_key"
+        key_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        if key_path.exists():
+            key_from_file = key_path.read_bytes()
+            if len(key_from_file) == 32:
+                return key_from_file
+        
+        key = secrets.token_bytes(32)
+        key_path.write_bytes(key)
+        return key
 
     def list_indexes(self) -> List[str]:
         """
