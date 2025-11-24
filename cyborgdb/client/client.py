@@ -129,10 +129,9 @@ class Client:
         key_path.parent.mkdir(parents=True, exist_ok=True)
         
         if key_path.exists():
-            key_from_file = key_path.read_bytes()
-            if len(key_from_file) == 32:
+            if key_path.stat().st_size == 32:
                 logger.warning(f"Loading existing index key from '{key_path}'.\nSaving keys is not recommended for production use.")
-                return key_from_file
+                return key_path.read_bytes()
         
         key = secrets.token_bytes(32)
         key_path.write_bytes(key)
