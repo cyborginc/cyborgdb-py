@@ -131,10 +131,12 @@ class Client:
         if key_path.exists():
             key_from_file = key_path.read_bytes()
             if len(key_from_file) == 32:
+                logger.warning(f"Loading existing index key from '{key_path}'.\nSaving keys is not recommended for production use.")
                 return key_from_file
         
         key = secrets.token_bytes(32)
         key_path.write_bytes(key)
+        logger.warning(f"Generated new index key and saved to '{key_path}'.\nSaving keys is not recommended for production use.")
         return key
 
     def list_indexes(self) -> List[str]:
