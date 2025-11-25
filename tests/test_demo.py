@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone
 
-from cyborgdb.demo import get_demo_api_key
+from cyborgdb import get_demo_api_key
 
 
 class TestGetDemoApiKey(unittest.TestCase):
