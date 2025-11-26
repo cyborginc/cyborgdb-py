@@ -58,6 +58,15 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.13'
+
+      - name: Load secrets from 1Password
+        uses: 1password/load-secrets-action@v2
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_TOKEN }}
+          PIP_EXTRA_INDEX_URL: "op://CyborgDB/CyborgDB Dev/PIP_EXTRA_INDEX_URL"
+          CYBORGDB_API_KEY: "op://CyborgDB/CyborgDB Dev/CYBORGDB_API_KEY"
           
       - name: Checkout cyborgdb-service repository
         uses: actions/checkout@v4
@@ -66,8 +75,6 @@ jobs:
           ref: main
           path: cyborgdb-service
           token: ${{ secrets.CYBORGDB_SERVICE_TOKEN }}
-          fetch-depth: 0  # Get full history for version detection
-          fetch-tags: true  # Fetch all tags
           
       - name: Install service dependencies
         run: |
@@ -79,23 +86,12 @@ jobs:
       - name: Install cyborgdb-service from source
         run: |
           # Install the server from the cloned repository
-          pip install ./cyborgdb-service
+          pip install ./cyborgdb-service --extra-index-url "${PIP_EXTRA_INDEX_URL}"
           
       - name: Install SDK and test dependencies
         run: |
           pip install '.[langchain]'
           pip install pytest pytest-cov pytest-asyncio
-
-      - name: Load Demo API Key
-        run: |
-          echo "=== Loading Demo API Key ==="
-          CYBORGDB_API_KEY=$(python -c "from cyborgdb import get_demo_api_key; print(get_demo_api_key())")
-          if [ -z "$CYBORGDB_API_KEY" ]; then
-            echo "Failed to generate demo API key"
-            exit 1
-          fi
-          echo "CYBORGDB_API_KEY=${CYBORGDB_API_KEY}" >> $GITHUB_ENV
-          echo "Demo API key loaded successfully"
 
       - name: Test
         run: |
