@@ -44,16 +44,14 @@ try:
         """
 
         @staticmethod
-        def generate_key() -> bytes:
+        def generate_key(save: bool = False) -> bytes:
             """
             Generate a secure 32-byte key for use with CyborgDB indexes.
 
             Returns:
                 bytes: A cryptographically secure 32-byte key.
             """
-            import secrets
-
-            return secrets.token_bytes(32)
+            return Client.generate_key(save=save)
 
         @staticmethod
         def _validate_index_key(index_key: bytes) -> None:
