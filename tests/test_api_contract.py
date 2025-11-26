@@ -199,12 +199,16 @@ class TestAPIContract(unittest.TestCase):
 
         # Test that explicit save=False generates a new key
         new_key = cyborgdb.Client.generate_key(save=False)
-        self.assertNotEqual(new_key, key, "Keys generated with save=False should be different")
+        self.assertNotEqual(
+            new_key, key, "Keys generated with save=False should be different"
+        )
 
         # Test that member function is able to recall the same key
         client = cyborgdb.Client(base_url=self.base_url, api_key=self.api_key)
         member_key = client.generate_key(save=True)
-        self.assertEqual(member_key, key, "Keys generated with save=True should be the same")
+        self.assertEqual(
+            member_key, key, "Keys generated with save=True should be the same"
+        )
 
         # Test that is also works as a member function
         client = cyborgdb.Client(base_url=self.base_url, api_key=self.api_key)
