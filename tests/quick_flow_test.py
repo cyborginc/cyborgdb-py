@@ -329,19 +329,50 @@ class TestUnitFlow(unittest.TestCase):
         # WAIT FOR INITIAL TRAINING TO COMPLETE
         num_retries = 60
         trained = False
+
         for attempt in range(num_retries):
             time.sleep(2)
-            if not self.index.is_training():
-                trained = self.index.is_trained()
-                if trained:
-                    print("Index is now trained.")
-                    break
+            trained = self.index.is_trained()
+            if trained:
+                print("Index is now trained.")
+                break
             else:
                 print(
                     f"Index not trained yet, retrying... ({attempt + 1}/{num_retries})"
                 )
 
         self.assertTrue(trained, "Index did not become trained in time")
+
+        # Retrain with explicit n_lists to match core test behavior
+        print(f"Retraining index with n_lists={self.n_lists}...")
+        self.index.train(n_lists=self.n_lists)
+
+        # Wait for training to finish by checking is_training status
+        for attempt in range(num_retries):
+            time.sleep(2)
+
+            is_currently_training = self.index.is_training()
+
+            if not is_currently_training:
+                # Training finished, verify it's trained
+                trained = self.index.is_trained()
+                if trained:
+                    print("Index retrained successfully.")
+                    break
+            else:
+                print(
+                    f"Index still training, retrying... ({attempt + 1}/{num_retries})"
+                )
+
+        self.assertTrue(trained, "Index did not become trained after retraining")
+
+        # Verify final state - n_lists should match what we specified
+        final_config = self.index.index_config
+        final_n_lists = final_config.get("n_lists")
+        print(f"Final n_lists: {final_n_lists}")
+        self.assertEqual(
+            final_n_lists, self.n_lists, f"Expected n_lists={self.n_lists}, got {final_n_lists}"
+        )
 
     def test_08_trained_query_should_get_perfect_recall(self):
         # TRAINED QUERY WHERE N_PROBES == N_LISTS
