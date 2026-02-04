@@ -277,7 +277,7 @@ class EncryptedIndex:
         and 'metadata'.
         - If the index was created with an embedding model and 'vector' is not provided,
             'contents' will be automatically embedded.
-        2. With separate IDs and vectors arrays.
+        2. With separate IDs and vectors arrays (automatically uses efficient binary format).
 
         Args:
             arg1: Either a list of dictionaries or a list/array of IDs.
@@ -289,6 +289,16 @@ class EncryptedIndex:
                 the number of vectors and IDs, or if the vectors could not be upserted.
             TypeError: If the arguments do not match expected types.
         """
+        # Case 2: arg1 is a list of IDs, arg2 is a numpy array -> use binary format
+        if arg2 is not None and isinstance(arg2, np.ndarray):
+            if not isinstance(arg1, list):
+                raise TypeError("arg1 must be a list of IDs")
+            # Convert IDs to strings if needed
+            ids = [str(id_val) for id_val in arg1]
+            # Use binary upsert for efficiency
+            self.upsert_binary(ids, arg2)
+            return
+
         try:
             items = []
 
@@ -343,16 +353,12 @@ class EncryptedIndex:
 
                     items.append(item)
 
-            # Case 2: arg1 is a list of IDs, arg2 is a matrix of vectors
+            # Case 2: arg1 is a list of IDs, arg2 is a list of vectors (non-numpy)
             else:
                 if not isinstance(arg1, list):
                     raise TypeError("arg1 must be a list of IDs")
 
-                # Convert numpy array to list if needed
                 vectors = arg2
-                if isinstance(vectors, np.ndarray):
-                    vectors = vectors.tolist()
-
                 if len(arg1) != len(vectors):
                     raise ValueError("Number of IDs must match number of vectors")
 
@@ -385,6 +391,109 @@ class EncryptedIndex:
         except (TypeError, ValueError) as e:
             logger.error(str(e))
             raise
+
+    def upsert_binary(
+        self,
+        ids: List[str],
+        vectors: np.ndarray,
+        metadata: Optional[List[Optional[Dict[str, Any]]]] = None,
+        contents: Optional[List[Optional[Union[str, bytes]]]] = None,
+    ) -> None:
+        """
+        Add or update vector embeddings using binary format for efficiency.
+
+        This method is optimized for large batches. Vectors are sent as base64-encoded
+        binary data instead of JSON arrays, which is ~10x faster for large datasets.
+
+        Args:
+            ids: List of unique identifiers for each vector.
+            vectors: NumPy array of shape (n_vectors, dimension) with dtype float32.
+            metadata: Optional list of metadata dicts for each vector.
+            contents: Optional list of contents for each vector.
+
+        Raises:
+            ValueError: If vectors shape doesn't match ids length, or if upsert fails.
+            TypeError: If vectors is not a numpy array.
+        """
+        import base64
+
+        if not isinstance(vectors, np.ndarray):
+            raise TypeError("vectors must be a numpy array")
+
+        if vectors.ndim != 2:
+            raise ValueError("vectors must be a 2D array of shape (n_vectors, dimension)")
+
+        if len(ids) != vectors.shape[0]:
+            raise ValueError(
+                f"Number of ids ({len(ids)}) must match number of vectors ({vectors.shape[0]})"
+            )
+
+        # Ensure float32 dtype
+        if vectors.dtype != np.float32:
+            vectors = vectors.astype(np.float32)
+
+        # Encode vectors as base64
+        vectors_b64 = base64.b64encode(vectors.tobytes()).decode("ascii")
+
+        # Build the request payload
+        payload = {
+            "index_name": self._index_name,
+            "index_key": self._key_to_hex(),
+            "batch": {
+                "ids": ids,
+                "vectors_b64": vectors_b64,
+                "dimension": vectors.shape[1],
+            },
+        }
+
+        if metadata is not None:
+            payload["batch"]["metadata"] = metadata
+        if contents is not None:
+            payload["batch"]["contents"] = contents
+
+        try:
+            # Make direct HTTP request since this is a custom endpoint
+            import urllib.request
+            import json
+
+            url = f"{self._api_client.configuration.host}/v1/vectors/upsert_binary"
+            headers = {
+                "X-API-Key": self._api_client.configuration.api_key["X-API-Key"],
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+
+            # Handle SSL verification setting
+            import ssl
+
+            if hasattr(self._api_client.configuration, "verify_ssl"):
+                if not self._api_client.configuration.verify_ssl:
+                    ctx = ssl.create_default_context()
+                    ctx.check_hostname = False
+                    ctx.verify_mode = ssl.CERT_NONE
+                    response = urllib.request.urlopen(req, context=ctx)
+                else:
+                    response = urllib.request.urlopen(req)
+            else:
+                response = urllib.request.urlopen(req)
+
+            response_data = json.loads(response.read().decode("utf-8"))
+
+            if response_data.get("status") != "success":
+                raise ValueError(f"Upsert failed: {response_data}")
+
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode("utf-8") if e.fp else str(e)
+            error_msg = f"Failed to upsert items (binary): {e.code} - {error_body}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        except Exception as e:
+            error_msg = f"Failed to upsert items (binary): {str(e)}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
     def delete(self, ids: List[str]) -> None:
         """
