@@ -17,25 +17,25 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional, Union
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional
+from cyborgdb.openapi_client.models.binary_query_batch import BinaryQueryBatch
 from typing import Optional, Set
 from typing_extensions import Self
 
-class QueryRequest(BaseModel):
+class BinaryQueryRequest(BaseModel):
     """
-    Request model for performing a similarity search in the encrypted index.  Inherits:     IndexOperationRequest: Includes `index_name` and `index_key`.  Attributes:     query_vectors (Optional[List[float]]): The vector used for the similarity search.     query_contents (Optional[str]): Text-based content used for semantic search.     top_k (Optional[int]): Number of nearest neighbors to return for each query. Defaults to 100.     n_probes (Optional[int]): Number of lists to probe during the query. Defaults to auto.     greedy (Optional[bool]): Whether to use greedy search. Defaults to False.     filters (Optional[Dict[str, Any]]): JSON-like dictionary specifying metadata filters. Defaults to {}.     include (List[str]): List of additional fields to include in the response. Defaults to `[\"distance\", \"metadata\"]`.
+    Request model for batch similarity search using binary format.  This is more efficient than BatchQueryRequest for large batches as vectors are sent as base64-encoded binary data instead of JSON arrays.  Inherits:     IndexOperationRequest: Includes `index_name` and `index_key`.  Attributes:     batch (BinaryQueryBatch): The batch of query vectors in binary format.     top_k (Optional[int]): Number of nearest neighbors to return for each query. Defaults to 100.     n_probes (Optional[int]): Number of lists to probe during the query. Defaults to auto.     greedy (Optional[bool]): Whether to use greedy search. Defaults to False.     filters (Optional[Dict[str, Any]]): JSON-like dictionary specifying metadata filters. Defaults to {}.     include (List[str]): List of additional fields to include in the response. Defaults to `[\"distance\", \"metadata\"]`.
     """ # noqa: E501
     index_key: StrictStr = Field(description="32-byte encryption key as hex string")
     index_name: StrictStr = Field(description="ID name")
-    query_vectors: Optional[List[Union[StrictFloat, StrictInt]]] = None
-    query_contents: Optional[StrictStr] = None
+    batch: BinaryQueryBatch
     top_k: Optional[StrictInt] = None
     n_probes: Optional[StrictInt] = None
     greedy: Optional[StrictBool] = None
     filters: Optional[Dict[str, Any]] = None
     include: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["index_key", "index_name", "query_vectors", "query_contents", "top_k", "n_probes", "greedy", "filters", "include"]
+    __properties: ClassVar[List[str]] = ["index_key", "index_name", "batch", "top_k", "n_probes", "greedy", "filters", "include"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -55,7 +55,7 @@ class QueryRequest(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of QueryRequest from a JSON string"""
+        """Create an instance of BinaryQueryRequest from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -76,16 +76,9 @@ class QueryRequest(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if query_vectors (nullable) is None
-        # and model_fields_set contains the field
-        if self.query_vectors is None and "query_vectors" in self.model_fields_set:
-            _dict['query_vectors'] = None
-
-        # set to None if query_contents (nullable) is None
-        # and model_fields_set contains the field
-        if self.query_contents is None and "query_contents" in self.model_fields_set:
-            _dict['query_contents'] = None
-
+        # override the default output from pydantic by calling `to_dict()` of batch
+        if self.batch:
+            _dict['batch'] = self.batch.to_dict()
         # set to None if top_k (nullable) is None
         # and model_fields_set contains the field
         if self.top_k is None and "top_k" in self.model_fields_set:
@@ -110,7 +103,7 @@ class QueryRequest(BaseModel):
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of QueryRequest from a dict"""
+        """Create an instance of BinaryQueryRequest from a dict"""
         if obj is None:
             return None
 
@@ -120,8 +113,7 @@ class QueryRequest(BaseModel):
         _obj = cls.model_validate({
             "index_key": obj.get("index_key"),
             "index_name": obj.get("index_name"),
-            "query_vectors": obj.get("query_vectors"),
-            "query_contents": obj.get("query_contents"),
+            "batch": BinaryQueryBatch.from_dict(obj["batch"]) if obj.get("batch") is not None else None,
             "top_k": obj.get("top_k"),
             "n_probes": obj.get("n_probes"),
             "greedy": obj.get("greedy"),

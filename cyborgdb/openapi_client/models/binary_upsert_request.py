@@ -17,21 +17,20 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional, Union
-from cyborgdb.openapi_client.models.contents import Contents
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
+from typing import Any, ClassVar, Dict, List
+from cyborgdb.openapi_client.models.binary_vector_batch import BinaryVectorBatch
 from typing import Optional, Set
 from typing_extensions import Self
 
-class VectorItem(BaseModel):
+class BinaryUpsertRequest(BaseModel):
     """
-    Represents a vectorized item for storage in the encrypted index.  Attributes:     id (str): Unique identifier for the vector item.     vector (Optional[List[float]]): The vector representation of the item.     contents (Optional[Union[str, bytes]]): The original text or associated content (can be string or bytes).     metadata (Optional[Dict[str, Any]]): Additional metadata associated with the item.
+    Request model for adding or updating vectors using binary format.  This is more efficient than UpsertRequest for large batches as vectors are sent as base64-encoded binary data instead of JSON arrays.  Inherits:     IndexOperationRequest: Includes `index_name` and `index_key`.  Attributes:     batch (BinaryVectorBatch): The batch of vectors in binary format.
     """ # noqa: E501
-    id: StrictStr
-    vector: Optional[List[Union[StrictFloat, StrictInt]]] = None
-    contents: Optional[Contents] = None
-    metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["id", "vector", "contents", "metadata"]
+    index_key: StrictStr = Field(description="32-byte encryption key as hex string")
+    index_name: StrictStr = Field(description="ID name")
+    batch: BinaryVectorBatch
+    __properties: ClassVar[List[str]] = ["index_key", "index_name", "batch"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -51,7 +50,7 @@ class VectorItem(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of VectorItem from a JSON string"""
+        """Create an instance of BinaryUpsertRequest from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -72,29 +71,14 @@ class VectorItem(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of contents
-        if self.contents:
-            _dict['contents'] = self.contents.to_dict()
-        # set to None if vector (nullable) is None
-        # and model_fields_set contains the field
-        if self.vector is None and "vector" in self.model_fields_set:
-            _dict['vector'] = None
-
-        # set to None if contents (nullable) is None
-        # and model_fields_set contains the field
-        if self.contents is None and "contents" in self.model_fields_set:
-            _dict['contents'] = None
-
-        # set to None if metadata (nullable) is None
-        # and model_fields_set contains the field
-        if self.metadata is None and "metadata" in self.model_fields_set:
-            _dict['metadata'] = None
-
+        # override the default output from pydantic by calling `to_dict()` of batch
+        if self.batch:
+            _dict['batch'] = self.batch.to_dict()
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of VectorItem from a dict"""
+        """Create an instance of BinaryUpsertRequest from a dict"""
         if obj is None:
             return None
 
@@ -102,10 +86,9 @@ class VectorItem(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "id": obj.get("id"),
-            "vector": obj.get("vector"),
-            "contents": Contents.from_dict(obj["contents"]) if obj.get("contents") is not None else None,
-            "metadata": obj.get("metadata")
+            "index_key": obj.get("index_key"),
+            "index_name": obj.get("index_name"),
+            "batch": BinaryVectorBatch.from_dict(obj["batch"]) if obj.get("batch") is not None else None
         })
         return _obj
 

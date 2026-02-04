@@ -17,21 +17,18 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional, Union
-from cyborgdb.openapi_client.models.contents import Contents
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
 
-class VectorItem(BaseModel):
+class BinaryQueryBatch(BaseModel):
     """
-    Represents a vectorized item for storage in the encrypted index.  Attributes:     id (str): Unique identifier for the vector item.     vector (Optional[List[float]]): The vector representation of the item.     contents (Optional[Union[str, bytes]]): The original text or associated content (can be string or bytes).     metadata (Optional[Dict[str, Any]]): Additional metadata associated with the item.
+    Represents a batch of query vectors in binary format for efficient transfer.  Attributes:     vectors_b64 (str): Base64-encoded float32 numpy array (shape: n_queries x dimension).     dimension (int): The dimension of each vector.
     """ # noqa: E501
-    id: StrictStr
-    vector: Optional[List[Union[StrictFloat, StrictInt]]] = None
-    contents: Optional[Contents] = None
-    metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["id", "vector", "contents", "metadata"]
+    vectors_b64: StrictStr
+    dimension: StrictInt
+    __properties: ClassVar[List[str]] = ["vectors_b64", "dimension"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -51,7 +48,7 @@ class VectorItem(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of VectorItem from a JSON string"""
+        """Create an instance of BinaryQueryBatch from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -72,29 +69,11 @@ class VectorItem(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of contents
-        if self.contents:
-            _dict['contents'] = self.contents.to_dict()
-        # set to None if vector (nullable) is None
-        # and model_fields_set contains the field
-        if self.vector is None and "vector" in self.model_fields_set:
-            _dict['vector'] = None
-
-        # set to None if contents (nullable) is None
-        # and model_fields_set contains the field
-        if self.contents is None and "contents" in self.model_fields_set:
-            _dict['contents'] = None
-
-        # set to None if metadata (nullable) is None
-        # and model_fields_set contains the field
-        if self.metadata is None and "metadata" in self.model_fields_set:
-            _dict['metadata'] = None
-
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of VectorItem from a dict"""
+        """Create an instance of BinaryQueryBatch from a dict"""
         if obj is None:
             return None
 
@@ -102,10 +81,8 @@ class VectorItem(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "id": obj.get("id"),
-            "vector": obj.get("vector"),
-            "contents": Contents.from_dict(obj["contents"]) if obj.get("contents") is not None else None,
-            "metadata": obj.get("metadata")
+            "vectors_b64": obj.get("vectors_b64"),
+            "dimension": obj.get("dimension")
         })
         return _obj
 

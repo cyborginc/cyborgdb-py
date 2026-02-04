@@ -6,9 +6,10 @@ This module provides the EncryptedIndex class for interacting with encrypted vec
 
 import base64
 import binascii
+import json
 import logging
 from typing import Dict, List, Optional, Union, Any
-import json
+
 import numpy as np
 
 # Import the OpenAPI generated client
@@ -26,6 +27,10 @@ try:
     from cyborgdb.openapi_client.models.list_ids_request import ListIDsRequest
     from cyborgdb.openapi_client.models.request import Request
     from cyborgdb.openapi_client.models import Contents
+    from cyborgdb.openapi_client.models.binary_upsert_request import BinaryUpsertRequest
+    from cyborgdb.openapi_client.models.binary_vector_batch import BinaryVectorBatch
+    from cyborgdb.openapi_client.models.binary_query_request import BinaryQueryRequest
+    from cyborgdb.openapi_client.models.binary_query_batch import BinaryQueryBatch
 except ImportError:
     raise ImportError(
         "Failed to import openapi_client. Make sure the OpenAPI client library is properly installed."
@@ -277,7 +282,7 @@ class EncryptedIndex:
         and 'metadata'.
         - If the index was created with an embedding model and 'vector' is not provided,
             'contents' will be automatically embedded.
-        2. With separate IDs and vectors arrays.
+        2. With separate IDs and vectors arrays (automatically uses efficient binary format).
 
         Args:
             arg1: Either a list of dictionaries or a list/array of IDs.
@@ -289,6 +294,16 @@ class EncryptedIndex:
                 the number of vectors and IDs, or if the vectors could not be upserted.
             TypeError: If the arguments do not match expected types.
         """
+        # Case 2: arg1 is a list of IDs, arg2 is a numpy array -> use binary format
+        if arg2 is not None and isinstance(arg2, np.ndarray):
+            if not isinstance(arg1, list):
+                raise TypeError("arg1 must be a list of IDs")
+            # Convert IDs to strings if needed
+            ids = [str(id_val) for id_val in arg1]
+            # Use binary upsert for efficiency
+            self.upsert_binary(ids, arg2)
+            return
+
         try:
             items = []
 
@@ -343,16 +358,12 @@ class EncryptedIndex:
 
                     items.append(item)
 
-            # Case 2: arg1 is a list of IDs, arg2 is a matrix of vectors
+            # Case 2: arg1 is a list of IDs, arg2 is a list of vectors (non-numpy)
             else:
                 if not isinstance(arg1, list):
                     raise TypeError("arg1 must be a list of IDs")
 
-                # Convert numpy array to list if needed
                 vectors = arg2
-                if isinstance(vectors, np.ndarray):
-                    vectors = vectors.tolist()
-
                 if len(arg1) != len(vectors):
                     raise ValueError("Number of IDs must match number of vectors")
 
@@ -385,6 +396,78 @@ class EncryptedIndex:
         except (TypeError, ValueError) as e:
             logger.error(str(e))
             raise
+
+    def upsert_binary(
+        self,
+        ids: List[str],
+        vectors: np.ndarray,
+        metadata: Optional[List[Optional[Dict[str, Any]]]] = None,
+        contents: Optional[List[Optional[Union[str, bytes]]]] = None,
+    ) -> None:
+        """
+        Add or update vector embeddings using binary format for efficiency.
+
+        This method is optimized for large batches. Vectors are sent as base64-encoded
+        binary data instead of JSON arrays, which can be significantly faster for large datasets.
+
+        Args:
+            ids: List of unique identifiers for each vector.
+            vectors: NumPy array of shape (n_vectors, dimension) with dtype float32.
+            metadata: Optional list of metadata dicts for each vector.
+            contents: Optional list of contents for each vector.
+
+        Raises:
+            ValueError: If vectors shape doesn't match ids length, or if upsert fails.
+            TypeError: If vectors is not a numpy array.
+        """
+        if not isinstance(vectors, np.ndarray):
+            raise TypeError("vectors must be a numpy array")
+
+        if vectors.ndim != 2:
+            raise ValueError(
+                "vectors must be a 2D array of shape (n_vectors, dimension)"
+            )
+
+        if len(ids) != vectors.shape[0]:
+            raise ValueError(
+                f"Number of ids ({len(ids)}) must match number of vectors ({vectors.shape[0]})"
+            )
+
+        # Ensure float32 dtype
+        if vectors.dtype != np.float32:
+            vectors = vectors.astype(np.float32)
+
+        # Encode vectors as base64
+        vectors_b64 = base64.b64encode(vectors.tobytes()).decode("ascii")
+
+        # Build the request using generated models
+        batch = BinaryVectorBatch(
+            ids=ids,
+            vectors_b64=vectors_b64,
+            dimension=vectors.shape[1],
+            metadata=metadata,
+            contents=contents,
+        )
+
+        request = BinaryUpsertRequest(
+            index_name=self._index_name,
+            index_key=self._key_to_hex(),
+            batch=batch,
+        )
+
+        try:
+            self._api.upsert_vectors_binary_v1_vectors_upsert_binary_post(
+                binary_upsert_request=request,
+                _headers={
+                    "X-API-Key": self._api_client.configuration.api_key["X-API-Key"],
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+            )
+        except ApiException as e:
+            error_msg = f"Failed to upsert items (binary): {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
     def delete(self, ids: List[str]) -> None:
         """
@@ -428,6 +511,9 @@ class EncryptedIndex:
         """
         Retrieve the nearest neighbors for given query vectors.
         Supports both single vector (1D) and batched vectors (2D).
+
+        For batch queries with 2D numpy arrays, automatically uses efficient
+        binary format for faster transfer.
         """
         try:
             if filters is None:
@@ -444,8 +530,15 @@ class EncryptedIndex:
                         is_single_query = True
                         vector_list = query_vectors.tolist()
                     elif query_vectors.ndim == 2:
-                        # Batch of vectors as 2D NumPy array
-                        vector_list = query_vectors.tolist()
+                        # Batch of vectors as 2D NumPy array -> use binary format
+                        return self.query_binary(
+                            query_vectors=query_vectors,
+                            top_k=top_k,
+                            n_probes=n_probes,
+                            filters=filters,
+                            include=include,
+                            greedy=greedy,
+                        )
                     else:
                         raise ValueError(
                             "Expected 1D or 2D NumPy array for `query_vectors`."
@@ -582,6 +675,95 @@ class EncryptedIndex:
 
             logger.error(traceback.format_exc())
             raise
+
+    def query_binary(
+        self,
+        query_vectors: np.ndarray,
+        top_k: Optional[int] = None,
+        n_probes: Optional[int] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        include: Optional[List[str]] = None,
+        greedy: Optional[bool] = None,
+    ) -> List[List[Dict[str, Any]]]:
+        """
+        Retrieve the nearest neighbors for given query vectors using binary format.
+
+        This method is optimized for large batch queries. Query vectors are sent as
+        base64-encoded binary data instead of JSON arrays, which is more efficient.
+
+        Args:
+            query_vectors: NumPy array of shape (n_queries, dimension) with dtype float32.
+            top_k: Number of nearest neighbors to return for each query.
+            n_probes: Number of lists to probe during the query.
+            filters: Dictionary specifying metadata filters.
+            include: List of fields to include in the response.
+            greedy: Whether to use greedy search.
+
+        Returns:
+            List of lists of result dictionaries, one list per query vector.
+
+        Raises:
+            ValueError: If query fails or vectors have wrong shape.
+            TypeError: If query_vectors is not a numpy array.
+        """
+        if not isinstance(query_vectors, np.ndarray):
+            raise TypeError("query_vectors must be a numpy array")
+
+        if query_vectors.ndim != 2:
+            raise ValueError(
+                "query_vectors must be a 2D array of shape (n_queries, dimension)"
+            )
+
+        # Ensure float32 dtype
+        if query_vectors.dtype != np.float32:
+            query_vectors = query_vectors.astype(np.float32)
+
+        # Encode vectors as base64
+        vectors_b64 = base64.b64encode(query_vectors.tobytes()).decode("ascii")
+
+        # Build the request using generated models
+        batch = BinaryQueryBatch(
+            vectors_b64=vectors_b64,
+            dimension=query_vectors.shape[1],
+        )
+
+        request = BinaryQueryRequest(
+            index_name=self._index_name,
+            index_key=self._key_to_hex(),
+            batch=batch,
+            top_k=top_k,
+            n_probes=n_probes,
+            filters=filters,
+            include=include,
+            greedy=greedy,
+        )
+
+        try:
+            response = self._api.query_vectors_binary_v1_vectors_query_binary_post(
+                binary_query_request=request,
+                _headers={
+                    "X-API-Key": self._api_client.configuration.api_key["X-API-Key"],
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+            )
+
+            # Results is an anyOf wrapper - extract actual_instance
+            results = response.results.actual_instance
+            # Convert QueryResultItem objects to dicts
+            if results and isinstance(results[0], list):
+                # Batch results: List[List[QueryResultItem]]
+                return [
+                    [item.to_dict() for item in result_list] for result_list in results
+                ]
+            else:
+                # Single query: List[QueryResultItem]
+                return [item.to_dict() for item in results]
+
+        except ApiException as e:
+            error_msg = f"Failed to query (binary): {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
     def list_ids(self) -> List[str]:
         """

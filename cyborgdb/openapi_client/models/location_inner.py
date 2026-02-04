@@ -17,30 +17,28 @@ from inspect import getfullargspec
 import json
 import pprint
 import re  # noqa: F401
-from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, ValidationError, field_validator
 from typing import Optional
-from cyborgdb.openapi_client.models.batch_query_request import BatchQueryRequest
-from cyborgdb.openapi_client.models.query_request import QueryRequest
 from typing import Union, Any, List, Set, TYPE_CHECKING, Optional, Dict
 from typing_extensions import Literal, Self
 from pydantic import Field
 
-REQUEST_ANY_OF_SCHEMAS = ["BatchQueryRequest", "QueryRequest"]
+LOCATIONINNER_ANY_OF_SCHEMAS = ["int", "str"]
 
-class Request(BaseModel):
+class LocationInner(BaseModel):
     """
-    Request
+    LocationInner
     """
 
-    # data type: QueryRequest
-    anyof_schema_1_validator: Optional[QueryRequest] = None
-    # data type: BatchQueryRequest
-    anyof_schema_2_validator: Optional[BatchQueryRequest] = None
+    # data type: str
+    anyof_schema_1_validator: Optional[StrictStr] = None
+    # data type: int
+    anyof_schema_2_validator: Optional[StrictInt] = None
     if TYPE_CHECKING:
-        actual_instance: Optional[Union[BatchQueryRequest, QueryRequest]] = None
+        actual_instance: Optional[Union[int, str]] = None
     else:
         actual_instance: Any = None
-    any_of_schemas: Set[str] = { "BatchQueryRequest", "QueryRequest" }
+    any_of_schemas: Set[str] = { "int", "str" }
 
     model_config = {
         "validate_assignment": True,
@@ -59,23 +57,23 @@ class Request(BaseModel):
 
     @field_validator('actual_instance')
     def actual_instance_must_validate_anyof(cls, v):
-        instance = Request.model_construct()
+        instance = LocationInner.model_construct()
         error_messages = []
-        # validate data type: QueryRequest
-        if not isinstance(v, QueryRequest):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `QueryRequest`")
-        else:
+        # validate data type: str
+        try:
+            instance.anyof_schema_1_validator = v
             return v
-
-        # validate data type: BatchQueryRequest
-        if not isinstance(v, BatchQueryRequest):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `BatchQueryRequest`")
-        else:
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # validate data type: int
+        try:
+            instance.anyof_schema_2_validator = v
             return v
-
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
         if error_messages:
             # no match
-            raise ValueError("No match found when setting the actual_instance in Request with anyOf schemas: BatchQueryRequest, QueryRequest. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting the actual_instance in LocationInner with anyOf schemas: int, str. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -88,22 +86,28 @@ class Request(BaseModel):
         """Returns the object represented by the json string"""
         instance = cls.model_construct()
         error_messages = []
-        # anyof_schema_1_validator: Optional[QueryRequest] = None
+        # deserialize data into str
         try:
-            instance.actual_instance = QueryRequest.from_json(json_str)
+            # validation
+            instance.anyof_schema_1_validator = json.loads(json_str)
+            # assign value to actual_instance
+            instance.actual_instance = instance.anyof_schema_1_validator
             return instance
         except (ValidationError, ValueError) as e:
-             error_messages.append(str(e))
-        # anyof_schema_2_validator: Optional[BatchQueryRequest] = None
+            error_messages.append(str(e))
+        # deserialize data into int
         try:
-            instance.actual_instance = BatchQueryRequest.from_json(json_str)
+            # validation
+            instance.anyof_schema_2_validator = json.loads(json_str)
+            # assign value to actual_instance
+            instance.actual_instance = instance.anyof_schema_2_validator
             return instance
         except (ValidationError, ValueError) as e:
-             error_messages.append(str(e))
+            error_messages.append(str(e))
 
         if error_messages:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into Request with anyOf schemas: BatchQueryRequest, QueryRequest. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into LocationInner with anyOf schemas: int, str. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -117,7 +121,7 @@ class Request(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], BatchQueryRequest, QueryRequest]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], int, str]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None
