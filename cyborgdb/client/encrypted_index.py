@@ -537,6 +537,9 @@ class EncryptedIndex:
         """
         Retrieve the nearest neighbors for given query vectors.
         Supports both single vector (1D) and batched vectors (2D).
+
+        For batch queries with 2D numpy arrays, automatically uses efficient
+        binary format for faster transfer.
         """
         try:
             if filters is None:
@@ -553,8 +556,15 @@ class EncryptedIndex:
                         is_single_query = True
                         vector_list = query_vectors.tolist()
                     elif query_vectors.ndim == 2:
-                        # Batch of vectors as 2D NumPy array
-                        vector_list = query_vectors.tolist()
+                        # Batch of vectors as 2D NumPy array -> use binary format
+                        return self.query_binary(
+                            query_vectors=query_vectors,
+                            top_k=top_k,
+                            n_probes=n_probes,
+                            filters=filters,
+                            include=include,
+                            greedy=greedy,
+                        )
                     else:
                         raise ValueError(
                             "Expected 1D or 2D NumPy array for `query_vectors`."
@@ -691,6 +701,118 @@ class EncryptedIndex:
 
             logger.error(traceback.format_exc())
             raise
+
+    def query_binary(
+        self,
+        query_vectors: np.ndarray,
+        top_k: Optional[int] = None,
+        n_probes: Optional[int] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        include: Optional[List[str]] = None,
+        greedy: Optional[bool] = None,
+    ) -> List[List[Dict[str, Any]]]:
+        """
+        Retrieve the nearest neighbors for given query vectors using binary format.
+
+        This method is optimized for large batch queries. Query vectors are sent as
+        base64-encoded binary data instead of JSON arrays, which is more efficient.
+
+        Args:
+            query_vectors: NumPy array of shape (n_queries, dimension) with dtype float32.
+            top_k: Number of nearest neighbors to return for each query.
+            n_probes: Number of lists to probe during the query.
+            filters: Dictionary specifying metadata filters.
+            include: List of fields to include in the response.
+            greedy: Whether to use greedy search.
+
+        Returns:
+            List of lists of result dictionaries, one list per query vector.
+
+        Raises:
+            ValueError: If query fails or vectors have wrong shape.
+            TypeError: If query_vectors is not a numpy array.
+        """
+        import base64
+
+        if not isinstance(query_vectors, np.ndarray):
+            raise TypeError("query_vectors must be a numpy array")
+
+        if query_vectors.ndim != 2:
+            raise ValueError("query_vectors must be a 2D array of shape (n_queries, dimension)")
+
+        # Ensure float32 dtype
+        if query_vectors.dtype != np.float32:
+            query_vectors = query_vectors.astype(np.float32)
+
+        # Encode vectors as base64
+        vectors_b64 = base64.b64encode(query_vectors.tobytes()).decode("ascii")
+
+        # Build the request payload
+        payload = {
+            "index_name": self._index_name,
+            "index_key": self._key_to_hex(),
+            "batch": {
+                "vectors_b64": vectors_b64,
+                "dimension": query_vectors.shape[1],
+            },
+        }
+
+        if top_k is not None:
+            payload["top_k"] = top_k
+        if n_probes is not None:
+            payload["n_probes"] = n_probes
+        if filters is not None:
+            payload["filters"] = filters
+        if include is not None:
+            payload["include"] = include
+        if greedy is not None:
+            payload["greedy"] = greedy
+
+        try:
+            # Make direct HTTP request since this is a custom endpoint
+            import urllib.request
+            import json
+
+            url = f"{self._api_client.configuration.host}/v1/vectors/query_binary"
+            headers = {
+                "X-API-Key": self._api_client.configuration.api_key["X-API-Key"],
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+
+            # Handle SSL verification setting
+            import ssl
+
+            if hasattr(self._api_client.configuration, "verify_ssl"):
+                if not self._api_client.configuration.verify_ssl:
+                    ctx = ssl.create_default_context()
+                    ctx.check_hostname = False
+                    ctx.verify_mode = ssl.CERT_NONE
+                    response = urllib.request.urlopen(req, context=ctx)
+                else:
+                    response = urllib.request.urlopen(req)
+            else:
+                response = urllib.request.urlopen(req)
+
+            response_data = json.loads(response.read().decode("utf-8"))
+
+            if "results" not in response_data:
+                raise ValueError(f"Query failed: unexpected response format")
+
+            return response_data["results"]
+
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode("utf-8") if e.fp else str(e)
+            error_msg = f"Failed to query (binary): {e.code} - {error_body}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        except Exception as e:
+            error_msg = f"Failed to query (binary): {str(e)}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
     def list_ids(self) -> List[str]:
         """
