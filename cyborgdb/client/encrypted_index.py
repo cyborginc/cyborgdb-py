@@ -424,7 +424,9 @@ class EncryptedIndex:
             raise TypeError("vectors must be a numpy array")
 
         if vectors.ndim != 2:
-            raise ValueError("vectors must be a 2D array of shape (n_vectors, dimension)")
+            raise ValueError(
+                "vectors must be a 2D array of shape (n_vectors, dimension)"
+            )
 
         if len(ids) != vectors.shape[0]:
             raise ValueError(
@@ -708,7 +710,9 @@ class EncryptedIndex:
             raise TypeError("query_vectors must be a numpy array")
 
         if query_vectors.ndim != 2:
-            raise ValueError("query_vectors must be a 2D array of shape (n_queries, dimension)")
+            raise ValueError(
+                "query_vectors must be a 2D array of shape (n_queries, dimension)"
+            )
 
         # Ensure float32 dtype
         if query_vectors.dtype != np.float32:
@@ -749,7 +753,9 @@ class EncryptedIndex:
             # Convert QueryResultItem objects to dicts
             if results and isinstance(results[0], list):
                 # Batch results: List[List[QueryResultItem]]
-                return [[item.to_dict() for item in result_list] for result_list in results]
+                return [
+                    [item.to_dict() for item in result_list] for result_list in results
+                ]
             else:
                 # Single query: List[QueryResultItem]
                 return [item.to_dict() for item in results]
