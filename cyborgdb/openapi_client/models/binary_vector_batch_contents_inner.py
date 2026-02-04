@@ -23,11 +23,11 @@ from typing import Union, Any, List, Set, TYPE_CHECKING, Optional, Dict
 from typing_extensions import Literal, Self
 from pydantic import Field
 
-CONTENTS_ANY_OF_SCHEMAS = ["bytearray", "str"]
+BINARYVECTORBATCHCONTENTSINNER_ANY_OF_SCHEMAS = ["bytearray", "str"]
 
-class Contents(BaseModel):
+class BinaryVectorBatchContentsInner(BaseModel):
     """
-    Contents
+    BinaryVectorBatchContentsInner
     """
 
     # data type: str
@@ -60,7 +60,7 @@ class Contents(BaseModel):
         if v is None:
             return v
 
-        instance = Contents.model_construct()
+        instance = BinaryVectorBatchContentsInner.model_construct()
         error_messages = []
         # validate data type: str
         try:
@@ -76,7 +76,7 @@ class Contents(BaseModel):
             error_messages.append(str(e))
         if error_messages:
             # no match
-            raise ValueError("No match found when setting the actual_instance in Contents with anyOf schemas: bytearray, str. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting the actual_instance in BinaryVectorBatchContentsInner with anyOf schemas: bytearray, str. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -113,7 +113,7 @@ class Contents(BaseModel):
 
         if error_messages:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into Contents with anyOf schemas: bytearray, str. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into BinaryVectorBatchContentsInner with anyOf schemas: bytearray, str. Details: " + ", ".join(error_messages))
         else:
             return instance
 

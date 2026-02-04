@@ -17,20 +17,20 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List
-from cyborgdb.openapi_client.models.location_inner import LocationInner
+from cyborgdb.openapi_client.models.binary_vector_batch import BinaryVectorBatch
 from typing import Optional, Set
 from typing_extensions import Self
 
-class ValidationError(BaseModel):
+class BinaryUpsertRequest(BaseModel):
     """
-    ValidationError
+    Request model for adding or updating vectors using binary format.  This is more efficient than UpsertRequest for large batches as vectors are sent as base64-encoded binary data instead of JSON arrays.  Inherits:     IndexOperationRequest: Includes `index_name` and `index_key`.  Attributes:     batch (BinaryVectorBatch): The batch of vectors in binary format.
     """ # noqa: E501
-    loc: List[LocationInner]
-    msg: StrictStr
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["loc", "msg", "type"]
+    index_key: StrictStr = Field(description="32-byte encryption key as hex string")
+    index_name: StrictStr = Field(description="ID name")
+    batch: BinaryVectorBatch
+    __properties: ClassVar[List[str]] = ["index_key", "index_name", "batch"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -50,7 +50,7 @@ class ValidationError(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of ValidationError from a JSON string"""
+        """Create an instance of BinaryUpsertRequest from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -71,18 +71,14 @@ class ValidationError(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of each item in loc (list)
-        _items = []
-        if self.loc:
-            for _item_loc in self.loc:
-                if _item_loc:
-                    _items.append(_item_loc.to_dict())
-            _dict['loc'] = _items
+        # override the default output from pydantic by calling `to_dict()` of batch
+        if self.batch:
+            _dict['batch'] = self.batch.to_dict()
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of ValidationError from a dict"""
+        """Create an instance of BinaryUpsertRequest from a dict"""
         if obj is None:
             return None
 
@@ -90,9 +86,9 @@ class ValidationError(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "loc": [LocationInner.from_dict(_item) for _item in obj["loc"]] if obj.get("loc") is not None else None,
-            "msg": obj.get("msg"),
-            "type": obj.get("type")
+            "index_key": obj.get("index_key"),
+            "index_name": obj.get("index_name"),
+            "batch": BinaryVectorBatch.from_dict(obj["batch"]) if obj.get("batch") is not None else None
         })
         return _obj
 

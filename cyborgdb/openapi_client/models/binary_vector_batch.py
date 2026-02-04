@@ -17,20 +17,22 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional, Union
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional
+from cyborgdb.openapi_client.models.binary_vector_batch_contents_inner import BinaryVectorBatchContentsInner
 from typing import Optional, Set
 from typing_extensions import Self
 
-class QueryResultItem(BaseModel):
+class BinaryVectorBatch(BaseModel):
     """
-    Represents a single result from a similarity search.  Attributes:     id (str): The identifier of the retrieved item.     distance (Optional[float]): Distance from the query vector (smaller = more similar).     metadata (Optional[Dict[str, Any]]): Additional metadata for the result.     vector (Optional[List[float]]): The retrieved vector (if included in response).
+    Represents a batch of vectors in binary format for efficient transfer.  Attributes:     ids (List[str]): List of unique identifiers for each vector.     vectors_b64 (str): Base64-encoded float32 numpy array (shape: n_vectors x dimension).     dimension (int): The dimension of each vector.     metadata (Optional[List[Optional[Dict[str, Any]]]]): Optional metadata for each vector.     contents (Optional[List[Optional[Union[str, bytes]]]]): Optional contents for each vector.
     """ # noqa: E501
-    id: StrictStr
-    distance: Optional[Union[StrictFloat, StrictInt]] = None
-    metadata: Optional[Dict[str, Any]] = None
-    vector: Optional[List[Union[StrictFloat, StrictInt]]] = None
-    __properties: ClassVar[List[str]] = ["id", "distance", "metadata", "vector"]
+    ids: List[StrictStr]
+    vectors_b64: StrictStr
+    dimension: StrictInt
+    metadata: Optional[List[Optional[Dict[str, Any]]]] = None
+    contents: Optional[List[Optional[BinaryVectorBatchContentsInner]]] = None
+    __properties: ClassVar[List[str]] = ["ids", "vectors_b64", "dimension", "metadata", "contents"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -50,7 +52,7 @@ class QueryResultItem(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of QueryResultItem from a JSON string"""
+        """Create an instance of BinaryVectorBatch from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -71,26 +73,28 @@ class QueryResultItem(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if distance (nullable) is None
-        # and model_fields_set contains the field
-        if self.distance is None and "distance" in self.model_fields_set:
-            _dict['distance'] = None
-
+        # override the default output from pydantic by calling `to_dict()` of each item in contents (list)
+        _items = []
+        if self.contents:
+            for _item_contents in self.contents:
+                if _item_contents:
+                    _items.append(_item_contents.to_dict())
+            _dict['contents'] = _items
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
             _dict['metadata'] = None
 
-        # set to None if vector (nullable) is None
+        # set to None if contents (nullable) is None
         # and model_fields_set contains the field
-        if self.vector is None and "vector" in self.model_fields_set:
-            _dict['vector'] = None
+        if self.contents is None and "contents" in self.model_fields_set:
+            _dict['contents'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of QueryResultItem from a dict"""
+        """Create an instance of BinaryVectorBatch from a dict"""
         if obj is None:
             return None
 
@@ -98,10 +102,11 @@ class QueryResultItem(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "id": obj.get("id"),
-            "distance": obj.get("distance"),
+            "ids": obj.get("ids"),
+            "vectors_b64": obj.get("vectors_b64"),
+            "dimension": obj.get("dimension"),
             "metadata": obj.get("metadata"),
-            "vector": obj.get("vector")
+            "contents": [BinaryVectorBatchContentsInner.from_dict(_item) for _item in obj["contents"]] if obj.get("contents") is not None else None
         })
         return _obj
 

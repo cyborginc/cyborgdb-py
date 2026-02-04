@@ -17,28 +17,28 @@ from inspect import getfullargspec
 import json
 import pprint
 import re  # noqa: F401
-from pydantic import BaseModel, ConfigDict, Field, StrictBytes, StrictStr, ValidationError, field_validator
-from typing import Optional, Tuple, Union
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, ValidationError, field_validator
+from typing import Optional
 from typing import Union, Any, List, Set, TYPE_CHECKING, Optional, Dict
 from typing_extensions import Literal, Self
 from pydantic import Field
 
-CONTENTS_ANY_OF_SCHEMAS = ["bytearray", "str"]
+LOCATIONINNER_ANY_OF_SCHEMAS = ["int", "str"]
 
-class Contents(BaseModel):
+class LocationInner(BaseModel):
     """
-    Contents
+    LocationInner
     """
 
     # data type: str
     anyof_schema_1_validator: Optional[StrictStr] = None
-    # data type: bytearray
-    anyof_schema_2_validator: Optional[Union[StrictBytes, StrictStr, Tuple[StrictStr, StrictBytes]]] = None
+    # data type: int
+    anyof_schema_2_validator: Optional[StrictInt] = None
     if TYPE_CHECKING:
-        actual_instance: Optional[Union[bytearray, str]] = None
+        actual_instance: Optional[Union[int, str]] = None
     else:
         actual_instance: Any = None
-    any_of_schemas: Set[str] = { "bytearray", "str" }
+    any_of_schemas: Set[str] = { "int", "str" }
 
     model_config = {
         "validate_assignment": True,
@@ -57,10 +57,7 @@ class Contents(BaseModel):
 
     @field_validator('actual_instance')
     def actual_instance_must_validate_anyof(cls, v):
-        if v is None:
-            return v
-
-        instance = Contents.model_construct()
+        instance = LocationInner.model_construct()
         error_messages = []
         # validate data type: str
         try:
@@ -68,7 +65,7 @@ class Contents(BaseModel):
             return v
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # validate data type: bytearray
+        # validate data type: int
         try:
             instance.anyof_schema_2_validator = v
             return v
@@ -76,7 +73,7 @@ class Contents(BaseModel):
             error_messages.append(str(e))
         if error_messages:
             # no match
-            raise ValueError("No match found when setting the actual_instance in Contents with anyOf schemas: bytearray, str. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting the actual_instance in LocationInner with anyOf schemas: int, str. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -88,9 +85,6 @@ class Contents(BaseModel):
     def from_json(cls, json_str: str) -> Self:
         """Returns the object represented by the json string"""
         instance = cls.model_construct()
-        if json_str is None:
-            return instance
-
         error_messages = []
         # deserialize data into str
         try:
@@ -101,7 +95,7 @@ class Contents(BaseModel):
             return instance
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # deserialize data into bytearray
+        # deserialize data into int
         try:
             # validation
             instance.anyof_schema_2_validator = json.loads(json_str)
@@ -113,7 +107,7 @@ class Contents(BaseModel):
 
         if error_messages:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into Contents with anyOf schemas: bytearray, str. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into LocationInner with anyOf schemas: int, str. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -127,7 +121,7 @@ class Contents(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], bytearray, str]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], int, str]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None
