@@ -415,7 +415,6 @@ class EncryptedIndex:
             ValueError: If vectors shape doesn't match ids length, or if upsert fails.
             TypeError: If vectors is not a numpy array.
         """
-        import base64
 
         if not isinstance(vectors, np.ndarray):
             raise TypeError("vectors must be a numpy array")
