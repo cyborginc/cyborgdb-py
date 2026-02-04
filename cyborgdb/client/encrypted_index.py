@@ -408,7 +408,7 @@ class EncryptedIndex:
         Add or update vector embeddings using binary format for efficiency.
 
         This method is optimized for large batches. Vectors are sent as base64-encoded
-        binary data instead of JSON arrays, which is ~10x faster for large datasets.
+        binary data instead of JSON arrays, which can be significantly faster for large datasets.
 
         Args:
             ids: List of unique identifiers for each vector.
