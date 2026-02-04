@@ -731,7 +731,6 @@ class EncryptedIndex:
             ValueError: If query fails or vectors have wrong shape.
             TypeError: If query_vectors is not a numpy array.
         """
-        import base64
 
         if not isinstance(query_vectors, np.ndarray):
             raise TypeError("query_vectors must be a numpy array")
