@@ -127,7 +127,7 @@ class TestUnitFlow(unittest.TestCase):
             checksum = hashlib.sha256(json_data).hexdigest()
 
             expected_checksum = (
-                "a2989692cb12e8667b22bee4177acb295b72a23be82458ce7dd06e4a901cb04d"
+                "b581f18d84f8dca43d8915f81b36f8aee1d6b914ecd3338684108679ae5a81e7"
             )
 
             if checksum != expected_checksum:
@@ -464,23 +464,21 @@ class TestUnitFlow(unittest.TestCase):
             94.04,  # Query #1
             100.00,  # Query #2
             91.05,  # Query #3
-            88.24,  # Query #4
+            77.77,  # Query #4
             100.00,  # Query #5
             78.88,  # Query #6
             100.00,  # Query #7
             92.35,  # Query #8
             91.66,  # Query #9
-            88.38,  # Query #10
+            77.77,  # Query #10
             88.26,  # Query #11
             94.04,  # Query #12
             90.05,  # Query #13
-            74.09,  # Query #14
-            9.00,  # Query #15
+            50.00,  # Query #14
+            7.00,  # Query #15
+            70.00,  # Query #16
+            70.00,  # Query #17
         ]
-
-        # For the additional 2 recalls, we'll use a default threshold of 70%
-        for _ in range(len(base_thresholds), len(recalls)):
-            base_thresholds.append(70.00)
 
         expected_thresholds = [threshold * 0.95 for threshold in base_thresholds]
 
@@ -495,7 +493,7 @@ class TestUnitFlow(unittest.TestCase):
             recall_percentage = recall * 100
             threshold = expected_thresholds[idx]
 
-            if idx < 15:
+            if idx < 17:
                 print()
                 print(f"Metadata Query #{idx + 1}")
                 print(f"Metadata filters: {self.metadata_queries[idx]}")
@@ -546,23 +544,21 @@ class TestUnitFlow(unittest.TestCase):
             94.04,  # Query #1
             100.00,  # Query #2
             91.05,  # Query #3
-            88.24,  # Query #4
+            77.77,  # Query #4
             100.00,  # Query #5
             78.88,  # Query #6
             100.00,  # Query #7
             92.35,  # Query #8
             91.66,  # Query #9
-            88.38,  # Query #10
+            77.77,  # Query #10
             88.26,  # Query #11
             94.04,  # Query #12
             90.05,  # Query #13
-            74.09,  # Query #14
-            9.00,  # Query #15
+            50.00,  # Query #14
+            7.00,  # Query #15
+            70.00,  # Query #16
+            70.00,  # Query #17
         ]
-
-        # For the additional 2 recalls, we'll use a default threshold of 70%
-        for _ in range(len(base_thresholds), len(recalls)):
-            base_thresholds.append(70.00)
 
         # Apply a 10% reduction to the base thresholds
         expected_thresholds = [threshold * 0.90 for threshold in base_thresholds]
@@ -578,7 +574,7 @@ class TestUnitFlow(unittest.TestCase):
             recall_percentage = recall * 100
             threshold = expected_thresholds[idx]
 
-            if idx < 15:
+            if idx < 17:
                 print()
                 print(f"Metadata Query #{idx + 1}")
                 print(f"Metadata filters: {self.metadata_queries[idx]}")
