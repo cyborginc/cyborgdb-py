@@ -304,10 +304,11 @@ class TestUnitFlow(unittest.TestCase):
         self.assertFalse(self.index.is_trained(), "Index should still be untrained")
 
     def test_06_upsert_to_trigger_auto_train(self):
-        # Upsert 2500 vectors to reach 10,000 total (triggers auto train)
-        auto_train_threshold = 10000
+        # Upsert 1 vector to exceed 10,000 and trigger auto-train
+        # (RETRAIN_THRESHOLD=10000 means auto-train triggers when num_vectors > 10000)
+        auto_train_trigger = 10001
         items = []
-        for i in range(self.num_untrained_vectors, auto_train_threshold):
+        for i in range(self.num_untrained_vectors, auto_train_trigger):
             items.append(
                 {
                     "id": str(i),
@@ -315,18 +316,20 @@ class TestUnitFlow(unittest.TestCase):
                     "metadata": self.metadata[i],
                 }
             )
+        print(f"\nUpserting {len(items)} vector(s) to trigger auto-train (total will be {auto_train_trigger})...")
         self.index.upsert(items)
 
-        # Wait for 1 second to ensure upsert is processed
+        # Wait for upsert to be processed
         time.sleep(1)
 
-        # Check if the index has all IDs up to auto_train_threshold
+        # Verify IDs are present
         results = self.index.list_ids()
-        expected_ids = [str(i) for i in range(auto_train_threshold)]
+        print(f"Total IDs in index: {len(results)}")
+        expected_ids = [str(i) for i in range(auto_train_trigger)]
         self.assertCountEqual(results, expected_ids)
 
     def test_07_wait_for_auto_train(self):
-        # WAIT FOR AUTO TRAINING TO COMPLETE (triggered at 10,000 vectors)
+        # WAIT FOR AUTO TRAINING TO COMPLETE (triggered at >10,000 vectors)
         num_retries = 60
         trained = False
 
@@ -334,18 +337,40 @@ class TestUnitFlow(unittest.TestCase):
             time.sleep(2)
             trained = self.index.is_trained()
             if trained:
-                print("Index is now trained (auto train complete).")
+                print("Index is now trained (auto-train complete).")
                 break
             else:
-                print(
-                    f"Index not trained yet, retrying... ({attempt + 1}/{num_retries})"
-                )
+                print(f"Index not trained yet, retrying... ({attempt + 1}/{num_retries})")
 
-        self.assertTrue(trained, "Index did not become trained in time")
+        self.assertTrue(trained, "Index did not become trained via auto-train in time")
 
-    def test_08_retrain_with_n_lists(self):
+    def test_08_upsert_remaining_vectors(self):
+        # Upsert remaining vectors (10001 to 49999) after auto-train
+        auto_train_trigger = 10001
+        items = []
+        for i in range(auto_train_trigger, self.total_num_vectors):
+            items.append(
+                {
+                    "id": str(i),
+                    "vector": self.vectors[i],
+                    "metadata": self.metadata[i],
+                }
+            )
+        print(f"\nUpserting {len(items)} remaining vectors (IDs {auto_train_trigger} to {self.total_num_vectors - 1})...")
+        self.index.upsert(items)
+
+        # Wait for upsert to be processed
+        time.sleep(1)
+
+        # Verify all IDs are present
+        results = self.index.list_ids()
+        print(f"Total IDs in index: {len(results)}")
+        expected_ids = [str(i) for i in range(self.total_num_vectors)]
+        self.assertCountEqual(results, expected_ids)
+
+    def test_09_retrain_with_n_lists(self):
         # Retrain with explicit n_lists to match core test behavior
-        print(f"Retraining index with n_lists={self.n_lists}...")
+        print(f"\nRetraining index with n_lists={self.n_lists} on {self.total_num_vectors} vectors...")
         self.index.train(n_lists=self.n_lists)
 
         # Wait for training to finish by checking is_training status
@@ -364,11 +389,14 @@ class TestUnitFlow(unittest.TestCase):
                     print("Index retrained successfully.")
                     break
             else:
-                print(
-                    f"Index still training, retrying... ({attempt + 1}/{num_retries})"
-                )
+                print(f"Index still training, retrying... ({attempt + 1}/{num_retries})")
 
         self.assertTrue(trained, "Index did not become trained after retraining")
+
+        # Verify all vectors are still present after training
+        results = self.index.list_ids()
+        print(f"Total IDs in index after retraining: {len(results)}")
+        self.assertEqual(len(results), self.total_num_vectors, "Vectors lost during retraining!")
 
         # Verify final state - n_lists should match what we specified
         final_config = self.index.index_config
@@ -378,33 +406,28 @@ class TestUnitFlow(unittest.TestCase):
             final_n_lists, self.n_lists, f"Expected n_lists={self.n_lists}, got {final_n_lists}"
         )
 
-    def test_09_upsert_remaining_trained_vectors(self):
-        # Upsert remaining 40,000 vectors (from 10,000 to 50,000)
-        auto_train_threshold = 10000
-        items = []
-        for i in range(auto_train_threshold, self.total_num_vectors):
-            items.append(
-                {
-                    "id": str(i),
-                    "vector": self.vectors[i],
-                    "metadata": self.metadata[i],
-                }
-            )
-        self.index.upsert(items)
-
-        # Wait for 1 second to ensure upsert is processed
-        time.sleep(1)
-
-        # Check if the index has all IDs
-        results = self.index.list_ids()
-        expected_ids = [str(i) for i in range(self.total_num_vectors)]
-        self.assertCountEqual(results, expected_ids)
-
     def test_10_trained_query_should_get_perfect_recall(self):
         # TRAINED QUERY WHERE N_PROBES == N_LISTS
+        # Debug: Check index state before query
+        num_ids = len(self.index.list_ids())
+        is_trained = self.index.is_trained()
+        index_config = self.index.index_config
+        print(f"\n=== DEBUG: Index state before query ===")
+        print(f"Total IDs in index: {num_ids}")
+        print(f"Is trained: {is_trained}")
+        print(f"Index config: {index_config}")
+
         results = self.index.query(
             query_vectors=self.queries, top_k=100, n_probes=self.n_lists
         )
+
+        # Debug: Check what IDs are being returned
+        all_returned_ids = set()
+        for query_results in results:
+            for res in query_results:
+                all_returned_ids.add(int(res["id"]))
+        print(f"Unique IDs returned across all queries: {len(all_returned_ids)}")
+        print(f"Min ID returned: {min(all_returned_ids)}, Max ID returned: {max(all_returned_ids)}")
 
         recall = check_query_results(results, self.trained_neighbors, self.num_queries)
         expected_recall = 1.0
