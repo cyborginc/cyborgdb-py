@@ -316,7 +316,9 @@ class TestUnitFlow(unittest.TestCase):
                     "metadata": self.metadata[i],
                 }
             )
-        print(f"\nUpserting {len(items)} vector(s) to trigger auto-train (total will be {auto_train_trigger})...")
+        print(
+            f"\nUpserting {len(items)} vector(s) to trigger auto-train (total will be {auto_train_trigger})..."
+        )
         self.index.upsert(items)
 
         # Wait for upsert to be processed
@@ -340,7 +342,9 @@ class TestUnitFlow(unittest.TestCase):
                 print("Index is now trained (auto-train complete).")
                 break
             else:
-                print(f"Index not trained yet, retrying... ({attempt + 1}/{num_retries})")
+                print(
+                    f"Index not trained yet, retrying... ({attempt + 1}/{num_retries})"
+                )
 
         self.assertTrue(trained, "Index did not become trained via auto-train in time")
 
@@ -356,7 +360,9 @@ class TestUnitFlow(unittest.TestCase):
                     "metadata": self.metadata[i],
                 }
             )
-        print(f"\nUpserting {len(items)} remaining vectors (IDs {auto_train_trigger} to {self.total_num_vectors - 1})...")
+        print(
+            f"\nUpserting {len(items)} remaining vectors (IDs {auto_train_trigger} to {self.total_num_vectors - 1})..."
+        )
         self.index.upsert(items)
 
         # Wait for upsert to be processed
@@ -370,7 +376,9 @@ class TestUnitFlow(unittest.TestCase):
 
     def test_09_retrain_with_n_lists(self):
         # Retrain with explicit n_lists to match core test behavior
-        print(f"\nRetraining index with n_lists={self.n_lists} on {self.total_num_vectors} vectors...")
+        print(
+            f"\nRetraining index with n_lists={self.n_lists} on {self.total_num_vectors} vectors..."
+        )
         self.index.train(n_lists=self.n_lists)
 
         # Wait for training to finish by checking is_training status
@@ -389,21 +397,27 @@ class TestUnitFlow(unittest.TestCase):
                     print("Index retrained successfully.")
                     break
             else:
-                print(f"Index still training, retrying... ({attempt + 1}/{num_retries})")
+                print(
+                    f"Index still training, retrying... ({attempt + 1}/{num_retries})"
+                )
 
         self.assertTrue(trained, "Index did not become trained after retraining")
 
         # Verify all vectors are still present after training
         results = self.index.list_ids()
         print(f"Total IDs in index after retraining: {len(results)}")
-        self.assertEqual(len(results), self.total_num_vectors, "Vectors lost during retraining!")
+        self.assertEqual(
+            len(results), self.total_num_vectors, "Vectors lost during retraining!"
+        )
 
         # Verify final state - n_lists should match what we specified
         final_config = self.index.index_config
         final_n_lists = final_config.get("n_lists")
         print(f"Final n_lists: {final_n_lists}")
         self.assertEqual(
-            final_n_lists, self.n_lists, f"Expected n_lists={self.n_lists}, got {final_n_lists}"
+            final_n_lists,
+            self.n_lists,
+            f"Expected n_lists={self.n_lists}, got {final_n_lists}",
         )
 
     def test_10_trained_query_should_get_perfect_recall(self):
@@ -412,7 +426,7 @@ class TestUnitFlow(unittest.TestCase):
         num_ids = len(self.index.list_ids())
         is_trained = self.index.is_trained()
         index_config = self.index.index_config
-        print(f"\n=== DEBUG: Index state before query ===")
+        print("\n=== DEBUG: Index state before query ===")
         print(f"Total IDs in index: {num_ids}")
         print(f"Is trained: {is_trained}")
         print(f"Index config: {index_config}")
@@ -427,7 +441,9 @@ class TestUnitFlow(unittest.TestCase):
             for res in query_results:
                 all_returned_ids.add(int(res["id"]))
         print(f"Unique IDs returned across all queries: {len(all_returned_ids)}")
-        print(f"Min ID returned: {min(all_returned_ids)}, Max ID returned: {max(all_returned_ids)}")
+        print(
+            f"Min ID returned: {min(all_returned_ids)}, Max ID returned: {max(all_returned_ids)}"
+        )
 
         recall = check_query_results(results, self.trained_neighbors, self.num_queries)
         expected_recall = 1.0
