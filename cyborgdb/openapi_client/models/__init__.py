@@ -12,6 +12,7 @@
     Do not edit the class manually.
 """  # noqa: E501
 
+
 # import models into model package
 from cyborgdb.openapi_client.models.batch_query_request import BatchQueryRequest
 from cyborgdb.openapi_client.models.binary_query_batch import BinaryQueryBatch
@@ -33,13 +34,13 @@ from cyborgdb.openapi_client.models.index_config import IndexConfig
 from cyborgdb.openapi_client.models.index_ivf_flat_model import IndexIVFFlatModel
 from cyborgdb.openapi_client.models.index_ivf_model import IndexIVFModel
 from cyborgdb.openapi_client.models.index_ivfpq_model import IndexIVFPQModel
+from cyborgdb.openapi_client.models.index_ivfsq_model import IndexIVFSQModel
 from cyborgdb.openapi_client.models.index_info_response_model import IndexInfoResponseModel
 from cyborgdb.openapi_client.models.index_list_response_model import IndexListResponseModel
 from cyborgdb.openapi_client.models.index_operation_request import IndexOperationRequest
 from cyborgdb.openapi_client.models.index_training_status_response_model import IndexTrainingStatusResponseModel
 from cyborgdb.openapi_client.models.list_ids_request import ListIDsRequest
 from cyborgdb.openapi_client.models.list_ids_response import ListIDsResponse
-from cyborgdb.openapi_client.models.location_inner import LocationInner
 from cyborgdb.openapi_client.models.query_request import QueryRequest
 from cyborgdb.openapi_client.models.query_response import QueryResponse
 from cyborgdb.openapi_client.models.query_result_item import QueryResultItem
@@ -48,5 +49,5 @@ from cyborgdb.openapi_client.models.results import Results
 from cyborgdb.openapi_client.models.train_request import TrainRequest
 from cyborgdb.openapi_client.models.upsert_request import UpsertRequest
 from cyborgdb.openapi_client.models.validation_error import ValidationError
+from cyborgdb.openapi_client.models.validation_error_loc_inner import ValidationErrorLocInner
 from cyborgdb.openapi_client.models.vector_item import VectorItem
-

@@ -17,22 +17,19 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
-from cyborgdb.openapi_client.models.validation_error_loc_inner import ValidationErrorLocInner
 from typing import Optional, Set
 from typing_extensions import Self
 
-class ValidationError(BaseModel):
+class IndexIVFSQModel(BaseModel):
     """
-    ValidationError
+    Model for configuring an IVFSQ (Inverted File with Scalar Quantization) index.  Attributes:     type (str): Index type identifier. Defaults to \"ivfsq\".     sq_bits (int): Number of bits per dimension for scalar quantization. Defaults to 8.
     """ # noqa: E501
-    loc: List[ValidationErrorLocInner]
-    msg: StrictStr
-    type: StrictStr
-    input: Optional[Any] = None
-    ctx: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["loc", "msg", "type", "input", "ctx"]
+    dimension: Optional[StrictInt] = None
+    type: Optional[StrictStr] = 'ivfsq'
+    sq_bits: Optional[StrictInt] = 8
+    __properties: ClassVar[List[str]] = ["dimension", "type", "sq_bits"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -52,7 +49,7 @@ class ValidationError(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of ValidationError from a JSON string"""
+        """Create an instance of IndexIVFSQModel from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -73,23 +70,16 @@ class ValidationError(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of each item in loc (list)
-        _items = []
-        if self.loc:
-            for _item_loc in self.loc:
-                if _item_loc:
-                    _items.append(_item_loc.to_dict())
-            _dict['loc'] = _items
-        # set to None if input (nullable) is None
+        # set to None if dimension (nullable) is None
         # and model_fields_set contains the field
-        if self.input is None and "input" in self.model_fields_set:
-            _dict['input'] = None
+        if self.dimension is None and "dimension" in self.model_fields_set:
+            _dict['dimension'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of ValidationError from a dict"""
+        """Create an instance of IndexIVFSQModel from a dict"""
         if obj is None:
             return None
 
@@ -97,11 +87,9 @@ class ValidationError(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "loc": [ValidationErrorLocInner.from_dict(_item) for _item in obj["loc"]] if obj.get("loc") is not None else None,
-            "msg": obj.get("msg"),
-            "type": obj.get("type"),
-            "input": obj.get("input"),
-            "ctx": obj.get("ctx")
+            "dimension": obj.get("dimension"),
+            "type": obj.get("type") if obj.get("type") is not None else 'ivfsq',
+            "sq_bits": obj.get("sq_bits") if obj.get("sq_bits") is not None else 8
         })
         return _obj
 
