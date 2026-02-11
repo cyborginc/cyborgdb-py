@@ -16,6 +16,7 @@ from cyborgdb.openapi_client.models import (
     IndexIVFModel as _OpenAPIIndexIVFModel,
     IndexIVFPQModel as _OpenAPIIndexIVFPQModel,
     IndexIVFFlatModel as _OpenAPIIndexIVFFlatModel,
+    IndexIVFSQModel as _OpenAPIIndexIVFSQModel,
     IndexConfig as _OpenAPIIndexConfig,
     CreateIndexRequest as _OpenAPICreateIndexRequest,
 )
@@ -29,6 +30,7 @@ try:
     from cyborgdb.openapi_client.models.index_ivf_flat_model import IndexIVFFlatModel
     from cyborgdb.openapi_client.models.index_ivf_model import IndexIVFModel
     from cyborgdb.openapi_client.models.index_ivfpq_model import IndexIVFPQModel
+    from cyborgdb.openapi_client.models.index_ivfsq_model import IndexIVFSQModel
     from cyborgdb.openapi_client.exceptions import ApiException
 except ImportError:
     raise ImportError(
@@ -46,12 +48,14 @@ __all__ = [
     "IndexIVF",
     "IndexIVFPQ",
     "IndexIVFFlat",
+    "IndexIVFSQ",
 ]
 
 # Re-export with friendly names
 IndexIVF = _OpenAPIIndexIVFModel
 IndexIVFPQ = _OpenAPIIndexIVFPQModel
 IndexIVFFlat = _OpenAPIIndexIVFFlatModel
+IndexIVFSQ = _OpenAPIIndexIVFSQModel
 IndexConfig = _OpenAPIIndexConfig
 CreateIndexRequest = _OpenAPICreateIndexRequest
 
@@ -168,7 +172,7 @@ class Client:
         index_name: str,
         index_key: bytes,
         index_config: Optional[
-            Union[IndexIVFModel, IndexIVFPQModel, IndexIVFFlatModel]
+            Union[IndexIVFModel, IndexIVFPQModel, IndexIVFFlatModel, IndexIVFSQModel]
         ] = None,
         embedding_model: Optional[str] = None,
         metric: Optional[str] = None,

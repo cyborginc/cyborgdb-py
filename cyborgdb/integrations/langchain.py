@@ -22,7 +22,14 @@ try:
     from sentence_transformers import SentenceTransformer
 
     # Import CyborgDB components
-    from cyborgdb import Client, EncryptedIndex, IndexIVF, IndexIVFFlat, IndexIVFPQ
+    from cyborgdb import (
+        Client,
+        EncryptedIndex,
+        IndexIVF,
+        IndexIVFFlat,
+        IndexIVFPQ,
+        IndexIVFSQ,
+    )
 
     class CyborgVectorStore(VectorStore):
         """
@@ -102,7 +109,7 @@ try:
                     - String model name (for SentenceTransformer)
                     - SentenceTransformer instance
                     - LangChain Embeddings instance
-                index_type: Type of index - "ivfflat", "ivf", or "ivfpq"
+                index_type: Type of index - "ivfflat", "ivf", "ivfpq", or "ivfsq"
                 index_config_params: Additional index configuration parameters
                 dimension: Embedding dimension (auto-detected if not provided)
                 metric: Distance metric - "cosine", "euclidean", or "squared_euclidean"
@@ -241,7 +248,7 @@ try:
 
         def _create_index_config(
             self, index_type: str, dimension: int, params: Dict[str, Any]
-        ) -> Union[IndexIVF, IndexIVFPQ, IndexIVFFlat]:
+        ) -> Union[IndexIVF, IndexIVFPQ, IndexIVFFlat, IndexIVFSQ]:
             """Create the appropriate index configuration."""
             if index_type == "ivf":
                 return IndexIVF(dimension=dimension)
@@ -255,9 +262,15 @@ try:
                 )
             elif index_type == "ivfflat":
                 return IndexIVFFlat(dimension=dimension)
+            elif index_type == "ivfsq":
+                sq_bits = params.get("sq_bits", 8)
+                return IndexIVFSQ(
+                    dimension=dimension,
+                    sq_bits=sq_bits,
+                )
             else:
                 raise ValueError(
-                    f"Invalid index type: {index_type}. Must be 'ivf', 'ivfpq', or 'ivfflat'"
+                    f"Invalid index type: {index_type}. Must be 'ivf', 'ivfpq', 'ivfflat', or 'ivfsq'"
                 )
 
         def get_embeddings(self, texts: Union[str, List[str]]) -> np.ndarray:
@@ -872,7 +885,7 @@ try:
 
             # Handle index config
             index_config_params = kwargs.pop("index_config_params", {})
-            for key in {"pq_dim", "pq_bits"}:
+            for key in {"pq_dim", "pq_bits", "sq_bits"}:
                 if key in kwargs:
                     index_config_params[key] = kwargs.pop(key)
 
