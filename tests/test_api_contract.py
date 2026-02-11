@@ -147,6 +147,7 @@ class TestAPIContract(unittest.TestCase):
             "IndexIVF",
             "IndexIVFPQ",
             "IndexIVFFlat",
+            "IndexIVFSQ",
         }
 
         # These may have additional internal exports, but we check minimums
@@ -336,6 +337,13 @@ class TestAPIContract(unittest.TestCase):
         self.assertEqual(config3.pq_dim, 64)
         self.assertEqual(config3.pq_bits, 8)
         self.assertEqual(config3.type, "ivfpq")
+
+        # Test IndexIVFSQ - check parameters
+        config4 = cyborgdb.IndexIVFSQ(dimension=self.dimension, sq_bits=8)
+        self.assertIsInstance(config4, cyborgdb.IndexIVFSQ)
+        self.assertEqual(config4.dimension, self.dimension)
+        self.assertEqual(config4.sq_bits, 8)
+        self.assertEqual(config4.type, "ivfsq")
 
     def test_08_client_create_index(self):
         """Test Client.create_index() with strict parameter validation."""
