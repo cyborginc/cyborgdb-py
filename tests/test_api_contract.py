@@ -144,7 +144,6 @@ class TestAPIContract(unittest.TestCase):
             "Client",
             "EncryptedIndex",
             "IndexConfig",
-            "IndexIVF",
             "IndexIVFPQ",
             "IndexIVFFlat",
             "IndexIVFSQ",
@@ -314,36 +313,28 @@ class TestAPIContract(unittest.TestCase):
 
     def test_07_index_config_classes(self):
         """Test index configuration class signatures and instantiation."""
-        # Test IndexIVF with no arguments
-        config1 = cyborgdb.IndexIVF()
-        # IndexIVF is actually IndexIVFModel, not IndexConfig
-        self.assertIsInstance(config1, cyborgdb.IndexIVF)
-        # Verify it has expected attributes
-        self.assertTrue(hasattr(config1, "type"))
-        self.assertEqual(config1.type, "ivf")
-
         # Test IndexIVFFlat - Pydantic models use **data so can't inspect individual params
         # Instead test that it accepts the dimension parameter correctly
 
-        config2 = cyborgdb.IndexIVFFlat(dimension=self.dimension)
-        self.assertIsInstance(config2, cyborgdb.IndexIVFFlat)
-        self.assertEqual(config2.dimension, self.dimension)
-        self.assertEqual(config2.type, "ivfflat")
+        config1 = cyborgdb.IndexIVFFlat(dimension=self.dimension)
+        self.assertIsInstance(config1, cyborgdb.IndexIVFFlat)
+        self.assertEqual(config1.dimension, self.dimension)
+        self.assertEqual(config1.type, "ivfflat")
 
         # Test IndexIVFPQ - check required parameters
-        config3 = cyborgdb.IndexIVFPQ(dimension=self.dimension, pq_dim=64, pq_bits=8)
-        self.assertIsInstance(config3, cyborgdb.IndexIVFPQ)
-        self.assertEqual(config3.dimension, self.dimension)
-        self.assertEqual(config3.pq_dim, 64)
-        self.assertEqual(config3.pq_bits, 8)
-        self.assertEqual(config3.type, "ivfpq")
+        config2 = cyborgdb.IndexIVFPQ(dimension=self.dimension, pq_dim=64, pq_bits=8)
+        self.assertIsInstance(config2, cyborgdb.IndexIVFPQ)
+        self.assertEqual(config2.dimension, self.dimension)
+        self.assertEqual(config2.pq_dim, 64)
+        self.assertEqual(config2.pq_bits, 8)
+        self.assertEqual(config2.type, "ivfpq")
 
         # Test IndexIVFSQ - check parameters
-        config4 = cyborgdb.IndexIVFSQ(dimension=self.dimension, sq_bits=8)
-        self.assertIsInstance(config4, cyborgdb.IndexIVFSQ)
-        self.assertEqual(config4.dimension, self.dimension)
-        self.assertEqual(config4.sq_bits, 8)
-        self.assertEqual(config4.type, "ivfsq")
+        config3 = cyborgdb.IndexIVFSQ(dimension=self.dimension, sq_bits=8)
+        self.assertIsInstance(config3, cyborgdb.IndexIVFSQ)
+        self.assertEqual(config3.dimension, self.dimension)
+        self.assertEqual(config3.sq_bits, 8)
+        self.assertEqual(config3.type, "ivfsq")
 
     def test_08_client_create_index(self):
         """Test Client.create_index() with strict parameter validation."""
@@ -366,31 +357,6 @@ class TestAPIContract(unittest.TestCase):
         self.assertEqual(created_config.get("dimension"), self.dimension)
         self.assertEqual(created_config.get("index_type"), "ivfflat")
         self.assertEqual(created_config.get("metric"), "cosine")
-
-        # Clean up this index
-        index.delete_index()
-        time.sleep(1)
-
-        # Create new index config
-        index_config = cyborgdb.IndexIVF()
-
-        # Test with keyword arguments
-        index = self.client.create_index(
-            index_name=self.index_name,
-            index_key=self.index_key,
-            index_config=index_config,
-            metric="squared_euclidean",
-        )
-
-        self.assertIsInstance(index, cyborgdb.EncryptedIndex)
-
-        # Check index config
-        created_config = index.index_config
-        print(f"Created config: {created_config}")
-        self.assertEqual(index.index_name, self.index_name)
-        self.assertEqual(created_config.get("dimension"), 0)
-        self.assertEqual(created_config.get("index_type"), "ivf")
-        self.assertEqual(created_config.get("metric"), "squared_euclidean")
 
         # Clean up this index
         index.delete_index()

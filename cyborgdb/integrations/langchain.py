@@ -25,7 +25,6 @@ try:
     from cyborgdb import (
         Client,
         EncryptedIndex,
-        IndexIVF,
         IndexIVFFlat,
         IndexIVFPQ,
         IndexIVFSQ,
@@ -109,7 +108,7 @@ try:
                     - String model name (for SentenceTransformer)
                     - SentenceTransformer instance
                     - LangChain Embeddings instance
-                index_type: Type of index - "ivfflat", "ivf", "ivfpq", or "ivfsq"
+                index_type: Type of index - "ivfflat", "ivfpq", or "ivfsq"
                 index_config_params: Additional index configuration parameters
                 dimension: Embedding dimension (auto-detected if not provided)
                 metric: Distance metric - "cosine", "euclidean", or "squared_euclidean"
@@ -248,11 +247,9 @@ try:
 
         def _create_index_config(
             self, index_type: str, dimension: int, params: Dict[str, Any]
-        ) -> Union[IndexIVF, IndexIVFPQ, IndexIVFFlat, IndexIVFSQ]:
+        ) -> Union[IndexIVFPQ, IndexIVFFlat, IndexIVFSQ]:
             """Create the appropriate index configuration."""
-            if index_type == "ivf":
-                return IndexIVF(dimension=dimension)
-            elif index_type == "ivfpq":
+            if index_type == "ivfpq":
                 pq_dim = params.get("pq_dim", 8)
                 pq_bits = params.get("pq_bits", 8)
                 return IndexIVFPQ(
@@ -270,7 +267,7 @@ try:
                 )
             else:
                 raise ValueError(
-                    f"Invalid index type: {index_type}. Must be 'ivf', 'ivfpq', 'ivfflat', or 'ivfsq'"
+                    f"Invalid index type: {index_type}. Must be 'ivfpq', 'ivfflat', or 'ivfsq'"
                 )
 
         def get_embeddings(self, texts: Union[str, List[str]]) -> np.ndarray:

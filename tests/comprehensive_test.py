@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Additional test coverage for Python SDK to achieve standardization
-Implements missing SSL, IVFPQ, IVF, error handling, and edge case tests
+Implements missing SSL, IVFPQ, error handling, and edge case tests
 """
 
 import unittest
@@ -119,7 +119,7 @@ class TestSSLVerification(unittest.TestCase):
 
 
 class TestIndexTypes(unittest.TestCase):
-    """Test all index types (IVF, IVFPQ) that are missing from current Python tests"""
+    """Test all index types (IVFPQ) that are missing from current Python tests"""
 
     @classmethod
     def setUpClass(cls):
@@ -138,41 +138,6 @@ class TestIndexTypes(unittest.TestCase):
                 self.index.delete_index()
         except Exception:
             pass
-
-    def test_ivf_index_creation_and_operations(self):
-        """Test IVF index creation, upsert, and query operations"""
-        index_config = cyborgdb.IndexIVF(dimension=self.dimension)
-
-        self.index = self.client.create_index(
-            self.index_name,
-            self.index_key,
-            index_config,
-            metric="euclidean",
-        )
-
-        # Verify index properties
-        self.assertEqual(self.index.index_type, "ivf")
-
-        # Test upsert
-        items = []
-        for i in range(len(self.test_vectors)):
-            items.append(
-                {
-                    "id": str(i),
-                    "vector": self.test_vectors[i],
-                    "metadata": {"test_id": i},
-                }
-            )
-
-        self.index.upsert(items)
-        time.sleep(1)  # Allow processing
-
-        # Test query
-        query_vector = self.test_vectors[0]
-        results = self.index.query(query_vectors=[query_vector], top_k=5)
-
-        self.assertGreater(len(results[0]), 0)
-        self.assertTrue("id" in results[0])
 
     def test_ivfpq_index_creation_and_operations(self):
         """Test IVFPQ index creation with PQ parameters"""

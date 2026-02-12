@@ -6,7 +6,6 @@
 from .client.client import (
     Client,
     IndexConfig,
-    IndexIVF,
     IndexIVFPQ,
     IndexIVFFlat,
     IndexIVFSQ,
@@ -41,7 +40,6 @@ __all__ = [
     "Client",
     "EncryptedIndex",
     "IndexConfig",
-    "IndexIVF",
     "IndexIVFPQ",
     "IndexIVFFlat",
     "IndexIVFSQ",

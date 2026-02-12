@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import time
 from dotenv import load_dotenv
-from cyborgdb import Client, EncryptedIndex, IndexIVF
+from cyborgdb import Client, EncryptedIndex, IndexIVFFlat
 
 # Load environment variables from .env.local
 load_dotenv(".env.local")
@@ -27,7 +27,7 @@ class ClientIntegrationTest(unittest.TestCase):
 
         # Create a test index
         self.index_name = f"test_index_{int(time.time())}"
-        self.index_config = IndexIVF(dimension=128)
+        self.index_config = IndexIVFFlat(dimension=128)
 
         # try:
         self.index = self.client.create_index(
