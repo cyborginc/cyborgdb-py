@@ -386,6 +386,29 @@ class TestAPIContract(unittest.TestCase):
         index.delete_index()
         time.sleep(1)
 
+        # Create new index config for IVFSQ
+        index_config = cyborgdb.IndexIVFSQ(sq_bits=8)
+
+        # Test with IVFSQ
+        index = self.client.create_index(
+            index_name=self.index_name,
+            index_key=self.index_key,
+            index_config=index_config,
+        )
+
+        # Check index config
+        created_config = index.index_config
+        print(f"Created config: {created_config}")
+        self.assertEqual(index.index_name, self.index_name)
+        self.assertEqual(created_config.get("dimension"), 0)
+        self.assertEqual(created_config.get("index_type"), "ivfsq")
+        self.assertEqual(created_config.get("metric"), "euclidean")
+        self.assertEqual(created_config.get("sq_bits"), 8)
+
+        # Clean up this index
+        index.delete_index()
+        time.sleep(1)
+
         # Test with all defaults + embedding model
         index = self.client.create_index(
             index_name=self.index_name,

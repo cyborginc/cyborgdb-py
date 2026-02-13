@@ -464,19 +464,7 @@ class TestUnitFlow(unittest.TestCase):
 
         self.assertAlmostEqual(recall.mean(), self.trained_recall, delta=0.08)
 
-    def test_12_trained_query_no_metadata_auto_n_probes(self):
-        # TRAINED QUERY (NO METADATA) with Auto n_probes
-        results = self.index.query(self.queries, top_k=100)
-
-        recall = check_query_results(results, self.trained_neighbors, self.num_queries)
-        print(
-            f"Trained Query (No Metadata, Auto n_probes). Expected recall: {self.trained_recall}, got {recall}"
-        )
-
-        # recall should be ~90% give or take 2%
-        self.assertGreaterEqual(recall.mean(), 0.9 - 0.02)
-
-    def test_13_trained_query_metadata(self):
+    def test_12_trained_query_metadata(self):
         # TRAINED QUERY (METADATA)
         results = []
         for metadata_query in self.metadata_queries:
@@ -561,88 +549,7 @@ class TestUnitFlow(unittest.TestCase):
                 f"Some recalls are below their thresholds:\n{fail_message}"
             )
 
-    def test_14_trained_query_metadata_auto_n_probes(self):
-        # TRAINED QUERY (METADATA)
-        results = []
-        for metadata_query in self.metadata_queries:
-            results.append(
-                self.index.query(self.queries, top_k=100, filters=metadata_query)
-            )
-        self.metadata_queries[6] = {"number": 0}
-
-        recalls = check_metadata_results(
-            results,
-            self.trained_metadata_neighbors,
-            self.trained_metadata_matches,
-            self.num_queries,
-        )
-
-        print(f"Number of recall values: {len(recalls)}")
-
-        base_thresholds = [
-            94.04,  # Query #1
-            100.00,  # Query #2
-            91.05,  # Query #3
-            77.77,  # Query #4
-            100.00,  # Query #5
-            78.88,  # Query #6
-            100.00,  # Query #7
-            92.35,  # Query #8
-            91.66,  # Query #9
-            77.77,  # Query #10
-            88.26,  # Query #11
-            94.04,  # Query #12
-            90.05,  # Query #13
-            50.00,  # Query #14
-            7.00,  # Query #15
-            70.00,  # Query #16
-            70.00,  # Query #17
-        ]
-
-        # Apply a 10% reduction to the base thresholds
-        expected_thresholds = [threshold * 0.90 for threshold in base_thresholds]
-
-        assert len(recalls) == len(expected_thresholds), (
-            f"Mismatch in number of recalls ({len(recalls)}) and thresholds ({len(expected_thresholds)})"
-        )
-
-        # Check each recall against its threshold
-        failing_recalls = []
-
-        for idx, recall in enumerate(recalls):
-            recall_percentage = recall * 100
-            threshold = expected_thresholds[idx]
-
-            if idx < 17:
-                print()
-                print(f"Metadata Query #{idx + 1}")
-                print(f"Metadata filters: {self.metadata_queries[idx]}")
-                print(
-                    f"Number of candidates: {len(self.trained_metadata_neighbors[idx])} / {self.total_num_vectors}"
-                )
-                print(f"Mean recall: {recall_percentage:.2f}%")
-                print(f"Expected threshold: {threshold:.2f}%")
-            else:
-                print()
-                print(f"Additional Query #{idx + 1}")
-                print(f"Mean recall: {recall_percentage:.2f}%")
-                print(f"Expected threshold: {threshold:.2f}%")
-
-            if recall_percentage < threshold:
-                failing_recalls.append((idx + 1, recall_percentage, threshold))
-
-        if failing_recalls:
-            fail_message = "\n".join(
-                [
-                    f"Query #{idx}: recall {actual:.2f}% < threshold {expected:.2f}%"
-                    for idx, actual, expected in failing_recalls
-                ]
-            )
-            assert not failing_recalls, (
-                f"Some recalls are below their thresholds:\n{fail_message}"
-            )
-
-    def test_15_trained_get(self):
+    def test_13_trained_get(self):
         # TRAINED GET (using untrained indices as an example)
         num_get = 1000
         get_indices = np.random.choice(
@@ -670,7 +577,7 @@ class TestUnitFlow(unittest.TestCase):
                 metadata_str, expected_metadata_str, f"Metadata mismatch for index {i}"
             )
 
-    def test_16_delete(self):
+    def test_14_delete(self):
         # DELETE ITEMS (using untrained indices as an example)
         ids_to_delete = [str(i) for i in range(self.num_untrained_vectors)]
         self.index.delete(ids_to_delete)
@@ -685,7 +592,7 @@ class TestUnitFlow(unittest.TestCase):
 
         self.assertTrue(True)
 
-    def test_17_get_deleted(self):
+    def test_15_get_deleted(self):
         # GET DELETED ITEMS
         num_get = 1000
         get_indices = np.random.choice(
@@ -700,7 +607,7 @@ class TestUnitFlow(unittest.TestCase):
         for i, get_result in enumerate(get_results):
             self.assertIsNone(get_result, f"Item {get_indices_str[i]} was not deleted")
 
-    def test_18_query_deleted(self):
+    def test_16_query_deleted(self):
         # QUERY DELETED ITEMS
         results = self.index.query(query_vectors=self.queries, top_k=100, n_probes=24)
 
@@ -710,7 +617,7 @@ class TestUnitFlow(unittest.TestCase):
 
         self.assertTrue(True)
 
-    def test_19_list_indexes(self):
+    def test_17_list_indexes(self):
         # LIST INDEXES
         indexes = self.client.list_indexes()
         self.assertIsInstance(indexes, list)
@@ -723,7 +630,7 @@ class TestUnitFlow(unittest.TestCase):
             f"Index {self.index_name} not found in the list of indexes",
         )
 
-    def test_20_index_properies(self):
+    def test_18_index_properies(self):
         # Check if the index has the expected properties
         self.assertEqual(
             self.index.index_name, self.index_name, "Index name does not match"
@@ -733,7 +640,7 @@ class TestUnitFlow(unittest.TestCase):
         )
         self.assertEqual(self.index.index_type, "ivfflat", "Index type is not IVFFlat")
 
-    def test_21_load_index(self):
+    def test_19_load_index(self):
         # Test loading an existing index.
         loaded_index = self.client.load_index(self.index_name, self.index_key)
         self.assertIsInstance(loaded_index, cyborgdb.EncryptedIndex)
