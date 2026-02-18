@@ -175,9 +175,7 @@ class TestIndexTypes(unittest.TestCase):
 
     def test_ivfsq_index_creation_and_operations(self):
         """Test IVFSQ index creation with SQ parameters"""
-        index_config = cyborgdb.IndexIVFSQ(
-            dimension=self.dimension, sq_bits=8
-        )
+        index_config = cyborgdb.IndexIVFSQ(dimension=self.dimension, sq_bits=8)
 
         self.index = self.client.create_index(
             self.index_name, self.index_key, index_config, metric="euclidean"
