@@ -630,7 +630,7 @@ class TestUnitFlow(unittest.TestCase):
             f"Index {self.index_name} not found in the list of indexes",
         )
 
-    def test_18_index_properies(self):
+    def test_18_index_properties(self):
         # Check if the index has the expected properties
         self.assertEqual(
             self.index.index_name, self.index_name, "Index name does not match"
