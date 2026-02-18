@@ -24,11 +24,11 @@ from typing_extensions import Self
 
 class IndexIVFSQModel(BaseModel):
     """
-    Model for configuring an IVFSQ (Inverted File with Scalar Quantization) index.  Attributes:     type (str): Index type identifier. Defaults to \"ivfsq\".     sq_bits (int): Number of bits per dimension for scalar quantization. Defaults to 8.
+    Model for configuring an IVFSQ (Inverted File with Scalar Quantization) index.  Attributes:     type (str): Index type identifier. Defaults to \"ivfsq\".     sq_bits (int): Number of bits per dimension for scalar quantization. Defaults to 16.
     """ # noqa: E501
     dimension: Optional[StrictInt] = None
     type: Optional[StrictStr] = 'ivfsq'
-    sq_bits: Optional[StrictInt] = 8
+    sq_bits: Optional[StrictInt] = 16
     __properties: ClassVar[List[str]] = ["dimension", "type", "sq_bits"]
 
     model_config = ConfigDict(
@@ -89,7 +89,7 @@ class IndexIVFSQModel(BaseModel):
         _obj = cls.model_validate({
             "dimension": obj.get("dimension"),
             "type": obj.get("type") if obj.get("type") is not None else 'ivfsq',
-            "sq_bits": obj.get("sq_bits") if obj.get("sq_bits") is not None else 8
+            "sq_bits": obj.get("sq_bits") if obj.get("sq_bits") is not None else 16
         })
         return _obj
 
