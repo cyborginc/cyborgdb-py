@@ -173,6 +173,40 @@ class TestIndexTypes(unittest.TestCase):
         self.assertGreater(len(results[0]), 0)
         self.assertTrue("id" in results[0])
 
+    def test_ivfsq_index_creation_and_operations(self):
+        """Test IVFSQ index creation with SQ parameters"""
+        index_config = cyborgdb.IndexIVFSQ(
+            dimension=self.dimension, sq_bits=8
+        )
+
+        self.index = self.client.create_index(
+            self.index_name, self.index_key, index_config, metric="euclidean"
+        )
+
+        # Verify index properties
+        self.assertEqual(self.index.index_type, "ivfsq")
+
+        # Test upsert
+        items = []
+        for i in range(len(self.test_vectors)):
+            items.append(
+                {
+                    "id": str(i),
+                    "vector": self.test_vectors[i],
+                    "metadata": {"test_id": i},
+                }
+            )
+
+        self.index.upsert(items)
+        time.sleep(1)  # Allow processing
+
+        # Test query
+        query_vector = self.test_vectors[0]
+        results = self.index.query(query_vectors=[query_vector], top_k=5)
+
+        self.assertGreater(len(results[0]), 0)
+        self.assertTrue("id" in results[0])
+
     # def test_ivfpq_parameter_validation(self):
     #     """Test IVFPQ parameter validation"""
     #     # Test invalid pq_dim = 0
