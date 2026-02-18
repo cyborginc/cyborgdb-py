@@ -260,7 +260,7 @@ try:
             elif index_type == "ivfflat":
                 return IndexIVFFlat(dimension=dimension)
             elif index_type == "ivfsq":
-                sq_bits = params.get("sq_bits", 8)
+                sq_bits = params.get("sq_bits", 16)
                 return IndexIVFSQ(
                     dimension=dimension,
                     sq_bits=sq_bits,
