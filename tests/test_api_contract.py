@@ -956,7 +956,91 @@ class TestAPIContract(unittest.TestCase):
                     f"Filter not applied correctly for text query ID {result['id']}",
                 )
 
-    def test_17_encrypted_index_train(self):
+    def test_17_encrypted_index_upsert_binary(self):
+        """Test EncryptedIndex.upsert() with binary format vectors."""
+        # Generate binary vectors (raw float32 bytes)
+        num_vectors = 5
+        binary_items = []
+        start_id = 100  # Use IDs that don't conflict with existing tests
+
+        for i in range(num_vectors):
+            vector = np.random.rand(self.dimension).astype(np.float32)
+            binary_items.append(
+                {
+                    "id": str(start_id + i),
+                    "vector": vector,  # numpy array (will be serialized as binary)
+                    "metadata": {"binary_test": True, "index": i},
+                }
+            )
+
+        # Test upsert with numpy arrays (binary format)
+        result = self.index.upsert(binary_items)
+        self.assertIsNone(result, "upsert must return None")
+
+        time.sleep(1)
+
+        # Verify the vectors were upserted correctly
+        ids_to_check = [str(start_id + i) for i in range(num_vectors)]
+        results = self.index.get(ids_to_check, include=["vector", "metadata"])
+
+        self.assertEqual(len(results), num_vectors)
+        for i, result in enumerate(results):
+            self.assertEqual(result["id"], str(start_id + i))
+            self.assertIsInstance(result["vector"], (list, np.ndarray))
+            self.assertEqual(len(result["vector"]), self.dimension)
+            self.assertEqual(result["metadata"]["binary_test"], True)
+            self.assertEqual(result["metadata"]["index"], i)
+
+    def test_18_encrypted_index_query_binary(self):
+        """Test EncryptedIndex.query() with binary format query vectors."""
+        # Test with numpy array (binary format)
+        query_vector = np.random.rand(self.dimension).astype(np.float32)
+
+        # Single binary query
+        results = self.index.query(query_vectors=query_vector, top_k=5)
+
+        self.assertIsInstance(results, list)
+        self.assertGreater(len(results), 0, "Binary query should return results")
+
+        for result in results:
+            self.assertIsInstance(result, dict)
+            self.assertIn("id", result)
+            self.assertIn("distance", result)
+            self.assertIsInstance(result["distance"], (int, float))
+            self.assertGreaterEqual(result["distance"], 0)
+
+        # Batch binary query with 2D numpy array
+        batch_vectors = np.random.rand(3, self.dimension).astype(np.float32)
+        results = self.index.query(query_vectors=batch_vectors, top_k=3)
+
+        self.assertIsInstance(results, list)
+        self.assertEqual(len(results), 3, "Should have 3 result lists for batch query")
+
+        for i, query_results in enumerate(results):
+            self.assertIsInstance(query_results, list)
+            self.assertLessEqual(len(query_results), 3)
+            for result in query_results:
+                self.assertIn("id", result)
+                self.assertIn("distance", result)
+
+        # Test binary query with filters
+        query_vector = np.random.rand(self.dimension).astype(np.float32)
+        results = self.index.query(
+            query_vectors=query_vector,
+            top_k=10,
+            filters={"binary_test": True},
+        )
+
+        # Results should only include vectors from binary upsert test
+        for result in results:
+            if result.get("metadata"):
+                self.assertEqual(
+                    result["metadata"].get("binary_test"),
+                    True,
+                    "Filter should only return binary test vectors",
+                )
+
+    def test_19_encrypted_index_train(self):
         """Test EncryptedIndex.train() parameter validation."""
         # Test with no arguments (should use documented defaults)
         result = self.index.train()
@@ -977,7 +1061,7 @@ class TestAPIContract(unittest.TestCase):
 
         time.sleep(2)
 
-    def test_18_encrypted_index_delete(self):
+    def test_20_encrypted_index_delete(self):
         """Test EncryptedIndex.delete() exact behavior."""
         ids_to_delete = ["0", "5"]
 
@@ -996,7 +1080,7 @@ class TestAPIContract(unittest.TestCase):
         for deleted_id in ["0", "5", "9"]:
             self.assertNotIn(deleted_id, remaining)
 
-    def test_19_client_load_index(self):
+    def test_21_client_load_index(self):
         """Test Client.load_index() exact behavior."""
         # Test positional arguments
         loaded = self.client.load_index(self.index_name, self.index_key)
@@ -1015,7 +1099,7 @@ class TestAPIContract(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.client.load_index(self.index_name, self.index_key, "unexpected_arg")
 
-    def test_20_encrypted_index_delete_index(self):
+    def test_22_encrypted_index_delete_index(self):
         """Test EncryptedIndex.delete_index() exact behavior."""
         # Should accept no arguments
         result = self.index.delete_index()
