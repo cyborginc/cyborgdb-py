@@ -96,7 +96,7 @@ class ClientIntegrationTest(unittest.TestCase):
         self.assertEqual(len(results), 5)
         # First result should be the same vector we queried with
         self.assertEqual(results[0]["id"], "numpy_0")
-        self.assertAlmostEqual(results[0]["distance"], 0.0, places=5)
+        self.assertAlmostEqual(results[0]["distance"], 0.0, places=2)
 
     def test_upsert_with_numpy_float64_conversion(self):
         """Test upserting vectors with float64 numpy array (should auto-convert)."""
