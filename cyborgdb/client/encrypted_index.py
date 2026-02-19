@@ -326,7 +326,14 @@ class EncryptedIndex:
                     item = {"id": item_dict["id"]}
 
                     if "vector" in item_dict:
-                        item["vector"] = item_dict["vector"]
+                        vec = item_dict["vector"]
+                        # Normalize to float32 so JSON serialization matches binary path
+                        if isinstance(vec, np.ndarray):
+                            item["vector"] = vec.astype(np.float32).tolist()
+                        elif isinstance(vec, list):
+                            item["vector"] = np.array(vec, dtype=np.float32).tolist()
+                        else:
+                            item["vector"] = vec
 
                     if "contents" in item_dict:
                         contents_value = item_dict["contents"]
@@ -369,6 +376,11 @@ class EncryptedIndex:
 
                 # Create items from IDs and vectors
                 for id_val, vector in zip(arg1, vectors):
+                    # Normalize to float32 so JSON serialization matches binary path
+                    if isinstance(vector, np.ndarray):
+                        vector = vector.astype(np.float32).tolist()
+                    elif isinstance(vector, list):
+                        vector = np.array(vector, dtype=np.float32).tolist()
                     items.append({"id": str(id_val), "vector": vector})
 
             # Import the UpsertRequest model from the OpenAPI-generated code
@@ -544,14 +556,16 @@ class EncryptedIndex:
                         raise ValueError("Empty list provided for `query_vectors`.")
                     if isinstance(query_vectors[0], (list, np.ndarray)):
                         # Batch of vectors as list of lists
+                        # Normalize to float32 so JSON serialization matches binary path
                         vector_list = [
-                            list(map(float, v)) if isinstance(v, list) else v.tolist()
+                            np.array(v, dtype=np.float32).tolist()
                             for v in query_vectors
                         ]
                     else:
                         # Single vector as flat list
+                        # Normalize to float32 so JSON serialization matches binary path
                         is_single_query = True
-                        vector_list = list(map(float, query_vectors))
+                        vector_list = np.array(query_vectors, dtype=np.float32).tolist()
                 else:
                     raise ValueError("Invalid type for `query_vectors`")
 
