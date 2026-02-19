@@ -298,6 +298,8 @@ jobs:
     if: github.event_name == 'push' && (needs.compute_version.outputs.env == 'dev' || needs.compute_version.outputs.env == 'staging')
     environment:
       name: ${{ needs.compute_version.outputs.env }}
+    permissions:
+      contents: read
 
     steps:
       - name: Download distribution artifacts
