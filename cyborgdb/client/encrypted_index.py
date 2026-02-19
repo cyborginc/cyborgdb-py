@@ -433,9 +433,9 @@ class EncryptedIndex:
                 f"Number of ids ({len(ids)}) must match number of vectors ({vectors.shape[0]})"
             )
 
-        # Ensure float32 dtype
-        if vectors.dtype != np.float32:
-            vectors = vectors.astype(np.float32)
+        # Ensure little-endian float32 dtype for cross-platform binary compatibility
+        if vectors.dtype != np.dtype("<f4"):
+            vectors = vectors.astype("<f4")
 
         # Encode vectors as base64
         vectors_b64 = base64.b64encode(vectors.tobytes()).decode("ascii")
@@ -714,9 +714,9 @@ class EncryptedIndex:
                 "query_vectors must be a 2D array of shape (n_queries, dimension)"
             )
 
-        # Ensure float32 dtype
-        if query_vectors.dtype != np.float32:
-            query_vectors = query_vectors.astype(np.float32)
+        # Ensure little-endian float32 dtype for cross-platform binary compatibility
+        if query_vectors.dtype != np.dtype("<f4"):
+            query_vectors = query_vectors.astype("<f4")
 
         # Encode vectors as base64
         vectors_b64 = base64.b64encode(query_vectors.tobytes()).decode("ascii")
