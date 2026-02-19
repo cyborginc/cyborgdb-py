@@ -22,11 +22,12 @@ from typing import Optional
 from cyborgdb.openapi_client.models.index_ivf_flat_model import IndexIVFFlatModel
 from cyborgdb.openapi_client.models.index_ivf_model import IndexIVFModel
 from cyborgdb.openapi_client.models.index_ivfpq_model import IndexIVFPQModel
+from cyborgdb.openapi_client.models.index_ivfsq_model import IndexIVFSQModel
 from typing import Union, Any, List, Set, TYPE_CHECKING, Optional, Dict
 from typing_extensions import Literal, Self
 from pydantic import Field
 
-INDEXCONFIG_ANY_OF_SCHEMAS = ["IndexIVFFlatModel", "IndexIVFModel", "IndexIVFPQModel"]
+INDEXCONFIG_ANY_OF_SCHEMAS = ["IndexIVFFlatModel", "IndexIVFModel", "IndexIVFPQModel", "IndexIVFSQModel"]
 
 class IndexConfig(BaseModel):
     """
@@ -39,11 +40,13 @@ class IndexConfig(BaseModel):
     anyof_schema_2_validator: Optional[IndexIVFPQModel] = None
     # data type: IndexIVFFlatModel
     anyof_schema_3_validator: Optional[IndexIVFFlatModel] = None
+    # data type: IndexIVFSQModel
+    anyof_schema_4_validator: Optional[IndexIVFSQModel] = None
     if TYPE_CHECKING:
-        actual_instance: Optional[Union[IndexIVFFlatModel, IndexIVFModel, IndexIVFPQModel]] = None
+        actual_instance: Optional[Union[IndexIVFFlatModel, IndexIVFModel, IndexIVFPQModel, IndexIVFSQModel]] = None
     else:
         actual_instance: Any = None
-    any_of_schemas: Set[str] = { "IndexIVFFlatModel", "IndexIVFModel", "IndexIVFPQModel" }
+    any_of_schemas: Set[str] = { "IndexIVFFlatModel", "IndexIVFModel", "IndexIVFPQModel", "IndexIVFSQModel" }
 
     model_config = {
         "validate_assignment": True,
@@ -85,9 +88,15 @@ class IndexConfig(BaseModel):
         else:
             return v
 
+        # validate data type: IndexIVFSQModel
+        if not isinstance(v, IndexIVFSQModel):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `IndexIVFSQModel`")
+        else:
+            return v
+
         if error_messages:
             # no match
-            raise ValueError("No match found when setting the actual_instance in IndexConfig with anyOf schemas: IndexIVFFlatModel, IndexIVFModel, IndexIVFPQModel. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting the actual_instance in IndexConfig with anyOf schemas: IndexIVFFlatModel, IndexIVFModel, IndexIVFPQModel, IndexIVFSQModel. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -121,10 +130,16 @@ class IndexConfig(BaseModel):
             return instance
         except (ValidationError, ValueError) as e:
              error_messages.append(str(e))
+        # anyof_schema_4_validator: Optional[IndexIVFSQModel] = None
+        try:
+            instance.actual_instance = IndexIVFSQModel.from_json(json_str)
+            return instance
+        except (ValidationError, ValueError) as e:
+             error_messages.append(str(e))
 
         if error_messages:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into IndexConfig with anyOf schemas: IndexIVFFlatModel, IndexIVFModel, IndexIVFPQModel. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into IndexConfig with anyOf schemas: IndexIVFFlatModel, IndexIVFModel, IndexIVFPQModel, IndexIVFSQModel. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -138,7 +153,7 @@ class IndexConfig(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], IndexIVFFlatModel, IndexIVFModel, IndexIVFPQModel]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], IndexIVFFlatModel, IndexIVFModel, IndexIVFPQModel, IndexIVFSQModel]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None

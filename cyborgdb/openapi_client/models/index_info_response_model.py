@@ -24,7 +24,7 @@ from typing_extensions import Self
 
 class IndexInfoResponseModel(BaseModel):
     """
-    Response model for retrieving information about an index.  Attributes:     index_name (str): The name of the index.     index_type (str): The type of index (e.g., IVF, IVFFlat, IVFPQ).     is_trained (bool): Indicates whether the index has been trained.     index_config (Dict[str, Any]): The full configuration details of the index.
+    Response model for retrieving information about an index.  Attributes:     index_name (str): The name of the index.     index_type (str): The type of index (e.g., IVF, IVFFlat, IVFPQ, IVFSQ).     is_trained (bool): Indicates whether the index has been trained.     index_config (Dict[str, Any]): The full configuration details of the index.
     """ # noqa: E501
     index_name: StrictStr
     index_type: StrictStr

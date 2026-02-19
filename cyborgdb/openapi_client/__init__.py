@@ -48,13 +48,13 @@ __all__ = [
     "IndexIVFFlatModel",
     "IndexIVFModel",
     "IndexIVFPQModel",
+    "IndexIVFSQModel",
     "IndexInfoResponseModel",
     "IndexListResponseModel",
     "IndexOperationRequest",
     "IndexTrainingStatusResponseModel",
     "ListIDsRequest",
     "ListIDsResponse",
-    "LocationInner",
     "QueryRequest",
     "QueryResponse",
     "QueryResultItem",
@@ -63,6 +63,7 @@ __all__ = [
     "TrainRequest",
     "UpsertRequest",
     "ValidationError",
+    "ValidationErrorLocInner",
     "VectorItem",
 ]
 
@@ -101,13 +102,13 @@ from cyborgdb.openapi_client.models.index_config import IndexConfig as IndexConf
 from cyborgdb.openapi_client.models.index_ivf_flat_model import IndexIVFFlatModel as IndexIVFFlatModel
 from cyborgdb.openapi_client.models.index_ivf_model import IndexIVFModel as IndexIVFModel
 from cyborgdb.openapi_client.models.index_ivfpq_model import IndexIVFPQModel as IndexIVFPQModel
+from cyborgdb.openapi_client.models.index_ivfsq_model import IndexIVFSQModel as IndexIVFSQModel
 from cyborgdb.openapi_client.models.index_info_response_model import IndexInfoResponseModel as IndexInfoResponseModel
 from cyborgdb.openapi_client.models.index_list_response_model import IndexListResponseModel as IndexListResponseModel
 from cyborgdb.openapi_client.models.index_operation_request import IndexOperationRequest as IndexOperationRequest
 from cyborgdb.openapi_client.models.index_training_status_response_model import IndexTrainingStatusResponseModel as IndexTrainingStatusResponseModel
 from cyborgdb.openapi_client.models.list_ids_request import ListIDsRequest as ListIDsRequest
 from cyborgdb.openapi_client.models.list_ids_response import ListIDsResponse as ListIDsResponse
-from cyborgdb.openapi_client.models.location_inner import LocationInner as LocationInner
 from cyborgdb.openapi_client.models.query_request import QueryRequest as QueryRequest
 from cyborgdb.openapi_client.models.query_response import QueryResponse as QueryResponse
 from cyborgdb.openapi_client.models.query_result_item import QueryResultItem as QueryResultItem
@@ -116,5 +117,5 @@ from cyborgdb.openapi_client.models.results import Results as Results
 from cyborgdb.openapi_client.models.train_request import TrainRequest as TrainRequest
 from cyborgdb.openapi_client.models.upsert_request import UpsertRequest as UpsertRequest
 from cyborgdb.openapi_client.models.validation_error import ValidationError as ValidationError
+from cyborgdb.openapi_client.models.validation_error_loc_inner import ValidationErrorLocInner as ValidationErrorLocInner
 from cyborgdb.openapi_client.models.vector_item import VectorItem as VectorItem
-
