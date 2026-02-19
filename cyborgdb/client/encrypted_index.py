@@ -525,12 +525,8 @@ class EncryptedIndex:
 
             if query_vectors is not None:
                 if isinstance(query_vectors, np.ndarray):
-                    if query_vectors.ndim == 1:
-                        # Single vector as 1D NumPy array
-                        is_single_query = True
-                        vector_list = query_vectors.tolist()
-                    elif query_vectors.ndim == 2:
-                        # Batch of vectors as 2D NumPy array -> use binary format
+                    if query_vectors.ndim == 1 or query_vectors.ndim == 2:
+                        # NumPy arrays (1D or 2D) -> use binary format for efficiency
                         return self.query_binary(
                             query_vectors=query_vectors,
                             top_k=top_k,
@@ -684,7 +680,7 @@ class EncryptedIndex:
         filters: Optional[Dict[str, Any]] = None,
         include: Optional[List[str]] = None,
         greedy: Optional[bool] = None,
-    ) -> List[List[Dict[str, Any]]]:
+    ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
         """
         Retrieve the nearest neighbors for given query vectors using binary format.
 
@@ -692,7 +688,8 @@ class EncryptedIndex:
         base64-encoded binary data instead of JSON arrays, which is more efficient.
 
         Args:
-            query_vectors: NumPy array of shape (n_queries, dimension) with dtype float32.
+            query_vectors: NumPy array of shape (dimension,) for single query or
+                (n_queries, dimension) for batch queries, with dtype float32.
             top_k: Number of nearest neighbors to return for each query.
             n_probes: Number of lists to probe during the query.
             filters: Dictionary specifying metadata filters.
@@ -700,7 +697,8 @@ class EncryptedIndex:
             greedy: Whether to use greedy search.
 
         Returns:
-            List of lists of result dictionaries, one list per query vector.
+            For single query (1D input): List of result dictionaries.
+            For batch query (2D input): List of lists of result dictionaries, one list per query vector.
 
         Raises:
             ValueError: If query fails or vectors have wrong shape.
@@ -709,9 +707,14 @@ class EncryptedIndex:
         if not isinstance(query_vectors, np.ndarray):
             raise TypeError("query_vectors must be a numpy array")
 
-        if query_vectors.ndim != 2:
+        # Handle 1D array (single query vector)
+        is_single_query = False
+        if query_vectors.ndim == 1:
+            is_single_query = True
+            query_vectors = query_vectors.reshape(1, -1)
+        elif query_vectors.ndim != 2:
             raise ValueError(
-                "query_vectors must be a 2D array of shape (n_queries, dimension)"
+                "query_vectors must be a 1D array (single query) or 2D array (batch queries)"
             )
 
         # Ensure float32 dtype
@@ -753,9 +756,13 @@ class EncryptedIndex:
             # Convert QueryResultItem objects to dicts
             if results and isinstance(results[0], list):
                 # Batch results: List[List[QueryResultItem]]
-                return [
+                batch_results = [
                     [item.to_dict() for item in result_list] for result_list in results
                 ]
+                # If input was 1D, return just the first result list
+                if is_single_query:
+                    return batch_results[0]
+                return batch_results
             else:
                 # Single query: List[QueryResultItem]
                 return [item.to_dict() for item in results]
