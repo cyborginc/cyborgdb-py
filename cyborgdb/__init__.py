@@ -17,6 +17,8 @@ from .client.encrypted_index import EncryptedIndex
 # Re-export demo functionality
 from .demo import get_demo_api_key
 
+from importlib.metadata import PackageNotFoundError, version
+
 # Try to import LangChain integration (optional dependency)
 try:
     from .integrations.langchain import CyborgVectorStore
@@ -35,6 +37,10 @@ except ImportError:
                 "Please install them with: pip install cyborgdb[langchain]"
             )
 
+try:
+    __version__ = version("cyborgdb-service")
+except PackageNotFoundError:
+    __version__ = "0.0.0.dev0"
 
 __all__ = [
     "Client",
@@ -45,4 +51,5 @@ __all__ = [
     "IndexIVFSQ",
     "CyborgVectorStore",
     "get_demo_api_key",
+    "__version__",
 ]
