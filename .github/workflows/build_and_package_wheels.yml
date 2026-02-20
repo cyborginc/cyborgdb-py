@@ -106,27 +106,22 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Checkout cyborgdb-service repository
-        uses: actions/checkout@v4
+      - name: Load Extra Index URL from 1Password
+        uses: 1password/load-secrets-action@v2
         with:
-          repository: cyborginc/cyborgdb-service
-          ref: main
-          path: cyborgdb-service
-          token: ${{ secrets.CYBORGDB_SERVICE_TOKEN }}
-          fetch-depth: 0  # Get full history for version detection
-          fetch-tags: true  # Fetch all tags
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_TOKEN }}
+          PIP_EXTRA_INDEX_URL: "op://CyborgDB/CyborgDB Dev/PIP_EXTRA_INDEX_URL"
 
-      - name: Install service dependencies
+      - name: Install cyborgdb-service from Cloudsmith
         run: |
           # Install CPU-only torch
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           # Install optional test dependencies
           pip install sentence-transformers
-
-      - name: Install cyborgdb-service from source
-        run: |
-          # Install the server from the cloned repository
-          pip install ./cyborgdb-service
+          # Install cyborgdb-service from Cloudsmith
+          pip install "cyborgdb-service[embeddings]" --pre --extra-index-url "$PIP_EXTRA_INDEX_URL"
 
       - name: Install SDK and test dependencies
         run: |
