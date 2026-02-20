@@ -39,7 +39,7 @@ except ImportError:
 
 
 try:
-    __version__ = version("cyborgdb-service")
+    __version__ = version("cyborgdb")
 except PackageNotFoundError:
     __version__ = "0.0.0.dev0"
 
