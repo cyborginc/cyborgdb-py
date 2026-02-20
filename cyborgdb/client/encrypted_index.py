@@ -528,9 +528,6 @@ class EncryptedIndex:
         binary format for faster transfer.
         """
         try:
-            if filters is None:
-                filters = {}
-
             # Determine the correct vector input
             vector_list = None
             is_single_query = False
