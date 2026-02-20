@@ -525,7 +525,19 @@ try:
                 return {}
 
             # Check if filter already has a top-level operator
-            filter_operators = {"$and", "$or", "$not", "$eq", "$ne", "$gt", "$gte", "$lt", "$lte", "$in", "$nin"}
+            filter_operators = {
+                "$and",
+                "$or",
+                "$not",
+                "$eq",
+                "$ne",
+                "$gt",
+                "$gte",
+                "$lt",
+                "$lte",
+                "$in",
+                "$nin",
+            }
             top_level_keys = set(filter.keys())
 
             # If filter has exactly one key that's an operator, return as-is
