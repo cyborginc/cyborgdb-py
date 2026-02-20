@@ -568,29 +568,44 @@ class EncryptedIndex:
 
             if is_single_query or query_contents is not None:
                 # Use QueryRequest for single vector or content-based query
-                query_request = QueryRequest(
-                    index_key=self._key_to_hex(),
-                    index_name=self._index_name,
-                    query_vectors=vector_list,
-                    query_contents=query_contents,
-                    top_k=top_k,
-                    n_probes=n_probes,
-                    greedy=greedy,
-                    filters=filters,
-                    include=include,
-                )
+                # Build kwargs to avoid passing None values (which would be serialized)
+                query_kwargs = {
+                    "index_key": self._key_to_hex(),
+                    "index_name": self._index_name,
+                    "query_vectors": vector_list,
+                }
+                if query_contents is not None:
+                    query_kwargs["query_contents"] = query_contents
+                if top_k is not None:
+                    query_kwargs["top_k"] = top_k
+                if n_probes is not None:
+                    query_kwargs["n_probes"] = n_probes
+                if greedy is not None:
+                    query_kwargs["greedy"] = greedy
+                if filters is not None:
+                    query_kwargs["filters"] = filters
+                if include is not None:
+                    query_kwargs["include"] = include
+                query_request = QueryRequest(**query_kwargs)
             else:
                 # Use BatchQueryRequest for multiple vectors
-                query_request = BatchQueryRequest(
-                    index_key=self._key_to_hex(),
-                    index_name=self._index_name,
-                    query_vectors=vector_list,
-                    top_k=top_k,
-                    n_probes=n_probes,
-                    greedy=greedy,
-                    filters=filters,
-                    include=include,
-                )
+                # Build kwargs to avoid passing None values (which would be serialized)
+                query_kwargs = {
+                    "index_key": self._key_to_hex(),
+                    "index_name": self._index_name,
+                    "query_vectors": vector_list,
+                }
+                if top_k is not None:
+                    query_kwargs["top_k"] = top_k
+                if n_probes is not None:
+                    query_kwargs["n_probes"] = n_probes
+                if greedy is not None:
+                    query_kwargs["greedy"] = greedy
+                if filters is not None:
+                    query_kwargs["filters"] = filters
+                if include is not None:
+                    query_kwargs["include"] = include
+                query_request = BatchQueryRequest(**query_kwargs)
 
             request = Request(query_request)
 
@@ -741,16 +756,23 @@ class EncryptedIndex:
             dimension=query_vectors.shape[1],
         )
 
-        request = BinaryQueryRequest(
-            index_name=self._index_name,
-            index_key=self._key_to_hex(),
-            batch=batch,
-            top_k=top_k,
-            n_probes=n_probes,
-            filters=filters,
-            include=include,
-            greedy=greedy,
-        )
+        # Build kwargs to avoid passing None values (which would be serialized)
+        request_kwargs = {
+            "index_name": self._index_name,
+            "index_key": self._key_to_hex(),
+            "batch": batch,
+        }
+        if top_k is not None:
+            request_kwargs["top_k"] = top_k
+        if n_probes is not None:
+            request_kwargs["n_probes"] = n_probes
+        if filters is not None:
+            request_kwargs["filters"] = filters
+        if include is not None:
+            request_kwargs["include"] = include
+        if greedy is not None:
+            request_kwargs["greedy"] = greedy
+        request = BinaryQueryRequest(**request_kwargs)
 
         try:
             response = self._api.query_vectors_binary_v1_vectors_query_binary_post(
