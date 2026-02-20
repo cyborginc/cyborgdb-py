@@ -37,6 +37,7 @@ except ImportError:
                 "Please install them with: pip install cyborgdb[langchain]"
             )
 
+
 try:
     __version__ = version("cyborgdb-service")
 except PackageNotFoundError:
