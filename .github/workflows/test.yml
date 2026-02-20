@@ -122,7 +122,7 @@ jobs:
           
           # Run all tests
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            pytest tests/quick_flow_test.py -v --cov=cyborgdb --cov-report=term-missing --cov-append
+            pytest tests/quick_flow_test.py tests/test_langchain_integration.py -v --cov=cyborgdb --cov-report=term-missing --cov-append
           else
             pytest tests/ -v --cov=cyborgdb --cov-report=term-missing --cov-append --ignore=tests/test_api_contract.py
           fi
