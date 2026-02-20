@@ -170,8 +170,24 @@ try:
                 warnings.warn(f"Could not check if index exists: {e}", RuntimeWarning)
 
             if index_exists:
-                # Load existing index
-                self._load_existing_index()
+                # Try to load existing index and verify it's actually accessible
+                try:
+                    self._load_existing_index()
+                    # Verify the index is actually loadable by calling describe
+                    # This will fail if the index exists in the list but can't be loaded
+                    # (e.g., due to stale data in standalone storage)
+                    self._verify_index_loadable()
+                except Exception as e:
+                    # Index appears to exist but can't be loaded (stale listing)
+                    # Fall back to creating a new index
+                    warnings.warn(
+                        f"Index '{self.index_name}' found in list but could not be loaded: {e}. "
+                        f"Creating new index instead.",
+                        RuntimeWarning
+                    )
+                    self._create_new_index(
+                        index_type, index_config_params, dimension, metric
+                    )
             else:
                 # Create new index
                 self._create_new_index(
@@ -185,6 +201,27 @@ try:
                 index_key=self.index_key,
                 api=self.client.api,
                 api_client=self.client.api_client,
+            )
+
+        def _verify_index_loadable(self) -> None:
+            """Verify the index can actually be loaded by calling the describe endpoint.
+
+            This catches cases where an index appears in list_indexes() but can't
+            actually be loaded (e.g., stale data in standalone RocksDB storage).
+
+            Raises:
+                Exception: If the index cannot be loaded (e.g., config not found)
+            """
+            from cyborgdb.openapi_client.models import IndexOperationRequest
+
+            request = IndexOperationRequest(
+                index_key=self.index._key_to_hex(),
+                index_name=self.index_name
+            )
+
+            # This will raise an exception if the index can't be loaded
+            self.client.api.get_index_info_v1_indexes_describe_post(
+                index_operation_request=request
             )
 
         def _create_new_index(
