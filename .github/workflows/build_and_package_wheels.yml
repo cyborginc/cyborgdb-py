@@ -80,7 +80,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [lint, compute_version]
 
     services:
       postgres:
@@ -106,38 +106,36 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Load Extra Index URL from 1Password
+      - name: Load secrets from 1Password
         uses: 1password/load-secrets-action@v2
         with:
           export-env: true
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_TOKEN }}
-          PIP_EXTRA_INDEX_URL: "op://CyborgDB/CyborgDB Dev/PIP_EXTRA_INDEX_URL"
+          CYBORGDB_API_KEY: "op://CyborgDB/CyborgDB ${{ needs.compute_version.outputs.env == 'dev' && 'Dev' || needs.compute_version.outputs.env == 'staging' && 'Staging' || 'Prod' }}/CYBORGDB_API_KEY_STANDARD"
 
-      - name: Install cyborgdb-service from Cloudsmith
+      - name: Load Extra Index URL from 1Password
+        if: needs.compute_version.outputs.env != 'prod'
+        uses: 1password/load-secrets-action@v2
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_TOKEN }}
+          PIP_EXTRA_INDEX_URL: "op://CyborgDB/CyborgDB ${{ needs.compute_version.outputs.env == 'dev' && 'Dev' || 'Staging' }}/PIP_EXTRA_INDEX_URL"
+
+      - name: Install cyborgdb-service
         run: |
           # Install CPU-only torch
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           # Install optional test dependencies
           pip install sentence-transformers
-          # Install cyborgdb-service from Cloudsmith
-          pip install "cyborgdb-service[embeddings]" --pre --extra-index-url "$PIP_EXTRA_INDEX_URL"
+          # Install cyborgdb-service (from Cloudsmith for dev/staging, PyPI for prod)
+          pip install "cyborgdb-service[embeddings]" --pre ${PIP_EXTRA_INDEX_URL:+--extra-index-url "$PIP_EXTRA_INDEX_URL"}
 
       - name: Install SDK and test dependencies
         run: |
           pip install '.[langchain]'
           pip install pytest pytest-cov pytest-asyncio
-
-      - name: Load Demo API Key
-        run: |
-          echo "=== Loading Demo API Key ==="
-          CYBORGDB_API_KEY=$(python -c "from cyborgdb import get_demo_api_key; print(get_demo_api_key())")
-          if [ -z "$CYBORGDB_API_KEY" ]; then
-            echo "Failed to generate demo API key"
-            exit 1
-          fi
-          echo "CYBORGDB_API_KEY=${CYBORGDB_API_KEY}" >> $GITHUB_ENV
-          echo "Demo API key loaded successfully"
 
       - name: Test
         run: |
