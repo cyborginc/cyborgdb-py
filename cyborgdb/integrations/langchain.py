@@ -507,6 +507,50 @@ try:
             """
             return self.index.list_ids()
 
+        def _transform_filter(self, filter: Optional[Dict]) -> Dict:
+            """
+            Transform a filter dict into the format expected by CyborgDB.
+
+            CyborgDB expects filters with exactly one top-level filter operator.
+            If the filter has multiple keys (e.g., {"category": "AI", "source": "research"}),
+            this method wraps them in an $and operator.
+
+            Args:
+                filter: Optional metadata filter dict
+
+            Returns:
+                Transformed filter dict compatible with CyborgDB
+            """
+            if not filter:
+                return {}
+
+            # Check if filter already has a top-level operator
+            filter_operators = {
+                "$and",
+                "$or",
+                "$not",
+                "$eq",
+                "$ne",
+                "$gt",
+                "$gte",
+                "$lt",
+                "$lte",
+                "$in",
+                "$nin",
+            }
+            top_level_keys = set(filter.keys())
+
+            # If filter has exactly one key that's an operator, return as-is
+            if len(top_level_keys) == 1 and top_level_keys.issubset(filter_operators):
+                return filter
+
+            # If filter has multiple keys (field conditions), wrap in $and
+            if len(filter) > 1:
+                return {"$and": [{k: v} for k, v in filter.items()]}
+
+            # Single field condition - return as-is
+            return filter
+
         def _execute_query(
             self,
             query: Union[str, List[float]],
@@ -526,7 +570,7 @@ try:
             Returns:
                 List of result dictionaries
             """
-            filter = filter or {}
+            filter = self._transform_filter(filter)
 
             if isinstance(query, str):
                 # Text query - generate embedding
