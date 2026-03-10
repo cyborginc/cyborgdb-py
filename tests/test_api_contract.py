@@ -359,7 +359,6 @@ class TestAPIContract(unittest.TestCase):
 
         # Check index config
         created_config = index.index_config
-        print(f"Created config: {created_config}")
         self.assertEqual(index.index_name, self.index_name)
         self.assertEqual(created_config.get("dimension"), self.dimension)
         self.assertEqual(created_config.get("index_type"), "ivfflat")
@@ -381,7 +380,6 @@ class TestAPIContract(unittest.TestCase):
 
         # Check index config
         created_config = index.index_config
-        print(f"Created config: {created_config}")
         self.assertEqual(index.index_name, self.index_name)
         self.assertEqual(created_config.get("dimension"), 0)
         self.assertEqual(created_config.get("index_type"), "ivfpq")
@@ -405,7 +403,6 @@ class TestAPIContract(unittest.TestCase):
 
         # Check index config
         created_config = index.index_config
-        print(f"Created config: {created_config}")
         self.assertEqual(index.index_name, self.index_name)
         self.assertEqual(created_config.get("dimension"), 0)
         self.assertEqual(created_config.get("index_type"), "ivfsq")
@@ -428,7 +425,6 @@ class TestAPIContract(unittest.TestCase):
 
         # Check index config
         created_config = index.index_config
-        print(f"Created config: {created_config}")
         self.assertEqual(index.index_name, self.index_name)
         self.assertEqual(created_config.get("dimension"), 0)
         self.assertEqual(created_config.get("index_type"), "ivfsq")
@@ -449,7 +445,6 @@ class TestAPIContract(unittest.TestCase):
 
         # Check index config
         created_config = index.index_config
-        print(f"Created config: {created_config}")
         self.assertEqual(index.index_name, self.index_name)
         self.assertEqual(
             created_config.get("dimension"), 384
