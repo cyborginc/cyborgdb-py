@@ -17,6 +17,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 
 import cyborgdb
+from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
+from cyborgdb.integrations.langchain import CyborgVectorStore
 
 load_dotenv(".env.local")
 
@@ -24,10 +27,6 @@ DIMENSION = 128
 NUM_VECTORS = 50  # Per-thread/per-index vector count
 BASE_URL = os.getenv("CYBORGDB_BASE_URL", "http://localhost:8000")
 API_KEY = os.getenv("CYBORGDB_API_KEY", "")
-
-from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
-from cyborgdb.integrations.langchain import CyborgVectorStore
 
 
 class FixedDimensionEmbeddings(Embeddings):
@@ -115,7 +114,9 @@ class TestConcurrentUpserts(unittest.TestCase):
                 with lock:
                     errors.append((thread_id, e))
 
-        threads = [threading.Thread(target=worker, args=(i,)) for i in range(num_threads)]
+        threads = [
+            threading.Thread(target=worker, args=(i,)) for i in range(num_threads)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -128,8 +129,9 @@ class TestConcurrentUpserts(unittest.TestCase):
         stored_ids = set(self.index.list_ids())
         missing = [id_ for id_ in all_ids if id_ not in stored_ids]
         self.assertEqual(
-            len(missing), 0,
-            f"{len(missing)}/{len(all_ids)} IDs missing after concurrent upsert"
+            len(missing),
+            0,
+            f"{len(missing)}/{len(all_ids)} IDs missing after concurrent upsert",
         )
 
     def test_concurrent_upserts_overlapping_ids(self):
@@ -157,7 +159,9 @@ class TestConcurrentUpserts(unittest.TestCase):
                 with lock:
                     errors.append((thread_id, e))
 
-        threads = [threading.Thread(target=worker, args=(i,)) for i in range(num_threads)]
+        threads = [
+            threading.Thread(target=worker, args=(i,)) for i in range(num_threads)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -172,13 +176,11 @@ class TestConcurrentUpserts(unittest.TestCase):
         for item in items:
             stored_vec = np.array(item["vector"], dtype=np.float32)
             candidates = written_vectors[item["id"]]
-            matched = any(
-                np.allclose(stored_vec, c, rtol=1e-5) for c in candidates
-            )
+            matched = any(np.allclose(stored_vec, c, rtol=1e-5) for c in candidates)
             self.assertTrue(
                 matched,
                 f"ID '{item['id']}': stored vector doesn't match ANY of the "
-                f"{len(candidates)} written vectors — possible corruption"
+                f"{len(candidates)} written vectors — possible corruption",
             )
 
     def test_concurrent_write_then_verify_per_thread(self):
@@ -199,12 +201,16 @@ class TestConcurrentUpserts(unittest.TestCase):
                 time.sleep(1)
 
                 retrieved = self.index.get([ids[0]], include=["vector"])
-                self.assertEqual(len(retrieved), 1, f"Thread {thread_id}: get() returned wrong count")
+                self.assertEqual(
+                    len(retrieved), 1, f"Thread {thread_id}: get() returned wrong count"
+                )
                 self.assertEqual(retrieved[0]["id"], ids[0])
                 retrieved_vec = np.array(retrieved[0]["vector"], dtype=np.float32)
                 np.testing.assert_allclose(
-                    retrieved_vec, vecs[0], rtol=1e-5,
-                    err_msg=f"Thread {thread_id}: retrieved vector doesn't match written vector"
+                    retrieved_vec,
+                    vecs[0],
+                    rtol=1e-5,
+                    err_msg=f"Thread {thread_id}: retrieved vector doesn't match written vector",
                 )
                 with lock:
                     results_per_thread[thread_id] = True
@@ -269,17 +275,17 @@ class TestConcurrentReadsAndWrites(unittest.TestCase):
                         self.assertIn("distance", r)
                         self.assertIsInstance(r["distance"], (int, float))
                         self.assertGreaterEqual(
-                            r["distance"], 0,
-                            f"Negative distance {r['distance']} for ID {r['id']} — corrupted result"
+                            r["distance"],
+                            0,
+                            f"Negative distance {r['distance']} for ID {r['id']} — corrupted result",
                         )
             except Exception as e:
                 with lock:
                     errors.append(("reader", thread_id, e))
 
-        threads = (
-            [threading.Thread(target=writer, args=(i,)) for i in range(num_writers)]
-            + [threading.Thread(target=reader, args=(i,)) for i in range(num_readers)]
-        )
+        threads = [
+            threading.Thread(target=writer, args=(i,)) for i in range(num_writers)
+        ] + [threading.Thread(target=reader, args=(i,)) for i in range(num_readers)]
         for t in threads:
             t.start()
         for t in threads:
@@ -304,7 +310,7 @@ class TestConcurrentReadsAndWrites(unittest.TestCase):
         def deleter():
             try:
                 for i in range(0, 30, 5):
-                    self.index.delete(delete_ids[i:i + 5])
+                    self.index.delete(delete_ids[i : i + 5])
                     time.sleep(0.1)
             except Exception as e:
                 with lock:
@@ -360,17 +366,16 @@ class TestConcurrentReadsAndWrites(unittest.TestCase):
         def deleter(thread_id):
             try:
                 for _ in range(5):
-                    batch = target_ids[thread_id * 10:(thread_id + 1) * 10]
+                    batch = target_ids[thread_id * 10 : (thread_id + 1) * 10]
                     self.index.delete(batch)
                     time.sleep(0.05)
             except Exception as e:
                 with lock:
                     errors.append(("deleter", thread_id, e))
 
-        threads = (
-            [threading.Thread(target=upserter, args=(i,)) for i in range(2)]
-            + [threading.Thread(target=deleter, args=(i,)) for i in range(2)]
-        )
+        threads = [threading.Thread(target=upserter, args=(i,)) for i in range(2)] + [
+            threading.Thread(target=deleter, args=(i,)) for i in range(2)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -383,8 +388,9 @@ class TestConcurrentReadsAndWrites(unittest.TestCase):
         time.sleep(1)
         stored_ids = self.index.list_ids()
         self.assertGreater(
-            len(stored_ids), 0,
-            "All IDs gone after upsert/delete race — upserters never committed or deleters swept everything"
+            len(stored_ids),
+            0,
+            "All IDs gone after upsert/delete race — upserters never committed or deleters swept everything",
         )
         if stored_ids:
             items = self.index.get(list(stored_ids), include=["vector"])
@@ -393,8 +399,9 @@ class TestConcurrentReadsAndWrites(unittest.TestCase):
                 vec = item.get("vector")
                 self.assertIsNotNone(vec, f"ID '{item['id']}' exists but has no vector")
                 self.assertEqual(
-                    len(vec), DIMENSION,
-                    f"ID '{item['id']}' has wrong dimension: {len(vec)}"
+                    len(vec),
+                    DIMENSION,
+                    f"ID '{item['id']}' has wrong dimension: {len(vec)}",
                 )
 
 
@@ -460,8 +467,7 @@ class TestErrorIsolationUnderLoad(unittest.TestCase):
 
         self.assertGreater(len(bad_errors), 0, "Bad worker should have failed")
         self.assertEqual(
-            len(good_errors), 0,
-            f"Good workers failed due to bad worker: {good_errors}"
+            len(good_errors), 0, f"Good workers failed due to bad worker: {good_errors}"
         )
         self.assertGreater(len(good_results), 0)
 
@@ -518,17 +524,20 @@ class TestMultiIndexIsolation(unittest.TestCase):
                 qv = np.random.rand(DIMENSION).astype(np.float32)
                 results = index.query(query_vectors=qv, top_k=10)
                 self.assertGreater(
-                    len(results), 0,
-                    f"Index '{name}' returned empty results — isolation check is vacuous"
+                    len(results),
+                    0,
+                    f"Index '{name}' returned empty results — isolation check is vacuous",
                 )
                 for r in results:
                     self.assertIn(
-                        r["id"], my_ids,
-                        f"Index '{name}' returned ID '{r['id']}' that belongs to another index"
+                        r["id"],
+                        my_ids,
+                        f"Index '{name}' returned ID '{r['id']}' that belongs to another index",
                     )
                     self.assertNotIn(
-                        r["id"], other_ids,
-                        f"DATA LEAKAGE: Index '{name}' returned ID '{r['id']}' from another index"
+                        r["id"],
+                        other_ids,
+                        f"DATA LEAKAGE: Index '{name}' returned ID '{r['id']}' from another index",
                     )
 
     def test_list_ids_isolation(self):
@@ -540,7 +549,7 @@ class TestMultiIndexIsolation(unittest.TestCase):
             for id_ in stored:
                 self.assertTrue(
                     id_.startswith(expected_prefix),
-                    f"Index '{name}' contains foreign ID '{id_}'"
+                    f"Index '{name}' contains foreign ID '{id_}'",
                 )
             self.assertGreater(len(stored), 0, f"Index '{name}' has no IDs")
 
@@ -553,15 +562,16 @@ class TestMultiIndexIsolation(unittest.TestCase):
         target_index, target_name, _ = self.indexes[0]
         target_ids = list(target_index.list_ids())
         self.assertGreater(len(target_ids), 0, "Index 0 is empty — nothing to delete")
-        to_delete = target_ids[:min(15, len(target_ids))]
+        to_delete = target_ids[: min(15, len(target_ids))]
         target_index.delete(to_delete)
         time.sleep(1)
 
         for index, name, _ in self.indexes[1:]:
             stored = set(index.list_ids())
             self.assertEqual(
-                stored, other_snapshots[name],
-                f"Index '{name}' lost data after deleting from '{target_name}'"
+                stored,
+                other_snapshots[name],
+                f"Index '{name}' lost data after deleting from '{target_name}'",
             )
 
 
@@ -614,7 +624,9 @@ class TestConcurrentMultiIndexWrites(unittest.TestCase):
                 with lock:
                     errors.append((thread_id, e))
 
-        threads = [threading.Thread(target=worker, args=(i,)) for i in range(self.num_indexes)]
+        threads = [
+            threading.Thread(target=worker, args=(i,)) for i in range(self.num_indexes)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -633,11 +645,12 @@ class TestConcurrentMultiIndexWrites(unittest.TestCase):
             for id_ in stored:
                 self.assertTrue(
                     id_.startswith(expected_prefix),
-                    f"Index '{name}' contains foreign ID '{id_}' (expected prefix '{expected_prefix}')"
+                    f"Index '{name}' contains foreign ID '{id_}' (expected prefix '{expected_prefix}')",
                 )
             self.assertEqual(
-                stored, set(ids),
-                f"Index '{name}' has wrong IDs. Extra: {stored - set(ids)}, Missing: {set(ids) - stored}"
+                stored,
+                set(ids),
+                f"Index '{name}' has wrong IDs. Extra: {stored - set(ids)}, Missing: {set(ids) - stored}",
             )
 
             # Spot-check vector integrity: read back first and last vector
@@ -646,8 +659,10 @@ class TestConcurrentMultiIndexWrites(unittest.TestCase):
                 self.assertEqual(len(retrieved), 1)
                 retrieved_vec = np.array(retrieved[0]["vector"], dtype=np.float32)
                 np.testing.assert_allclose(
-                    retrieved_vec, vectors[check_idx], rtol=1e-5,
-                    err_msg=f"Index '{name}', ID '{ids[check_idx]}': vector mismatch"
+                    retrieved_vec,
+                    vectors[check_idx],
+                    rtol=1e-5,
+                    err_msg=f"Index '{name}', ID '{ids[check_idx]}': vector mismatch",
                 )
 
 
@@ -687,7 +702,9 @@ class TestStressHighConcurrency(unittest.TestCase):
 
         def worker(thread_id):
             try:
-                ids, _ = upsert_batch(self.index, f"stress_{thread_id}", count=vectors_per_thread)
+                ids, _ = upsert_batch(
+                    self.index, f"stress_{thread_id}", count=vectors_per_thread
+                )
                 with lock:
                     all_ids.extend(ids)
 
@@ -703,7 +720,9 @@ class TestStressHighConcurrency(unittest.TestCase):
                 with lock:
                     errors.append((thread_id, e))
 
-        threads = [threading.Thread(target=worker, args=(i,)) for i in range(num_threads)]
+        threads = [
+            threading.Thread(target=worker, args=(i,)) for i in range(num_threads)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -716,8 +735,9 @@ class TestStressHighConcurrency(unittest.TestCase):
         stored_ids = set(self.index.list_ids())
         missing = [id_ for id_ in all_ids if id_ not in stored_ids]
         self.assertEqual(
-            len(missing), 0,
-            f"{len(missing)}/{len(all_ids)} IDs missing after 20-thread stress test"
+            len(missing),
+            0,
+            f"{len(missing)}/{len(all_ids)} IDs missing after 20-thread stress test",
         )
 
 
@@ -785,9 +805,10 @@ class TestIndexSwitchingFromOneThread(unittest.TestCase):
             stored = set(index.list_ids())
             expected = set(per_index_ids[idx])
             self.assertEqual(
-                stored, expected,
+                stored,
+                expected,
                 f"Index {idx} ('{name}') has wrong IDs after rapid switching. "
-                f"Extra: {stored - expected}, Missing: {expected - stored}"
+                f"Extra: {stored - expected}, Missing: {expected - stored}",
             )
 
             # Spot-check vector integrity on last round's data
@@ -797,8 +818,10 @@ class TestIndexSwitchingFromOneThread(unittest.TestCase):
             self.assertEqual(len(retrieved), 1)
             retrieved_vec = np.array(retrieved[0]["vector"], dtype=np.float32)
             np.testing.assert_allclose(
-                retrieved_vec, last_vecs[0], rtol=1e-5,
-                err_msg=f"Index {idx}: vector mismatch after rapid switching"
+                retrieved_vec,
+                last_vecs[0],
+                rtol=1e-5,
+                err_msg=f"Index {idx}: vector mismatch after rapid switching",
             )
 
 
@@ -846,7 +869,10 @@ class TestAsyncConcurrentOperations(unittest.TestCase):
         async def run():
             # Phase 1: concurrent adds
             async def add_worker(task_id):
-                texts = [f"task {task_id} document {j} about topic {task_id}" for j in range(texts_per_task)]
+                texts = [
+                    f"task {task_id} document {j} about topic {task_id}"
+                    for j in range(texts_per_task)
+                ]
                 ids = [f"async_{task_id}_{j}" for j in range(texts_per_task)]
                 returned_ids = await self.store.aadd_texts(texts, ids=ids)
                 self.assertEqual(len(returned_ids), texts_per_task)
@@ -860,16 +886,15 @@ class TestAsyncConcurrentOperations(unittest.TestCase):
             # No add tasks should have raised
             for i, result in enumerate(add_results):
                 self.assertNotIsInstance(
-                    result, Exception,
-                    f"Async add task {i} failed: {result}"
+                    result, Exception, f"Async add task {i} failed: {result}"
                 )
 
             # Phase 2: concurrent searches
             async def search_worker(task_id):
-                results = await self.store.asimilarity_search(
-                    f"topic {task_id}", k=5
+                results = await self.store.asimilarity_search(f"topic {task_id}", k=5)
+                self.assertGreater(
+                    len(results), 0, f"Search task {task_id} got no results"
                 )
-                self.assertGreater(len(results), 0, f"Search task {task_id} got no results")
                 for doc in results:
                     self.assertIsInstance(doc, Document)
                     self.assertIsNotNone(doc.page_content)
@@ -882,8 +907,7 @@ class TestAsyncConcurrentOperations(unittest.TestCase):
 
             for i, result in enumerate(search_results):
                 self.assertNotIsInstance(
-                    result, Exception,
-                    f"Async search task {i} failed: {result}"
+                    result, Exception, f"Async search task {i} failed: {result}"
                 )
 
         asyncio.run(run())
@@ -911,7 +935,7 @@ class TestAsyncConcurrentOperations(unittest.TestCase):
 
             async def deleter(task_id):
                 try:
-                    batch = seed_ids[task_id * 10:(task_id + 1) * 10]
+                    batch = seed_ids[task_id * 10 : (task_id + 1) * 10]
                     await self.store.adelete(ids=batch)
                 except Exception as e:
                     errors.append(("deleter", task_id, e))
