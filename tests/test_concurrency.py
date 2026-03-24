@@ -575,6 +575,190 @@ class TestMultiIndexIsolation(unittest.TestCase):
             )
 
 
+class TestMixedIndexTypesOneClient(unittest.TestCase):
+    """
+    One Client managing indexes of different types (IVFFlat, IVFPQ, IVFSQ)
+    simultaneously. Reproduces a reported bug where mixed index types on a
+    single client cause failures.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client = make_client()
+        cls.indexes = {}
+
+        configs = {
+            "flat": cyborgdb.IndexIVFFlat(dimension=DIMENSION),
+            "pq": cyborgdb.IndexIVFPQ(dimension=DIMENSION, pq_dim=32, pq_bits=8),
+            "sq": cyborgdb.IndexIVFSQ(dimension=DIMENSION, sq_bits=8),
+        }
+
+        for type_name, config in configs.items():
+            name = f"mixed_{type_name}_{uuid.uuid4().hex[:8]}"
+            key = cyborgdb.Client.generate_key()
+            index = cls.client.create_index(name, key, config, metric="euclidean")
+            cls.indexes[type_name] = (index, name, key)
+
+    @classmethod
+    def tearDownClass(cls):
+        for index, _, _ in cls.indexes.values():
+            try:
+                index.delete_index()
+            except Exception:
+                pass
+
+    def test_upsert_and_query_all_types(self):
+        """
+        Upsert to all 3 index types through one Client, then query each.
+        Each must return only its own data with correct index_type.
+        Catches: client-side type confusion, wrong config sent to wrong index.
+        """
+        expected_types = {"flat": "ivfflat", "pq": "ivfpq", "sq": "ivfsq"}
+        per_type_ids = {}
+
+        for type_name, (index, _, _) in self.indexes.items():
+            ids = [f"{type_name}_{i}" for i in range(20)]
+            vectors = np.random.rand(20, DIMENSION).astype(np.float32)
+            index.upsert(ids, vectors)
+            per_type_ids[type_name] = set(ids)
+
+        time.sleep(2)
+
+        for type_name, (index, name, _) in self.indexes.items():
+            # Verify correct type is reported
+            self.assertEqual(
+                index.index_type,
+                expected_types[type_name],
+                f"Index '{name}' reports wrong type: {index.index_type}",
+            )
+
+            # Query must return only IDs belonging to this index — no cross-type leakage.
+            # Other tests in this class also write to these indexes, so check that
+            # returned IDs contain the type_name somewhere (all IDs use it as a tag).
+            other_types = [t for t in expected_types if t != type_name]
+            qv = np.random.rand(DIMENSION).astype(np.float32)
+            results = index.query(query_vectors=qv, top_k=10)
+            self.assertGreater(len(results), 0, f"Index '{name}' returned no results")
+            for r in results:
+                self.assertFalse(
+                    any(r["id"].startswith(ot + "_") for ot in other_types),
+                    f"Index '{name}' ({type_name}) returned ID '{r['id']}' from another index type",
+                )
+
+    def test_concurrent_writes_to_mixed_types(self):
+        """
+        3 threads each write to a different index type concurrently through
+        one shared Client. Then verify data integrity on each.
+        Catches: type-specific serialization issues under concurrent access.
+        """
+        errors = []
+        lock = threading.Lock()
+        per_type_data = {}
+
+        def worker(type_name):
+            try:
+                index, name, _ = self.indexes[type_name]
+                ids = [f"conc_{type_name}_{i}" for i in range(20)]
+                vectors = np.random.rand(20, DIMENSION).astype(np.float32)
+                index.upsert(ids, vectors)
+                with lock:
+                    per_type_data[type_name] = (ids, vectors)
+            except Exception as e:
+                with lock:
+                    errors.append((type_name, e))
+
+        threads = [
+            threading.Thread(target=worker, args=(t,)) for t in self.indexes.keys()
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=60)
+
+        self.assertEqual(
+            len(errors), 0, f"Mixed-type concurrent write errors: {errors}"
+        )
+        time.sleep(2)
+
+        # Verify each index has its data and vectors are intact
+        for type_name, (ids, vectors) in per_type_data.items():
+            index = self.indexes[type_name][0]
+            stored = set(index.list_ids())
+            for id_ in ids:
+                self.assertIn(
+                    id_,
+                    stored,
+                    f"Index type '{type_name}' missing ID '{id_}'",
+                )
+
+            # Spot-check first vector (IVFFlat should be exact, PQ/SQ may be lossy)
+            retrieved = index.get([ids[0]], include=["vector"])
+            self.assertEqual(len(retrieved), 1)
+            retrieved_vec = np.array(retrieved[0]["vector"], dtype=np.float32)
+            if type_name == "flat":
+                np.testing.assert_allclose(
+                    retrieved_vec,
+                    vectors[0],
+                    rtol=1e-5,
+                    err_msg="IVFFlat vector mismatch",
+                )
+            else:
+                # PQ/SQ are lossy — just verify shape and finite values
+                self.assertEqual(len(retrieved_vec), DIMENSION)
+                self.assertTrue(
+                    np.all(np.isfinite(retrieved_vec)),
+                    f"Index type '{type_name}' returned non-finite vector values",
+                )
+
+    def test_interleaved_operations_across_types(self):
+        """
+        Single thread alternates: upsert to flat, query pq, delete from sq,
+        query flat, upsert to sq, etc. Tests that the client correctly
+        dispatches to the right index when rapidly switching between types.
+        """
+        # Seed all indexes first
+        seed_ids = {}
+        for type_name, (index, _, _) in self.indexes.items():
+            ids = [f"interleave_{type_name}_{i}" for i in range(10)]
+            vectors = np.random.rand(10, DIMENSION).astype(np.float32)
+            index.upsert(ids, vectors)
+            seed_ids[type_name] = ids
+        time.sleep(1)
+
+        flat_idx = self.indexes["flat"][0]
+        pq_idx = self.indexes["pq"][0]
+        sq_idx = self.indexes["sq"][0]
+
+        # Interleaved operations — each must succeed independently
+        # 1. Query PQ
+        qv = np.random.rand(DIMENSION).astype(np.float32)
+        pq_results = pq_idx.query(query_vectors=qv, top_k=5)
+        self.assertGreater(len(pq_results), 0)
+
+        # 2. Upsert to flat
+        new_ids = [f"interleave_flat_new_{i}" for i in range(5)]
+        new_vecs = np.random.rand(5, DIMENSION).astype(np.float32)
+        flat_idx.upsert(new_ids, new_vecs)
+
+        # 3. Delete from SQ
+        sq_idx.delete(seed_ids["sq"][:3])
+
+        # 4. Query flat — should see new data
+        time.sleep(1)
+        flat_results = flat_idx.query(query_vectors=new_vecs[0], top_k=1)
+        self.assertGreater(len(flat_results), 0)
+        self.assertEqual(flat_results[0]["id"], new_ids[0])
+
+        # 5. Verify SQ deletes took effect
+        sq_stored = set(sq_idx.list_ids())
+        for deleted_id in seed_ids["sq"][:3]:
+            self.assertNotIn(
+                deleted_id,
+                sq_stored,
+                f"SQ index still contains deleted ID '{deleted_id}'",
+            )
+
+
 class TestConcurrentMultiIndexWrites(unittest.TestCase):
     """
     The #1 production pattern: one Client, multiple pre-existing indexes,
