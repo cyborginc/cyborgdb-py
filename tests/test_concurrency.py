@@ -52,6 +52,16 @@ class FixedDimensionEmbeddings(Embeddings):
         return self._embed(text)
 
 
+def join_threads(test, threads, timeout=60):
+    """Join all threads and assert none are still alive (catches hangs)."""
+    for t in threads:
+        t.join(timeout=timeout)
+    hung = [t for t in threads if t.is_alive()]
+    test.assertEqual(
+        len(hung), 0, f"{len(hung)} thread(s) hung past {timeout}s timeout"
+    )
+
+
 def make_client():
     """Create a fresh Client instance."""
     return cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
@@ -119,8 +129,7 @@ class TestConcurrentUpserts(unittest.TestCase):
         ]
         for t in threads:
             t.start()
-        for t in threads:
-            t.join(timeout=60)
+        join_threads(self, threads, timeout=60)
 
         self.assertEqual(len(errors), 0, f"Threads raised errors: {errors}")
 
@@ -151,6 +160,9 @@ class TestConcurrentUpserts(unittest.TestCase):
         def worker(thread_id):
             try:
                 vectors = np.random.rand(20, DIMENSION).astype(np.float32)
+                # Lock protects written_vectors tracking only — the upsert
+                # is intentionally outside the lock so writes race freely.
+                # We only assert the final value matches ONE of the writers.
                 with lock:
                     for i, id_ in enumerate(shared_ids):
                         written_vectors[id_].append(vectors[i].copy())
@@ -164,8 +176,7 @@ class TestConcurrentUpserts(unittest.TestCase):
         ]
         for t in threads:
             t.start()
-        for t in threads:
-            t.join(timeout=60)
+        join_threads(self, threads, timeout=60)
 
         self.assertEqual(len(errors), 0, f"Threads raised errors: {errors}")
         time.sleep(2)
@@ -288,8 +299,7 @@ class TestConcurrentReadsAndWrites(unittest.TestCase):
         ] + [threading.Thread(target=reader, args=(i,)) for i in range(num_readers)]
         for t in threads:
             t.start()
-        for t in threads:
-            t.join(timeout=120)
+        join_threads(self, threads, timeout=120)
 
         self.assertEqual(len(errors), 0, f"Concurrent read/write errors: {errors}")
 
@@ -334,8 +344,7 @@ class TestConcurrentReadsAndWrites(unittest.TestCase):
         threads += [threading.Thread(target=querier, args=(i,)) for i in range(4)]
         for t in threads:
             t.start()
-        for t in threads:
-            t.join(timeout=60)
+        join_threads(self, threads, timeout=60)
 
         self.assertEqual(len(errors), 0, f"Delete-during-query errors: {errors}")
 
@@ -378,8 +387,7 @@ class TestConcurrentReadsAndWrites(unittest.TestCase):
         ]
         for t in threads:
             t.start()
-        for t in threads:
-            t.join(timeout=60)
+        join_threads(self, threads, timeout=60)
 
         self.assertEqual(len(errors), 0, f"Upsert/delete race errors: {errors}")
 
@@ -462,8 +470,7 @@ class TestErrorIsolationUnderLoad(unittest.TestCase):
         threads += [threading.Thread(target=good_worker, args=(i,)) for i in range(4)]
         for t in threads:
             t.start()
-        for t in threads:
-            t.join(timeout=60)
+        join_threads(self, threads, timeout=60)
 
         self.assertGreater(len(bad_errors), 0, "Bad worker should have failed")
         self.assertEqual(
@@ -672,8 +679,7 @@ class TestMixedIndexTypesOneClient(unittest.TestCase):
         ]
         for t in threads:
             t.start()
-        for t in threads:
-            t.join(timeout=60)
+        join_threads(self, threads, timeout=60)
 
         self.assertEqual(
             len(errors), 0, f"Mixed-type concurrent write errors: {errors}"
@@ -813,8 +819,7 @@ class TestConcurrentMultiIndexWrites(unittest.TestCase):
         ]
         for t in threads:
             t.start()
-        for t in threads:
-            t.join(timeout=60)
+        join_threads(self, threads, timeout=60)
 
         self.assertEqual(len(errors), 0, f"Concurrent write errors: {errors}")
         time.sleep(2)
@@ -909,8 +914,7 @@ class TestStressHighConcurrency(unittest.TestCase):
         ]
         for t in threads:
             t.start()
-        for t in threads:
-            t.join(timeout=180)
+        join_threads(self, threads, timeout=180)
 
         self.assertEqual(len(errors), 0, f"Stress test errors: {errors}")
 
