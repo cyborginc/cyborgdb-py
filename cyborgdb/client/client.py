@@ -58,12 +58,15 @@ __all__ = [
 ]
 
 
-def _validate_url(url: str) -> None:
+def _validate_url(url: str) -> str:
     """
     Validate that the provided URL is a valid HTTP/HTTPS URL.
 
     Args:
         url: The URL string to validate
+
+    Returns:
+        The validated and stripped URL string
 
     Raises:
         CyborgDBInvalidURLError: If the URL is invalid
@@ -97,6 +100,8 @@ def _validate_url(url: str) -> None:
             raise
         raise CyborgDBInvalidURLError(f"Invalid URL format: {e}", url=url)
 
+    return url
+
 # Re-export with friendly names
 IndexIVFPQ = _OpenAPIIndexIVFPQModel
 IndexIVFFlat = _OpenAPIIndexIVFFlatModel
@@ -128,8 +133,8 @@ class Client:
             CyborgDBInvalidURLError: If the base_url is invalid
             CyborgDBConnectionError: If the client fails to initialize
         """
-        # Validate URL
-        _validate_url(base_url)
+        # Validate URL and get the cleaned version
+        base_url = _validate_url(base_url)
 
         # If base_url is http, disable SSL verification
         if base_url.startswith("http://"):
