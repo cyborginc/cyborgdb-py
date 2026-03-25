@@ -329,12 +329,19 @@ class TestAPIContract(unittest.TestCase):
         self.assertEqual(config2.pq_bits, 8)
         self.assertEqual(config2.type, "ivfpq")
 
-        # Test IndexIVFSQ - check parameters
+        # Test IndexIVFSQ - check parameters with explicit sq_bits
         config3 = cyborgdb.IndexIVFSQ(dimension=self.dimension, sq_bits=8)
         self.assertIsInstance(config3, cyborgdb.IndexIVFSQ)
         self.assertEqual(config3.dimension, self.dimension)
         self.assertEqual(config3.sq_bits, 8)
         self.assertEqual(config3.type, "ivfsq")
+
+        # Test IndexIVFSQ - check default sq_bits is 16
+        config4 = cyborgdb.IndexIVFSQ(dimension=self.dimension)
+        self.assertIsInstance(config4, cyborgdb.IndexIVFSQ)
+        self.assertEqual(config4.dimension, self.dimension)
+        self.assertEqual(config4.sq_bits, 16)
+        self.assertEqual(config4.type, "ivfsq")
 
     def test_08_client_create_index(self):
         """Test Client.create_index() with strict parameter validation."""
@@ -352,7 +359,6 @@ class TestAPIContract(unittest.TestCase):
 
         # Check index config
         created_config = index.index_config
-        print(f"Created config: {created_config}")
         self.assertEqual(index.index_name, self.index_name)
         self.assertEqual(created_config.get("dimension"), self.dimension)
         self.assertEqual(created_config.get("index_type"), "ivfflat")
@@ -374,7 +380,6 @@ class TestAPIContract(unittest.TestCase):
 
         # Check index config
         created_config = index.index_config
-        print(f"Created config: {created_config}")
         self.assertEqual(index.index_name, self.index_name)
         self.assertEqual(created_config.get("dimension"), 0)
         self.assertEqual(created_config.get("index_type"), "ivfpq")
@@ -386,10 +391,10 @@ class TestAPIContract(unittest.TestCase):
         index.delete_index()
         time.sleep(1)
 
-        # Create new index config for IVFSQ
+        # Create new index config for IVFSQ with explicit sq_bits=8
         index_config = cyborgdb.IndexIVFSQ(sq_bits=8)
 
-        # Test with IVFSQ
+        # Test with IVFSQ (explicit sq_bits=8)
         index = self.client.create_index(
             index_name=self.index_name,
             index_key=self.index_key,
@@ -398,12 +403,33 @@ class TestAPIContract(unittest.TestCase):
 
         # Check index config
         created_config = index.index_config
-        print(f"Created config: {created_config}")
         self.assertEqual(index.index_name, self.index_name)
         self.assertEqual(created_config.get("dimension"), 0)
         self.assertEqual(created_config.get("index_type"), "ivfsq")
         self.assertEqual(created_config.get("metric"), "euclidean")
         self.assertEqual(created_config.get("sq_bits"), 8)
+
+        # Clean up this index
+        index.delete_index()
+        time.sleep(1)
+
+        # Create new index config for IVFSQ with default sq_bits (should be 16)
+        index_config = cyborgdb.IndexIVFSQ()
+
+        # Test with IVFSQ (default sq_bits=16)
+        index = self.client.create_index(
+            index_name=self.index_name,
+            index_key=self.index_key,
+            index_config=index_config,
+        )
+
+        # Check index config
+        created_config = index.index_config
+        self.assertEqual(index.index_name, self.index_name)
+        self.assertEqual(created_config.get("dimension"), 0)
+        self.assertEqual(created_config.get("index_type"), "ivfsq")
+        self.assertEqual(created_config.get("metric"), "euclidean")
+        self.assertEqual(created_config.get("sq_bits"), 16)
 
         # Clean up this index
         index.delete_index()
@@ -419,7 +445,6 @@ class TestAPIContract(unittest.TestCase):
 
         # Check index config
         created_config = index.index_config
-        print(f"Created config: {created_config}")
         self.assertEqual(index.index_name, self.index_name)
         self.assertEqual(
             created_config.get("dimension"), 384
