@@ -102,6 +102,7 @@ def _validate_url(url: str) -> str:
 
     return url
 
+
 # Re-export with friendly names
 IndexIVFPQ = _OpenAPIIndexIVFPQModel
 IndexIVFFlat = _OpenAPIIndexIVFFlatModel
@@ -118,7 +119,10 @@ class Client:
     """
 
     def __init__(
-        self, base_url: str, api_key: Optional[str] = None, verify_ssl: Optional[bool] = None
+        self,
+        base_url: str,
+        api_key: Optional[str] = None,
+        verify_ssl: Optional[bool] = None,
     ):
         """
         Initialize the CyborgDB client.

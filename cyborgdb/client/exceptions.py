@@ -61,4 +61,3 @@ class CyborgDBInvalidURLError(CyborgDBValidationError):
     def __init__(self, message: str, url: Optional[str] = None):
         super().__init__(message)
         self.url = url
-
