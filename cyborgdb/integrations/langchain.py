@@ -22,7 +22,13 @@ try:
     from sentence_transformers import SentenceTransformer
 
     # Import CyborgDB components
-    from cyborgdb import Client, EncryptedIndex, IndexIVF, IndexIVFFlat, IndexIVFPQ
+    from cyborgdb import (
+        Client,
+        EncryptedIndex,
+        IndexIVFFlat,
+        IndexIVFPQ,
+        IndexIVFSQ,
+    )
 
     class CyborgVectorStore(VectorStore):
         """
@@ -102,7 +108,7 @@ try:
                     - String model name (for SentenceTransformer)
                     - SentenceTransformer instance
                     - LangChain Embeddings instance
-                index_type: Type of index - "ivfflat", "ivf", or "ivfpq"
+                index_type: Type of index - "ivfflat", "ivfpq", or "ivfsq"
                 index_config_params: Additional index configuration parameters
                 dimension: Embedding dimension (auto-detected if not provided)
                 metric: Distance metric - "cosine", "euclidean", or "squared_euclidean"
@@ -241,11 +247,9 @@ try:
 
         def _create_index_config(
             self, index_type: str, dimension: int, params: Dict[str, Any]
-        ) -> Union[IndexIVF, IndexIVFPQ, IndexIVFFlat]:
+        ) -> Union[IndexIVFPQ, IndexIVFFlat, IndexIVFSQ]:
             """Create the appropriate index configuration."""
-            if index_type == "ivf":
-                return IndexIVF(dimension=dimension)
-            elif index_type == "ivfpq":
+            if index_type == "ivfpq":
                 pq_dim = params.get("pq_dim", 8)
                 pq_bits = params.get("pq_bits", 8)
                 return IndexIVFPQ(
@@ -255,9 +259,15 @@ try:
                 )
             elif index_type == "ivfflat":
                 return IndexIVFFlat(dimension=dimension)
+            elif index_type == "ivfsq":
+                sq_bits = params.get("sq_bits", 16)
+                return IndexIVFSQ(
+                    dimension=dimension,
+                    sq_bits=sq_bits,
+                )
             else:
                 raise ValueError(
-                    f"Invalid index type: {index_type}. Must be 'ivf', 'ivfpq', or 'ivfflat'"
+                    f"Invalid index type: {index_type}. Must be 'ivfpq', 'ivfflat', or 'ivfsq'"
                 )
 
         def get_embeddings(self, texts: Union[str, List[str]]) -> np.ndarray:
@@ -497,6 +507,50 @@ try:
             """
             return self.index.list_ids()
 
+        def _transform_filter(self, filter: Optional[Dict]) -> Dict:
+            """
+            Transform a filter dict into the format expected by CyborgDB.
+
+            CyborgDB expects filters with exactly one top-level filter operator.
+            If the filter has multiple keys (e.g., {"category": "AI", "source": "research"}),
+            this method wraps them in an $and operator.
+
+            Args:
+                filter: Optional metadata filter dict
+
+            Returns:
+                Transformed filter dict compatible with CyborgDB
+            """
+            if not filter:
+                return {}
+
+            # Check if filter already has a top-level operator
+            filter_operators = {
+                "$and",
+                "$or",
+                "$not",
+                "$eq",
+                "$ne",
+                "$gt",
+                "$gte",
+                "$lt",
+                "$lte",
+                "$in",
+                "$nin",
+            }
+            top_level_keys = set(filter.keys())
+
+            # If filter has exactly one key that's an operator, return as-is
+            if len(top_level_keys) == 1 and top_level_keys.issubset(filter_operators):
+                return filter
+
+            # If filter has multiple keys (field conditions), wrap in $and
+            if len(filter) > 1:
+                return {"$and": [{k: v} for k, v in filter.items()]}
+
+            # Single field condition - return as-is
+            return filter
+
         def _execute_query(
             self,
             query: Union[str, List[float]],
@@ -516,7 +570,7 @@ try:
             Returns:
                 List of result dictionaries
             """
-            filter = filter or {}
+            filter = self._transform_filter(filter)
 
             if isinstance(query, str):
                 # Text query - generate embedding
@@ -872,7 +926,7 @@ try:
 
             # Handle index config
             index_config_params = kwargs.pop("index_config_params", {})
-            for key in {"pq_dim", "pq_bits"}:
+            for key in {"pq_dim", "pq_bits", "sq_bits"}:
                 if key in kwargs:
                     index_config_params[key] = kwargs.pop(key)
 

@@ -7,6 +7,11 @@ cyborgdb/openapi_client/configuration.py
 cyborgdb/openapi_client/exceptions.py
 cyborgdb/openapi_client/models/__init__.py
 cyborgdb/openapi_client/models/batch_query_request.py
+cyborgdb/openapi_client/models/binary_query_batch.py
+cyborgdb/openapi_client/models/binary_query_request.py
+cyborgdb/openapi_client/models/binary_upsert_request.py
+cyborgdb/openapi_client/models/binary_vector_batch.py
+cyborgdb/openapi_client/models/binary_vector_batch_contents_inner.py
 cyborgdb/openapi_client/models/contents.py
 cyborgdb/openapi_client/models/create_index_request.py
 cyborgdb/openapi_client/models/cyborgdb_service_api_schemas_index_success_response_model.py
@@ -22,6 +27,7 @@ cyborgdb/openapi_client/models/index_info_response_model.py
 cyborgdb/openapi_client/models/index_ivf_flat_model.py
 cyborgdb/openapi_client/models/index_ivf_model.py
 cyborgdb/openapi_client/models/index_ivfpq_model.py
+cyborgdb/openapi_client/models/index_ivfsq_model.py
 cyborgdb/openapi_client/models/index_list_response_model.py
 cyborgdb/openapi_client/models/index_operation_request.py
 cyborgdb/openapi_client/models/index_training_status_response_model.py

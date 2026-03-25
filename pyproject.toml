@@ -44,6 +44,9 @@ langchain = [
     "langchain-core >= 0.1.0",
     "sentence-transformers >= 2.2.0"
 ]
+test = [
+    "cyborgdb[langchain]",
+]
 
 [project.urls]
 "Homepage" = "https://www.cyborg.co"

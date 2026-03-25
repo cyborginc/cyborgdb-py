@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Additional test coverage for Python SDK to achieve standardization
-Implements missing SSL, IVFPQ, IVF, error handling, and edge case tests
+Implements missing SSL, IVFPQ, error handling, and edge case tests
 """
 
 import unittest
@@ -119,7 +119,7 @@ class TestSSLVerification(unittest.TestCase):
 
 
 class TestIndexTypes(unittest.TestCase):
-    """Test all index types (IVF, IVFPQ) that are missing from current Python tests"""
+    """Test all index types (IVFPQ) that are missing from current Python tests"""
 
     @classmethod
     def setUpClass(cls):
@@ -139,19 +139,18 @@ class TestIndexTypes(unittest.TestCase):
         except Exception:
             pass
 
-    def test_ivf_index_creation_and_operations(self):
-        """Test IVF index creation, upsert, and query operations"""
-        index_config = cyborgdb.IndexIVF(dimension=self.dimension)
+    def test_ivfpq_index_creation_and_operations(self):
+        """Test IVFPQ index creation with PQ parameters"""
+        index_config = cyborgdb.IndexIVFPQ(
+            dimension=self.dimension, pq_dim=32, pq_bits=8
+        )
 
         self.index = self.client.create_index(
-            self.index_name,
-            self.index_key,
-            index_config,
-            metric="euclidean",
+            self.index_name, self.index_key, index_config, metric="euclidean"
         )
 
         # Verify index properties
-        self.assertEqual(self.index.index_type, "ivf")
+        self.assertEqual(self.index.index_type, "ivfpq")
 
         # Test upsert
         items = []
@@ -174,18 +173,16 @@ class TestIndexTypes(unittest.TestCase):
         self.assertGreater(len(results[0]), 0)
         self.assertTrue("id" in results[0])
 
-    def test_ivfpq_index_creation_and_operations(self):
-        """Test IVFPQ index creation with PQ parameters"""
-        index_config = cyborgdb.IndexIVFPQ(
-            dimension=self.dimension, pq_dim=32, pq_bits=8
-        )
+    def test_ivfsq_index_creation_and_operations(self):
+        """Test IVFSQ index creation with SQ parameters"""
+        index_config = cyborgdb.IndexIVFSQ(dimension=self.dimension, sq_bits=8)
 
         self.index = self.client.create_index(
             self.index_name, self.index_key, index_config, metric="euclidean"
         )
 
         # Verify index properties
-        self.assertEqual(self.index.index_type, "ivfpq")
+        self.assertEqual(self.index.index_type, "ivfsq")
 
         # Test upsert
         items = []

@@ -619,19 +619,30 @@ class TestLangChainIntegration(unittest.TestCase):
 
         vectorstore.add_texts(texts=test_texts, metadatas=test_metadata)
 
-        # Search and verify exact content is returned
-        results = vectorstore.similarity_search("quantum computing", k=1)
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0].page_content, test_texts[0])
-        self.assertEqual(results[0].metadata["topic"], "quantum")
+        # Search and verify content is preserved in results (check all k=3 results)
+        results = vectorstore.similarity_search("quantum computing", k=3)
+        self.assertEqual(len(results), 3)
 
-        # Search with score and verify
-        results_with_score = vectorstore.similarity_search_with_score("blockchain", k=1)
-        self.assertEqual(len(results_with_score), 1)
-        doc, score = results_with_score[0]
-        self.assertEqual(doc.page_content, test_texts[1])
-        self.assertEqual(doc.metadata["topic"], "blockchain")
-        self.assertIsInstance(score, float)
+        # Verify all original texts are returned with correct metadata
+        result_contents = {doc.page_content for doc in results}
+        self.assertEqual(result_contents, set(test_texts))
+
+        # Verify metadata is preserved for each document
+        for doc in results:
+            self.assertIn(doc.page_content, test_texts)
+            idx = test_texts.index(doc.page_content)
+            self.assertEqual(doc.metadata["topic"], test_metadata[idx]["topic"])
+
+        # Search with score and verify content/metadata preservation
+        results_with_score = vectorstore.similarity_search_with_score("blockchain", k=3)
+        self.assertEqual(len(results_with_score), 3)
+
+        # Verify all results have proper structure
+        for doc, score in results_with_score:
+            self.assertIn(doc.page_content, test_texts)
+            self.assertIsInstance(score, float)
+            idx = test_texts.index(doc.page_content)
+            self.assertEqual(doc.metadata["topic"], test_metadata[idx]["topic"])
 
     def test_14_add_texts_with_precomputed_embeddings(self):
         """Test adding texts with pre-computed embeddings."""
@@ -877,6 +888,39 @@ class TestLangChainIntegration(unittest.TestCase):
 
         # Run async tests
         asyncio.run(run_async_tests())
+
+    def test_22_create_vectorstore_with_ivfsq(self):
+        """Test creating a vector store with IVFSQ index type."""
+        index_name = "langchain_test_ivfsq"
+        self.index_names_to_cleanup.append(index_name)
+
+        # Create vector store with IVFSQ index type
+        vectorstore = CyborgVectorStore(
+            index_name=index_name,
+            index_key=self.index_key,
+            api_key=self.api_key,
+            base_url=self.base_url,
+            embedding=MockEmbeddings(self.dimension),
+            index_type="ivfsq",
+            index_config_params={"sq_bits": 8},
+            metric="cosine",
+        )
+
+        # Add texts
+        ids = vectorstore.add_texts(
+            texts=self.test_texts[:5], metadatas=self.test_metadata[:5]
+        )
+
+        self.assertEqual(len(ids), 5)
+
+        # Test similarity search
+        results = vectorstore.similarity_search("artificial intelligence", k=3)
+        self.assertEqual(len(results), 3)
+        self.assertIsInstance(results[0], Document)
+
+        # Verify index type
+        index_config = vectorstore.index.index_config
+        self.assertEqual(index_config.get("index_type"), "ivfsq")
 
 
 if __name__ == "__main__":

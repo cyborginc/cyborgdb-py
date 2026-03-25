@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import time
 from dotenv import load_dotenv
-from cyborgdb import Client, EncryptedIndex, IndexIVF
+from cyborgdb import Client, EncryptedIndex, IndexIVFFlat
 
 # Load environment variables from .env.local
 load_dotenv(".env.local")
@@ -27,7 +27,7 @@ class ClientIntegrationTest(unittest.TestCase):
 
         # Create a test index
         self.index_name = f"test_index_{int(time.time())}"
-        self.index_config = IndexIVF(dimension=128)
+        self.index_config = IndexIVFFlat(dimension=128)
 
         # try:
         self.index = self.client.create_index(
@@ -78,3 +78,97 @@ class ClientIntegrationTest(unittest.TestCase):
 
         # Check if the index type is correct
         self.assertIsInstance(loaded_index, EncryptedIndex)
+
+    def test_upsert_with_numpy_array(self):
+        """Test upserting vectors using numpy array (binary format)."""
+        num_vectors = 50
+        dimension = 128
+        vectors = np.random.rand(num_vectors, dimension).astype(np.float32)
+        ids = [f"numpy_{i}" for i in range(num_vectors)]
+
+        # Upsert with numpy array - should use binary format internally
+        self.index.upsert(ids, vectors)
+
+        # Verify vectors were inserted by querying
+        query_vector = vectors[0]  # Use first vector as query
+        results = self.index.query(query_vectors=query_vector, top_k=5)
+
+        self.assertEqual(len(results), 5)
+        # First result should be the same vector we queried with
+        self.assertEqual(results[0]["id"], "numpy_0")
+        self.assertAlmostEqual(results[0]["distance"], 0.0, places=2)
+
+    def test_upsert_with_numpy_float64_conversion(self):
+        """Test upserting vectors with float64 numpy array (should auto-convert)."""
+        num_vectors = 20
+        dimension = 128
+        # Create float64 array - should be auto-converted to float32
+        vectors = np.random.rand(num_vectors, dimension).astype(np.float64)
+        ids = [f"float64_{i}" for i in range(num_vectors)]
+
+        # Should not raise an error - auto-converts to float32
+        self.index.upsert(ids, vectors)
+
+        # Verify vectors were inserted
+        query_vector = vectors[0].astype(np.float32)
+        results = self.index.query(query_vectors=query_vector, top_k=3)
+
+        self.assertEqual(len(results), 3)
+        self.assertEqual(results[0]["id"], "float64_0")
+
+    def test_upsert_binary_direct(self):
+        """Test calling upsert_binary directly."""
+        num_vectors = 30
+        dimension = 128
+        vectors = np.random.rand(num_vectors, dimension).astype(np.float32)
+        ids = [f"direct_{i}" for i in range(num_vectors)]
+
+        # Call upsert_binary directly
+        self.index.upsert_binary(ids, vectors)
+
+        # Verify vectors were inserted
+        query_vector = vectors[0]
+        results = self.index.query(query_vectors=query_vector, top_k=3)
+
+        self.assertEqual(len(results), 3)
+        self.assertEqual(results[0]["id"], "direct_0")
+
+    def test_query_with_2d_numpy_array(self):
+        """Test querying with 2D numpy array (batch query, binary format)."""
+        # First insert some vectors
+        num_vectors = 100
+        dimension = 128
+        vectors = np.random.rand(num_vectors, dimension).astype(np.float32)
+        ids = [f"batch_{i}" for i in range(num_vectors)]
+        self.index.upsert(ids, vectors)
+
+        # Query with multiple vectors at once (2D array)
+        query_vectors = vectors[:5]  # Use first 5 vectors as queries
+        results = self.index.query(query_vectors=query_vectors, top_k=3)
+
+        # Should return a list of lists (one list per query)
+        self.assertEqual(len(results), 5)
+        for i, result_list in enumerate(results):
+            self.assertEqual(len(result_list), 3)
+            # First result for each query should be itself
+            self.assertEqual(result_list[0]["id"], f"batch_{i}")
+            # Distance should be very small (near zero) - allow for float precision
+            self.assertLess(result_list[0]["distance"], 0.01)
+
+    def test_query_binary_direct(self):
+        """Test calling query_binary directly."""
+        # First insert some vectors
+        num_vectors = 50
+        dimension = 128
+        vectors = np.random.rand(num_vectors, dimension).astype(np.float32)
+        ids = [f"qbin_{i}" for i in range(num_vectors)]
+        self.index.upsert(ids, vectors)
+
+        # Call query_binary directly
+        query_vectors = vectors[:3].copy()  # Use first 3 vectors
+        results = self.index.query_binary(query_vectors=query_vectors, top_k=5)
+
+        self.assertEqual(len(results), 3)
+        for i, result_list in enumerate(results):
+            self.assertEqual(len(result_list), 5)
+            self.assertEqual(result_list[0]["id"], f"qbin_{i}")
