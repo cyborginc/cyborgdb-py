@@ -280,7 +280,9 @@ class TestConcurrentReadsAndWrites(unittest.TestCase):
             try:
                 for _ in range(query_count):
                     qv = np.random.rand(DIMENSION).astype(np.float32)
-                    results = self.index.query(query_vectors=qv, top_k=5)
+                    results = self.index.query(
+                        query_vectors=qv, top_k=5, include=["distance"]
+                    )
                     for r in results:
                         self.assertIn("id", r)
                         self.assertIn("distance", r)
@@ -330,7 +332,9 @@ class TestConcurrentReadsAndWrites(unittest.TestCase):
             try:
                 for _ in range(15):
                     qv = np.random.rand(DIMENSION).astype(np.float32)
-                    results = self.index.query(query_vectors=qv, top_k=10)
+                    results = self.index.query(
+                        query_vectors=qv, top_k=10, include=["distance"]
+                    )
                     for r in results:
                         self.assertIn("id", r)
                         self.assertIn("distance", r)
@@ -900,7 +904,9 @@ class TestStressHighConcurrency(unittest.TestCase):
                 # Each thread also queries to validate responses under load
                 for _ in range(5):
                     qv = np.random.rand(DIMENSION).astype(np.float32)
-                    results = self.index.query(query_vectors=qv, top_k=10)
+                    results = self.index.query(
+                        query_vectors=qv, top_k=10, include=["distance"]
+                    )
                     for r in results:
                         self.assertIn("id", r)
                         self.assertIn("distance", r)

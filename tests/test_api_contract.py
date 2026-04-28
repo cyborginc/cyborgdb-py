@@ -742,21 +742,24 @@ class TestAPIContract(unittest.TestCase):
         """Test EncryptedIndex.query() with exact response validation."""
         query_vector = self.test_vectors[0]
 
-        # Test query with default include (should be ["distance", "metadata"])
-        # Single query now returns results directly (not wrapped in a list)
-        results = self.index.query(query_vectors=[query_vector])
+        # Test query requesting distance and metadata explicitly.
+        # Default include (no arg) returns only id; covered separately in the
+        # default-include test below.
+        results = self.index.query(
+            query_vectors=[query_vector], include=["distance", "metadata"]
+        )
 
         self.assertIsInstance(results, list)
         # Single query returns flat list of results
         self.assertGreater(len(results), 0, "Query should return at least one result")
 
-        # Check exact structure with default include - id is always included, plus distance and metadata by default
+        # Check exact structure with include=['distance', 'metadata']
         for result in results:
             self.assertIsInstance(result, dict)
             validate_exact_keys(
                 result,
                 {"id", "distance", "metadata"},
-                "query() result with default include",
+                "query() result with include=['distance', 'metadata']",
             )
 
             # Validate result data
@@ -786,16 +789,16 @@ class TestAPIContract(unittest.TestCase):
                     f"Metadata for ID {result['id']} doesn't match upserted data",
                 )
 
-        # Test with specific include=["metadata"] only (distance is always included)
+        # Test with include=["distance", "metadata"]
         results = self.index.query(
-            query_vectors=[query_vector], top_k=5, include=["metadata"]
+            query_vectors=[query_vector], top_k=5, include=["distance", "metadata"]
         )
 
         for result in results:
             validate_exact_keys(
                 result,
                 {"id", "distance", "metadata"},
-                "query() result with include=['metadata']",
+                "query() result with include=['distance', 'metadata']",
             )
 
             # Validate metadata matches
@@ -816,17 +819,20 @@ class TestAPIContract(unittest.TestCase):
                 result, {"id", "distance"}, "query() result with include=[]"
             )
 
-        # Test with filters and default include
+        # Test with filters and include=['metadata']
         results = self.index.query(
-            query_vectors=[query_vector], filters={"category": "cat_0"}, top_k=20
+            query_vectors=[query_vector],
+            filters={"category": "cat_0"},
+            top_k=20,
+            include=["metadata"],
         )
 
-        # Results should have id, distance, and metadata (default include)
+        # Results should have id and metadata only
         for result in results:
             validate_exact_keys(
                 result,
-                {"id", "distance", "metadata"},
-                "query() result with filters and default include",
+                {"id", "metadata"},
+                "query() result with filters and include=['metadata']",
             )
 
             # All filtered results should have category="cat_0"
@@ -836,11 +842,25 @@ class TestAPIContract(unittest.TestCase):
                 f"Filter not applied correctly for ID {result['id']}",
             )
 
+        # Default include (no include arg) should return only id
+        results = self.index.query(query_vectors=[query_vector], top_k=5)
+
+        self.assertIsInstance(results, list)
+        self.assertGreater(len(results), 0)
+        for result in results:
+            validate_exact_keys(
+                result,
+                {"id"},
+                "query() result with default include",
+            )
+
     def test_16_encrypted_index_query_patterns(self):
         """Test different query patterns: single vs batch queries."""
         # Test Pattern 1: Single vector as flat list -> flat list return
         single_vector = self.test_vectors[0].tolist()  # Convert to list
-        results = self.index.query(query_vectors=single_vector, top_k=3)
+        results = self.index.query(
+            query_vectors=single_vector, top_k=3, include=["distance"]
+        )
 
         # Single query should return a flat list of results
         self.assertIsInstance(results, list)
@@ -855,7 +875,9 @@ class TestAPIContract(unittest.TestCase):
 
         # Test Pattern 2: Single vector in nested list -> flat list return (API update)
         single_vector_nested = [self.test_vectors[1].tolist()]
-        results = self.index.query(query_vectors=single_vector_nested, top_k=3)
+        results = self.index.query(
+            query_vectors=single_vector_nested, top_k=3, include=["distance"]
+        )
 
         # Single query now returns flat list of results directly
         self.assertIsInstance(results, list)
@@ -873,7 +895,11 @@ class TestAPIContract(unittest.TestCase):
             self.test_vectors[3].tolist(),
             self.test_vectors[4].tolist(),
         ]
-        results = self.index.query(query_vectors=multiple_vectors, top_k=2)
+        results = self.index.query(
+            query_vectors=multiple_vectors,
+            top_k=2,
+            include=["distance", "metadata"],
+        )
 
         # Should return list of lists, one for each query
         self.assertIsInstance(results, list)
@@ -940,7 +966,9 @@ class TestAPIContract(unittest.TestCase):
         # Test Pattern 6: Text-based query with query_contents
         # Single text query (returns flat list directly)
         text_query = "test content for similarity search"
-        results = self.index.query(query_contents=text_query, top_k=3)
+        results = self.index.query(
+            query_contents=text_query, top_k=3, include=["distance", "metadata"]
+        )
 
         # Should return flat list for single text query
         self.assertIsInstance(results, list)
@@ -954,7 +982,9 @@ class TestAPIContract(unittest.TestCase):
 
         # Test text query with specific include parameter
         results = self.index.query(
-            query_contents="another test query", top_k=5, include=["metadata"]
+            query_contents="another test query",
+            top_k=5,
+            include=["distance", "metadata"],
         )
 
         self.assertIsInstance(results, list)
@@ -962,7 +992,7 @@ class TestAPIContract(unittest.TestCase):
             validate_exact_keys(
                 result,
                 {"id", "distance", "metadata"},
-                "Text query result with include=['metadata']",
+                "Text query result with include=['distance', 'metadata']",
             )
 
         # Test text query with filters
@@ -970,6 +1000,7 @@ class TestAPIContract(unittest.TestCase):
             query_contents="search for specific category",
             top_k=10,
             filters={"category": "cat_1"},
+            include=["metadata"],
         )
 
         # Verify all results match the filter
@@ -1022,7 +1053,9 @@ class TestAPIContract(unittest.TestCase):
         query_vector = np.random.rand(self.dimension).astype(np.float32)
 
         # Single binary query
-        results = self.index.query(query_vectors=query_vector, top_k=5)
+        results = self.index.query(
+            query_vectors=query_vector, top_k=5, include=["distance"]
+        )
 
         self.assertIsInstance(results, list)
         self.assertGreater(len(results), 0, "Binary query should return results")
@@ -1036,7 +1069,9 @@ class TestAPIContract(unittest.TestCase):
 
         # Batch binary query with 2D numpy array
         batch_vectors = np.random.rand(3, self.dimension).astype(np.float32)
-        results = self.index.query(query_vectors=batch_vectors, top_k=3)
+        results = self.index.query(
+            query_vectors=batch_vectors, top_k=3, include=["distance"]
+        )
 
         self.assertIsInstance(results, list)
         self.assertEqual(len(results), 3, "Should have 3 result lists for batch query")
@@ -1054,6 +1089,7 @@ class TestAPIContract(unittest.TestCase):
             query_vectors=query_vector,
             top_k=10,
             filters={"binary_test": True},
+            include=["metadata"],
         )
 
         # Results should only include vectors from binary upsert test
