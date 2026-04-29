@@ -54,7 +54,9 @@ class ClientIntegrationTest(unittest.TestCase):
 
         # Query a vector
         query_vector = np.random.rand(dimension).astype(np.float32)
-        results = self.index.query(query_vectors=query_vector, top_k=10)
+        results = self.index.query(
+            query_vectors=query_vector, top_k=10, include=["distance"]
+        )
 
         # Check results - results is a flat list, not nested
         self.assertEqual(len(results), 10)
@@ -91,7 +93,9 @@ class ClientIntegrationTest(unittest.TestCase):
 
         # Verify vectors were inserted by querying
         query_vector = vectors[0]  # Use first vector as query
-        results = self.index.query(query_vectors=query_vector, top_k=5)
+        results = self.index.query(
+            query_vectors=query_vector, top_k=5, include=["distance"]
+        )
 
         self.assertEqual(len(results), 5)
         # First result should be the same vector we queried with
@@ -144,7 +148,9 @@ class ClientIntegrationTest(unittest.TestCase):
 
         # Query with multiple vectors at once (2D array)
         query_vectors = vectors[:5]  # Use first 5 vectors as queries
-        results = self.index.query(query_vectors=query_vectors, top_k=3)
+        results = self.index.query(
+            query_vectors=query_vectors, top_k=3, include=["distance"]
+        )
 
         # Should return a list of lists (one list per query)
         self.assertEqual(len(results), 5)
