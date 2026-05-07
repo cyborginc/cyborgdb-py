@@ -72,3 +72,5 @@ datasets
 venv
 
 .env.local
+# Local Claude Code settings
+.claude/
