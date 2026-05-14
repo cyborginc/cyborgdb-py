@@ -143,10 +143,7 @@ class TestAPIContract(unittest.TestCase):
         required_exports = {
             "Client",
             "EncryptedIndex",
-            "IndexConfig",
-            "IndexIVFPQ",
-            "IndexIVFFlat",
-            "IndexIVFSQ",
+            "IndexDiskIVF",
         }
 
         # These may have additional internal exports, but we check minimums
@@ -313,39 +310,22 @@ class TestAPIContract(unittest.TestCase):
 
     def test_07_index_config_classes(self):
         """Test index configuration class signatures and instantiation."""
-        # Test IndexIVFFlat - Pydantic models use **data so can't inspect individual params
+        # Test IndexDiskIVF - Pydantic models use **data so can't inspect individual params
         # Instead test that it accepts the dimension parameter correctly
 
-        config1 = cyborgdb.IndexIVFFlat(dimension=self.dimension)
-        self.assertIsInstance(config1, cyborgdb.IndexIVFFlat)
+        config1 = cyborgdb.IndexDiskIVF(dimension=self.dimension)
+        self.assertIsInstance(config1, cyborgdb.IndexDiskIVF)
         self.assertEqual(config1.dimension, self.dimension)
-        self.assertEqual(config1.type, "ivfflat")
+        self.assertEqual(config1.type, "disk_ivf")
 
-        # Test IndexIVFPQ - check required parameters
-        config2 = cyborgdb.IndexIVFPQ(dimension=self.dimension, pq_dim=64, pq_bits=8)
-        self.assertIsInstance(config2, cyborgdb.IndexIVFPQ)
-        self.assertEqual(config2.dimension, self.dimension)
-        self.assertEqual(config2.pq_dim, 64)
-        self.assertEqual(config2.pq_bits, 8)
-        self.assertEqual(config2.type, "ivfpq")
-
-        # Test IndexIVFSQ - check parameters with explicit sq_bits
-        config3 = cyborgdb.IndexIVFSQ(dimension=self.dimension, sq_bits=8)
-        self.assertIsInstance(config3, cyborgdb.IndexIVFSQ)
-        self.assertEqual(config3.dimension, self.dimension)
-        self.assertEqual(config3.sq_bits, 8)
-        self.assertEqual(config3.type, "ivfsq")
-
-        # Test IndexIVFSQ - check default sq_bits is 16
-        config4 = cyborgdb.IndexIVFSQ(dimension=self.dimension)
-        self.assertIsInstance(config4, cyborgdb.IndexIVFSQ)
-        self.assertEqual(config4.dimension, self.dimension)
-        self.assertEqual(config4.sq_bits, 16)
-        self.assertEqual(config4.type, "ivfsq")
+        # Default constructor (dimension auto-detected from first upsert)
+        config2 = cyborgdb.IndexDiskIVF()
+        self.assertIsInstance(config2, cyborgdb.IndexDiskIVF)
+        self.assertEqual(config2.type, "disk_ivf")
 
     def test_08_client_create_index(self):
         """Test Client.create_index() with strict parameter validation."""
-        index_config = cyborgdb.IndexIVFFlat(dimension=self.dimension)
+        index_config = cyborgdb.IndexDiskIVF(dimension=self.dimension)
 
         # Test with all parameters including a valid config
         index = self.client.create_index(
@@ -361,17 +341,16 @@ class TestAPIContract(unittest.TestCase):
         created_config = index.index_config
         self.assertEqual(index.index_name, self.index_name)
         self.assertEqual(created_config.get("dimension"), self.dimension)
-        self.assertEqual(created_config.get("index_type"), "ivfflat")
+        self.assertEqual(created_config.get("index_type"), "disk_ivf")
         self.assertEqual(created_config.get("metric"), "cosine")
 
         # Clean up this index
         index.delete_index()
         time.sleep(1)
 
-        # Create new index config
-        index_config = cyborgdb.IndexIVFPQ(pq_dim=32, pq_bits=8)
+        # Test with default constructor (dimension auto-detected)
+        index_config = cyborgdb.IndexDiskIVF()
 
-        # Test with IVFPQ
         index = self.client.create_index(
             index_name=self.index_name,
             index_key=self.index_key,
@@ -382,54 +361,8 @@ class TestAPIContract(unittest.TestCase):
         created_config = index.index_config
         self.assertEqual(index.index_name, self.index_name)
         self.assertEqual(created_config.get("dimension"), 0)
-        self.assertEqual(created_config.get("index_type"), "ivfpq")
+        self.assertEqual(created_config.get("index_type"), "disk_ivf")
         self.assertEqual(created_config.get("metric"), "euclidean")
-        self.assertEqual(created_config.get("pq_dim"), 32)
-        self.assertEqual(created_config.get("pq_bits"), 8)
-
-        # Clean up this index
-        index.delete_index()
-        time.sleep(1)
-
-        # Create new index config for IVFSQ with explicit sq_bits=8
-        index_config = cyborgdb.IndexIVFSQ(sq_bits=8)
-
-        # Test with IVFSQ (explicit sq_bits=8)
-        index = self.client.create_index(
-            index_name=self.index_name,
-            index_key=self.index_key,
-            index_config=index_config,
-        )
-
-        # Check index config
-        created_config = index.index_config
-        self.assertEqual(index.index_name, self.index_name)
-        self.assertEqual(created_config.get("dimension"), 0)
-        self.assertEqual(created_config.get("index_type"), "ivfsq")
-        self.assertEqual(created_config.get("metric"), "euclidean")
-        self.assertEqual(created_config.get("sq_bits"), 8)
-
-        # Clean up this index
-        index.delete_index()
-        time.sleep(1)
-
-        # Create new index config for IVFSQ with default sq_bits (should be 16)
-        index_config = cyborgdb.IndexIVFSQ()
-
-        # Test with IVFSQ (default sq_bits=16)
-        index = self.client.create_index(
-            index_name=self.index_name,
-            index_key=self.index_key,
-            index_config=index_config,
-        )
-
-        # Check index config
-        created_config = index.index_config
-        self.assertEqual(index.index_name, self.index_name)
-        self.assertEqual(created_config.get("dimension"), 0)
-        self.assertEqual(created_config.get("index_type"), "ivfsq")
-        self.assertEqual(created_config.get("metric"), "euclidean")
-        self.assertEqual(created_config.get("sq_bits"), 16)
 
         # Clean up this index
         index.delete_index()
@@ -449,7 +382,7 @@ class TestAPIContract(unittest.TestCase):
         self.assertEqual(
             created_config.get("dimension"), 384
         )  # all-MiniLM-L6-v2 dimension
-        self.assertEqual(created_config.get("index_type"), "ivfflat")
+        self.assertEqual(created_config.get("index_type"), "disk_ivf")
         self.assertEqual(created_config.get("metric"), "euclidean")
 
         # Store this one for later tests

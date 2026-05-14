@@ -5,10 +5,7 @@
 # Re-export classes from client module
 from .client.client import (
     Client,
-    IndexConfig,
-    IndexIVFPQ,
-    IndexIVFFlat,
-    IndexIVFSQ,
+    IndexDiskIVF,
 )
 
 # Re-export from encrypted_index.py
@@ -46,10 +43,7 @@ except PackageNotFoundError:
 __all__ = [
     "Client",
     "EncryptedIndex",
-    "IndexConfig",
-    "IndexIVFPQ",
-    "IndexIVFFlat",
-    "IndexIVFSQ",
+    "IndexDiskIVF",
     "CyborgVectorStore",
     "get_demo_api_key",
     "__version__",

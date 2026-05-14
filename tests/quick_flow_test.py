@@ -163,7 +163,7 @@ class TestUnitFlow(unittest.TestCase):
         cls.n_lists = 100
 
         # CYBORDB SETUP: Create the index once (shared state).
-        cls.index_config = cyborgdb.IndexIVFFlat(dimension=cls.dimension)
+        cls.index_config = cyborgdb.IndexDiskIVF(dimension=cls.dimension)
         cls.client = cyborgdb.Client(
             base_url="http://localhost:8000", api_key=os.getenv("CYBORGDB_API_KEY", "")
         )
@@ -638,7 +638,7 @@ class TestUnitFlow(unittest.TestCase):
         self.assertIsInstance(
             self.index.index_config, dict, "Index config is not a dictionary"
         )
-        self.assertEqual(self.index.index_type, "ivfflat", "Index type is not IVFFlat")
+        self.assertEqual(self.index.index_type, "disk_ivf", "Index type is not DiskIVF")
 
     def test_19_load_index(self):
         # Test loading an existing index.

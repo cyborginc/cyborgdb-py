@@ -118,113 +118,6 @@ class TestSSLVerification(unittest.TestCase):
         self.assertIsInstance(health, (dict, bool, str, type(None)))
 
 
-class TestIndexTypes(unittest.TestCase):
-    """Test all index types (IVFPQ) that are missing from current Python tests"""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.client = create_client()
-        cls.dimension = 128
-
-    def setUp(self):
-        self.index_name = generate_unique_name()
-        self.index_key = cyborgdb.Client.generate_key()
-        self.test_vectors = np.random.rand(10, self.dimension).astype(np.float32)
-
-    def tearDown(self):
-        """Clean up created indexes"""
-        try:
-            if hasattr(self, "index") and self.index:
-                self.index.delete_index()
-        except Exception:
-            pass
-
-    def test_ivfpq_index_creation_and_operations(self):
-        """Test IVFPQ index creation with PQ parameters"""
-        index_config = cyborgdb.IndexIVFPQ(
-            dimension=self.dimension, pq_dim=32, pq_bits=8
-        )
-
-        self.index = self.client.create_index(
-            self.index_name, self.index_key, index_config, metric="euclidean"
-        )
-
-        # Verify index properties
-        self.assertEqual(self.index.index_type, "ivfpq")
-
-        # Test upsert
-        items = []
-        for i in range(len(self.test_vectors)):
-            items.append(
-                {
-                    "id": str(i),
-                    "vector": self.test_vectors[i],
-                    "metadata": {"test_id": i},
-                }
-            )
-
-        self.index.upsert(items)
-        time.sleep(1)  # Allow processing
-
-        # Test query
-        query_vector = self.test_vectors[0]
-        results = self.index.query(query_vectors=[query_vector], top_k=5)
-
-        self.assertGreater(len(results[0]), 0)
-        self.assertTrue("id" in results[0])
-
-    def test_ivfsq_index_creation_and_operations(self):
-        """Test IVFSQ index creation with SQ parameters"""
-        index_config = cyborgdb.IndexIVFSQ(dimension=self.dimension, sq_bits=8)
-
-        self.index = self.client.create_index(
-            self.index_name, self.index_key, index_config, metric="euclidean"
-        )
-
-        # Verify index properties
-        self.assertEqual(self.index.index_type, "ivfsq")
-
-        # Test upsert
-        items = []
-        for i in range(len(self.test_vectors)):
-            items.append(
-                {
-                    "id": str(i),
-                    "vector": self.test_vectors[i],
-                    "metadata": {"test_id": i},
-                }
-            )
-
-        self.index.upsert(items)
-        time.sleep(1)  # Allow processing
-
-        # Test query
-        query_vector = self.test_vectors[0]
-        results = self.index.query(query_vectors=[query_vector], top_k=5)
-
-        self.assertGreater(len(results[0]), 0)
-        self.assertTrue("id" in results[0])
-
-    # def test_ivfpq_parameter_validation(self):
-    #     """Test IVFPQ parameter validation"""
-    #     # Test invalid pq_dim = 0
-    #     invalid_config = cyborgdb.IndexIVFPQ(
-    #         dimension=self.dimension, pq_dim=0, pq_bits=8
-    #     )
-
-    #     with self.assertRaises(Exception) as context:
-    #         invalid_index = self.client.create_index(
-    #             generate_unique_name(),
-    #             self.client.generate_key(),
-    #             invalid_config,
-    #             metric="euclidean",
-    #         )
-    #         invalid_index.delete_index()
-
-    #     # Verify the error is about pq_dim
-    #     self.assertIn("pq_dim", str(context.exception).lower())
-
-
 class TestErrorHandling(unittest.TestCase):
     """Test comprehensive error scenarios"""
 
@@ -239,7 +132,7 @@ class TestErrorHandling(unittest.TestCase):
 
         # Try to create an index - this should require authentication
         with self.assertRaises(Exception) as context:
-            index_config = cyborgdb.IndexIVFFlat(dimension=128)
+            index_config = cyborgdb.IndexDiskIVF(dimension=128)
             client.create_index(
                 generate_unique_name(),
                 client.generate_key(),
@@ -270,11 +163,11 @@ class TestErrorHandling(unittest.TestCase):
 
         # Test invalid dimension
         with self.assertRaises(Exception):
-            config = cyborgdb.IndexIVFFlat(dimension=-1)
+            config = cyborgdb.IndexDiskIVF(dimension=-1)
             self.client.create_index(index_name, index_key, config, metric="euclidean")
 
         # Test invalid metric
-        index_config = cyborgdb.IndexIVFFlat(dimension=128)
+        index_config = cyborgdb.IndexDiskIVF(dimension=128)
         with self.assertRaises(Exception):
             self.client.create_index(
                 index_name, index_key, index_config, metric="invalid_metric"
@@ -291,7 +184,7 @@ class TestErrorHandling(unittest.TestCase):
 
     def test_invalid_vector_dimensions(self):
         """Test handling of invalid vector dimensions"""
-        index_config = cyborgdb.IndexIVFFlat(dimension=128)
+        index_config = cyborgdb.IndexDiskIVF(dimension=128)
         index_name = generate_unique_name()
         index_key = self.client.generate_key()
 
@@ -311,7 +204,7 @@ class TestErrorHandling(unittest.TestCase):
         """Test handling of server error responses"""
         # Test with empty index name (should cause an error)
         index_key = self.client.generate_key()
-        index_config = cyborgdb.IndexIVFFlat(dimension=128)
+        index_config = cyborgdb.IndexDiskIVF(dimension=128)
 
         with self.assertRaises(Exception):
             self.client.create_index(
@@ -326,7 +219,7 @@ class TestErrorHandling(unittest.TestCase):
             self.client.create_index(
                 generate_unique_name(),
                 b"invalid_short_key",  # Invalid key length
-                cyborgdb.IndexIVFFlat(dimension=128),
+                cyborgdb.IndexDiskIVF(dimension=128),
                 metric="euclidean",
             )
 
@@ -338,7 +231,7 @@ class TestEdgeCases(unittest.TestCase):
         self.client = create_client()
         self.index_name = generate_unique_name()
         self.index_key = self.client.generate_key()
-        self.index_config = cyborgdb.IndexIVFFlat(dimension=128)
+        self.index_config = cyborgdb.IndexDiskIVF(dimension=128)
         self.index = self.client.create_index(
             self.index_name,
             self.index_key,
@@ -423,7 +316,7 @@ class TestEdgeCases(unittest.TestCase):
         # Create index
         test_index_name = generate_unique_name()
         test_index_key = self.client.generate_key()
-        test_config = cyborgdb.IndexIVFFlat(dimension=128)
+        test_config = cyborgdb.IndexDiskIVF(dimension=128)
 
         test_index = self.client.create_index(
             test_index_name, test_index_key, test_config, metric="euclidean"
@@ -469,7 +362,7 @@ class TestBackendCompatibility(unittest.TestCase):
         self.client = create_client()
         self.index_name = generate_unique_name()
         self.index_key = self.client.generate_key()
-        self.index_config = cyborgdb.IndexIVFFlat(dimension=128)
+        self.index_config = cyborgdb.IndexDiskIVF(dimension=128)
         self.index = self.client.create_index(
             self.index_name,
             self.index_key,
@@ -489,8 +382,7 @@ class TestBackendCompatibility(unittest.TestCase):
         """Test feature availability between backend variants"""
         client = create_client()
 
-        # Test if advanced index types are available
-        index_config = cyborgdb.IndexIVFPQ(dimension=128, pq_dim=32, pq_bits=8)
+        index_config = cyborgdb.IndexDiskIVF(dimension=128)
         index_name = generate_unique_name()
         index_key = client.generate_key()
 

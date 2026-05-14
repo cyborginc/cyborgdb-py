@@ -5,7 +5,7 @@ This module provides a Python client for interacting with the CyborgDB REST API.
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 import secrets
 import logging
 import binascii
@@ -13,10 +13,7 @@ from pydantic import ValidationError
 
 # Import from the OpenAPI generated models
 from cyborgdb.openapi_client.models import (
-    IndexIVFPQModel as _OpenAPIIndexIVFPQModel,
-    IndexIVFFlatModel as _OpenAPIIndexIVFFlatModel,
-    IndexIVFSQModel as _OpenAPIIndexIVFSQModel,
-    IndexConfig as _OpenAPIIndexConfig,
+    IndexDiskIVFModel as _OpenAPIIndexDiskIVFModel,
     CreateIndexRequest as _OpenAPICreateIndexRequest,
 )
 
@@ -25,10 +22,7 @@ try:
     from cyborgdb.openapi_client.api_client import ApiClient, Configuration
     from cyborgdb.openapi_client.api.default_api import DefaultApi
 
-    # Note: Model imports removed as they're accessed through the API client
-    from cyborgdb.openapi_client.models.index_ivf_flat_model import IndexIVFFlatModel
-    from cyborgdb.openapi_client.models.index_ivfpq_model import IndexIVFPQModel
-    from cyborgdb.openapi_client.models.index_ivfsq_model import IndexIVFSQModel
+    from cyborgdb.openapi_client.models.index_disk_ivf_model import IndexDiskIVFModel
     from cyborgdb.openapi_client.exceptions import ApiException
 except ImportError:
     raise ImportError(
@@ -42,17 +36,11 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "Client",
     "EncryptedIndex",
-    "IndexConfig",
-    "IndexIVFPQ",
-    "IndexIVFFlat",
-    "IndexIVFSQ",
+    "IndexDiskIVF",
 ]
 
 # Re-export with friendly names
-IndexIVFPQ = _OpenAPIIndexIVFPQModel
-IndexIVFFlat = _OpenAPIIndexIVFFlatModel
-IndexIVFSQ = _OpenAPIIndexIVFSQModel
-IndexConfig = _OpenAPIIndexConfig
+IndexDiskIVF = _OpenAPIIndexDiskIVFModel
 CreateIndexRequest = _OpenAPICreateIndexRequest
 
 
@@ -167,9 +155,7 @@ class Client:
         self,
         index_name: str,
         index_key: bytes,
-        index_config: Optional[
-            Union[IndexIVFPQModel, IndexIVFFlatModel, IndexIVFSQModel]
-        ] = None,
+        index_config: Optional[IndexDiskIVFModel] = None,
         embedding_model: Optional[str] = None,
         metric: Optional[str] = None,
     ) -> EncryptedIndex:
@@ -185,16 +171,13 @@ class Client:
             key_hex = binascii.hexlify(index_key).decode("ascii")
 
             if index_config is None:
-                index_config = IndexIVFFlatModel()  # Default config
-
-            # Create an IndexConfig instance with the appropriate model
-            index_config_obj = IndexConfig(index_config)
+                index_config = IndexDiskIVFModel()  # Default config
 
             # Create the complete request object
             request = CreateIndexRequest(
                 index_name=index_name,
                 index_key=key_hex,
-                index_config=index_config_obj,
+                index_config=index_config,
                 embedding_model=embedding_model,
                 metric=metric,
             )
