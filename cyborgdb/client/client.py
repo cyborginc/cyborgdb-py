@@ -9,11 +9,10 @@ from typing import Dict, List, Optional
 import secrets
 import logging
 import binascii
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 # Import from the OpenAPI generated models
 from cyborgdb.openapi_client.models import (
-    IndexDiskIVFModel as _OpenAPIIndexDiskIVFModel,
     CreateIndexRequest as _OpenAPICreateIndexRequest,
 )
 
@@ -22,7 +21,6 @@ try:
     from cyborgdb.openapi_client.api_client import ApiClient, Configuration
     from cyborgdb.openapi_client.api.default_api import DefaultApi
 
-    from cyborgdb.openapi_client.models.index_disk_ivf_model import IndexDiskIVFModel
     from cyborgdb.openapi_client.exceptions import ApiException
 except ImportError:
     raise ImportError(
@@ -39,9 +37,14 @@ __all__ = [
     "IndexDiskIVF",
 ]
 
-# Re-export with friendly names
-IndexDiskIVF = _OpenAPIIndexDiskIVFModel
 CreateIndexRequest = _OpenAPICreateIndexRequest
+
+
+class IndexDiskIVF(BaseModel):
+    """SDK-level config for a DiskIVF index."""
+
+    type: str = "disk_ivf"
+    dimension: Optional[int] = None
 
 
 class Client:
@@ -155,7 +158,7 @@ class Client:
         self,
         index_name: str,
         index_key: bytes,
-        index_config: Optional[IndexDiskIVFModel] = None,
+        index_config: Optional[IndexDiskIVF] = None,
         embedding_model: Optional[str] = None,
         metric: Optional[str] = None,
     ) -> EncryptedIndex:
@@ -171,13 +174,13 @@ class Client:
             key_hex = binascii.hexlify(index_key).decode("ascii")
 
             if index_config is None:
-                index_config = IndexDiskIVFModel()  # Default config
+                index_config = IndexDiskIVF()  # Default config
 
             # Create the complete request object
             request = CreateIndexRequest(
                 index_name=index_name,
                 index_key=key_hex,
-                index_config=index_config,
+                dimension=index_config.dimension,
                 embedding_model=embedding_model,
                 metric=metric,
             )
