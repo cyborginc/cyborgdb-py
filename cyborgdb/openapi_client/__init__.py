@@ -34,6 +34,7 @@ __all__ = [
     "BinaryUpsertRequest",
     "BinaryVectorBatch",
     "BinaryVectorBatchContentsInner",
+    "CachePolicyModel",
     "Contents",
     "CreateIndexRequest",
     "CyborgdbServiceApiSchemasIndexSuccessResponseModel",
@@ -83,6 +84,7 @@ from cyborgdb.openapi_client.models.binary_query_request import BinaryQueryReque
 from cyborgdb.openapi_client.models.binary_upsert_request import BinaryUpsertRequest as BinaryUpsertRequest
 from cyborgdb.openapi_client.models.binary_vector_batch import BinaryVectorBatch as BinaryVectorBatch
 from cyborgdb.openapi_client.models.binary_vector_batch_contents_inner import BinaryVectorBatchContentsInner as BinaryVectorBatchContentsInner
+from cyborgdb.openapi_client.models.cache_policy_model import CachePolicyModel as CachePolicyModel
 from cyborgdb.openapi_client.models.contents import Contents as Contents
 from cyborgdb.openapi_client.models.create_index_request import CreateIndexRequest as CreateIndexRequest
 from cyborgdb.openapi_client.models.cyborgdb_service_api_schemas_index_success_response_model import CyborgdbServiceApiSchemasIndexSuccessResponseModel as CyborgdbServiceApiSchemasIndexSuccessResponseModel

@@ -4,6 +4,7 @@
 
 # Re-export classes from client module
 from .client.client import (
+    CachePolicy,
     Client,
     IndexDiskIVF,
 )
@@ -41,6 +42,7 @@ except PackageNotFoundError:
     __version__ = "0.0.0.dev0"
 
 __all__ = [
+    "CachePolicy",
     "Client",
     "EncryptedIndex",
     "IndexDiskIVF",

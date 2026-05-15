@@ -14,6 +14,7 @@ from pydantic import BaseModel, ValidationError
 # Import from the OpenAPI generated models
 from cyborgdb.openapi_client.models import (
     CreateIndexRequest as _OpenAPICreateIndexRequest,
+    CachePolicyModel as _OpenAPICachePolicyModel,
 )
 
 # Import the OpenAPI generated client
@@ -35,9 +36,11 @@ __all__ = [
     "Client",
     "EncryptedIndex",
     "IndexDiskIVF",
+    "CachePolicy",
 ]
 
 CreateIndexRequest = _OpenAPICreateIndexRequest
+CachePolicy = _OpenAPICachePolicyModel
 
 
 class IndexDiskIVF(BaseModel):
@@ -45,6 +48,8 @@ class IndexDiskIVF(BaseModel):
 
     type: str = "disk_ivf"
     dimension: Optional[int] = None
+    cache_policy: Optional[CachePolicy] = None
+    storage_precision: Optional[str] = None
 
 
 class Client:
@@ -183,6 +188,8 @@ class Client:
                 dimension=index_config.dimension,
                 embedding_model=embedding_model,
                 metric=metric,
+                cache_policy=index_config.cache_policy,
+                storage_precision=index_config.storage_precision,
             )
 
             # Call the generated API method

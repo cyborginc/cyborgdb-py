@@ -141,6 +141,7 @@ class TestAPIContract(unittest.TestCase):
 
         # Define expected exports (core + optional)
         required_exports = {
+            "CachePolicy",
             "Client",
             "EncryptedIndex",
             "IndexDiskIVF",
@@ -317,11 +318,25 @@ class TestAPIContract(unittest.TestCase):
         self.assertIsInstance(config1, cyborgdb.IndexDiskIVF)
         self.assertEqual(config1.dimension, self.dimension)
         self.assertEqual(config1.type, "disk_ivf")
+        self.assertIsNone(config1.cache_policy)
+        self.assertIsNone(config1.storage_precision)
 
         # Default constructor (dimension auto-detected from first upsert)
         config2 = cyborgdb.IndexDiskIVF()
         self.assertIsInstance(config2, cyborgdb.IndexDiskIVF)
         self.assertEqual(config2.type, "disk_ivf")
+
+        # With cache_policy and storage_precision
+        cache_policy = cyborgdb.CachePolicy(vectors=True, metadata=False, ids=True)
+        config3 = cyborgdb.IndexDiskIVF(
+            dimension=self.dimension,
+            cache_policy=cache_policy,
+            storage_precision="float16",
+        )
+        self.assertEqual(config3.cache_policy.vectors, True)
+        self.assertEqual(config3.cache_policy.metadata, False)
+        self.assertEqual(config3.cache_policy.ids, True)
+        self.assertEqual(config3.storage_precision, "float16")
 
     def test_08_client_create_index(self):
         """Test Client.create_index() with strict parameter validation."""
@@ -363,6 +378,27 @@ class TestAPIContract(unittest.TestCase):
         self.assertEqual(created_config.get("dimension"), 0)
         self.assertEqual(created_config.get("index_type"), "disk_ivf")
         self.assertEqual(created_config.get("metric"), "euclidean")
+
+        # Clean up this index
+        index.delete_index()
+        time.sleep(1)
+
+        # Test with cache_policy and storage_precision
+        index_config = cyborgdb.IndexDiskIVF(
+            dimension=self.dimension,
+            cache_policy=cyborgdb.CachePolicy(vectors=True, metadata=True, ids=True),
+            storage_precision="float16",
+        )
+
+        index = self.client.create_index(
+            index_name=self.index_name,
+            index_key=self.index_key,
+            index_config=index_config,
+        )
+
+        created_config = index.index_config
+        self.assertEqual(created_config.get("dimension"), self.dimension)
+        self.assertEqual(created_config.get("index_type"), "disk_ivf")
 
         # Clean up this index
         index.delete_index()

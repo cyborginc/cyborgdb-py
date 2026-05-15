@@ -99,6 +99,7 @@ Class | Method | HTTP request | Description
  - [BinaryUpsertRequest](cyborgdb/openapi_client/docs/BinaryUpsertRequest.md)
  - [BinaryVectorBatch](cyborgdb/openapi_client/docs/BinaryVectorBatch.md)
  - [BinaryVectorBatchContentsInner](cyborgdb/openapi_client/docs/BinaryVectorBatchContentsInner.md)
+ - [CachePolicyModel](cyborgdb/openapi_client/docs/CachePolicyModel.md)
  - [Contents](cyborgdb/openapi_client/docs/Contents.md)
  - [CreateIndexRequest](cyborgdb/openapi_client/docs/CreateIndexRequest.md)
  - [CyborgdbServiceApiSchemasIndexSuccessResponseModel](cyborgdb/openapi_client/docs/CyborgdbServiceApiSchemasIndexSuccessResponseModel.md)
