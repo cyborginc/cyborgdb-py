@@ -188,7 +188,6 @@ class TestLangChainIntegration(unittest.TestCase):
             api_key=self.api_key,
             base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
-            index_type="disk_ivf",
             metric="cosine",
         )
 
@@ -215,9 +214,7 @@ class TestLangChainIntegration(unittest.TestCase):
             api_key=self.api_key,
             base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
-            index_type="disk_ivf",
             metric="cosine",
-            index_config_params={"n_lists": 10},
         )
 
         # Add test documents with specific IDs
@@ -255,7 +252,6 @@ class TestLangChainIntegration(unittest.TestCase):
             api_key=self.api_key,
             base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
-            index_type="disk_ivf",
         )
 
         # Add documents with specific IDs
@@ -296,9 +292,7 @@ class TestLangChainIntegration(unittest.TestCase):
             api_key=self.api_key,
             base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
-            index_type="disk_ivf",
             metric="euclidean",
-            index_config_params={"n_lists": 10},
         )
 
         # Add all test documents
@@ -334,7 +328,6 @@ class TestLangChainIntegration(unittest.TestCase):
             api_key=self.api_key,
             base_url=self.base_url,
             embedding=embeddings,
-            index_type="disk_ivf",
             metric="cosine",
         )
 
@@ -364,7 +357,6 @@ class TestLangChainIntegration(unittest.TestCase):
             api_key=self.api_key,
             base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
-            index_type="disk_ivf",
         )
 
         # Add texts with specific IDs
@@ -397,7 +389,6 @@ class TestLangChainIntegration(unittest.TestCase):
             index_key=self.index_key,
             api_key=self.api_key,
             base_url=self.base_url,
-            index_type="disk_ivf",
             metric="cosine",
         )
 
@@ -417,7 +408,6 @@ class TestLangChainIntegration(unittest.TestCase):
             index_key=self.index_key,
             api_key=self.api_key,
             base_url=self.base_url,
-            index_type="disk_ivf",
         )
 
         # Verify the store was created and populated
@@ -435,7 +425,6 @@ class TestLangChainIntegration(unittest.TestCase):
             api_key=self.api_key,
             base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
-            index_type="disk_ivf",
         )
 
         # Add documents
@@ -481,8 +470,7 @@ class TestLangChainIntegration(unittest.TestCase):
                 api_key=self.api_key,
                 base_url=self.base_url,
                 embedding=MockEmbeddings(self.dimension),
-                index_type="disk_ivf",
-            )
+                )
 
             # Async add texts
             ids = await vectorstore.aadd_texts(
@@ -567,7 +555,6 @@ class TestLangChainIntegration(unittest.TestCase):
             api_key=self.api_key,
             base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
-            index_type="disk_ivf",
         )
 
         # Test empty search results
@@ -601,7 +588,6 @@ class TestLangChainIntegration(unittest.TestCase):
             api_key=self.api_key,
             base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
-            index_type="disk_ivf",
             metric="cosine",
         )
 
@@ -668,7 +654,6 @@ class TestLangChainIntegration(unittest.TestCase):
             api_key=self.api_key,
             base_url=self.base_url,
             embedding=mock_embedder,  # Still needed for queries
-            index_type="disk_ivf",
             metric="cosine",
         )
 
@@ -721,7 +706,6 @@ class TestLangChainIntegration(unittest.TestCase):
             api_key=self.api_key,
             base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
-            index_type="disk_ivf",
             metric="cosine",
         )
 
@@ -767,7 +751,6 @@ class TestLangChainIntegration(unittest.TestCase):
             api_key=self.api_key,
             base_url=self.base_url,
             embedding=mock_embedder,
-            index_type="disk_ivf",
             metric="cosine",
         )
 
@@ -818,7 +801,6 @@ class TestLangChainIntegration(unittest.TestCase):
             index_key=self.index_key,
             api_key=self.api_key,
             base_url=self.base_url,
-            index_type="disk_ivf",
             metric="cosine",
         )
 
@@ -837,7 +819,6 @@ class TestLangChainIntegration(unittest.TestCase):
             api_key=self.api_key,
             base_url=self.base_url,
             embedding=MockEmbeddings(self.dimension),
-            index_type="disk_ivf",
             metric="cosine",
         )
 
@@ -870,8 +851,7 @@ class TestLangChainIntegration(unittest.TestCase):
                 api_key=self.api_key,
                 base_url=self.base_url,
                 embedding=mock_embedder,
-                index_type="disk_ivf",
-            )
+                )
 
             # Async add texts with pre-computed embeddings
             ids = await vectorstore.aadd_texts(

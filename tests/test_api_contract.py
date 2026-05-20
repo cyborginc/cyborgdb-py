@@ -143,7 +143,6 @@ class TestAPIContract(unittest.TestCase):
         required_exports = {
             "Client",
             "EncryptedIndex",
-            "IndexDiskIVF",
         }
 
         # These may have additional internal exports, but we check minimums
@@ -265,9 +264,10 @@ class TestAPIContract(unittest.TestCase):
             {
                 "index_name": {"position": 0, "default": inspect.Parameter.empty},
                 "index_key": {"position": 1, "default": inspect.Parameter.empty},
-                "index_config": {"position": 2, "default": None},
+                "dimension": {"position": 2, "default": None},
                 "embedding_model": {"position": 3, "default": None},
                 "metric": {"position": 4, "default": None},
+                "storage_precision": {"position": 5, "default": None},
             },
             "Client.create_index",
         )
@@ -308,38 +308,13 @@ class TestAPIContract(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.client.list_indexes("unexpected_arg")
 
-    def test_07_index_config_classes(self):
-        """Test index configuration class signatures and instantiation."""
-        # Test IndexDiskIVF - Pydantic models use **data so can't inspect individual params
-        # Instead test that it accepts the dimension parameter correctly
-
-        config1 = cyborgdb.IndexDiskIVF(dimension=self.dimension)
-        self.assertIsInstance(config1, cyborgdb.IndexDiskIVF)
-        self.assertEqual(config1.dimension, self.dimension)
-        self.assertEqual(config1.type, "disk_ivf")
-        self.assertIsNone(config1.storage_precision)
-
-        # Default constructor (dimension auto-detected from first upsert)
-        config2 = cyborgdb.IndexDiskIVF()
-        self.assertIsInstance(config2, cyborgdb.IndexDiskIVF)
-        self.assertEqual(config2.type, "disk_ivf")
-
-        # With storage_precision
-        config3 = cyborgdb.IndexDiskIVF(
-            dimension=self.dimension,
-            storage_precision="float16",
-        )
-        self.assertEqual(config3.storage_precision, "float16")
-
     def test_08_client_create_index(self):
         """Test Client.create_index() with strict parameter validation."""
-        index_config = cyborgdb.IndexDiskIVF(dimension=self.dimension)
-
-        # Test with all parameters including a valid config
+        # Test with all parameters
         index = self.client.create_index(
             self.index_name,
             self.index_key,
-            index_config,
+            self.dimension,
             None,  # embedding_model
             "cosine",  # metric - different from default
         )
@@ -356,13 +331,10 @@ class TestAPIContract(unittest.TestCase):
         index.delete_index()
         time.sleep(1)
 
-        # Test with default constructor (dimension auto-detected)
-        index_config = cyborgdb.IndexDiskIVF()
-
+        # Test with no dimension (auto-detected from first upsert)
         index = self.client.create_index(
             index_name=self.index_name,
             index_key=self.index_key,
-            index_config=index_config,
         )
 
         # Check index config
@@ -377,15 +349,11 @@ class TestAPIContract(unittest.TestCase):
         time.sleep(1)
 
         # Test with storage_precision
-        index_config = cyborgdb.IndexDiskIVF(
-            dimension=self.dimension,
-            storage_precision="float16",
-        )
-
         index = self.client.create_index(
             index_name=self.index_name,
             index_key=self.index_key,
-            index_config=index_config,
+            dimension=self.dimension,
+            storage_precision="float16",
         )
 
         created_config = index.index_config

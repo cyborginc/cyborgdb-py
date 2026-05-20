@@ -71,8 +71,7 @@ def make_index(client, prefix="conc"):
     """Create a uniquely-named DiskIVF index and return (index, name, key)."""
     name = f"{prefix}_{uuid.uuid4().hex[:8]}"
     key = cyborgdb.Client.generate_key()
-    config = cyborgdb.IndexDiskIVF(dimension=DIMENSION)
-    index = client.create_index(name, key, config, metric="euclidean")
+    index = client.create_index(name, key, dimension=DIMENSION, metric="euclidean")
     return index, name, key
 
 

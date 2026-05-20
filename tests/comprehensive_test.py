@@ -132,11 +132,10 @@ class TestErrorHandling(unittest.TestCase):
 
         # Try to create an index - this should require authentication
         with self.assertRaises(Exception) as context:
-            index_config = cyborgdb.IndexDiskIVF(dimension=128)
             client.create_index(
                 generate_unique_name(),
                 client.generate_key(),
-                index_config,
+                dimension=128,
                 metric="euclidean",
             )
 
@@ -163,14 +162,14 @@ class TestErrorHandling(unittest.TestCase):
 
         # Test invalid dimension
         with self.assertRaises(Exception):
-            config = cyborgdb.IndexDiskIVF(dimension=-1)
-            self.client.create_index(index_name, index_key, config, metric="euclidean")
+            self.client.create_index(
+                index_name, index_key, dimension=-1, metric="euclidean"
+            )
 
         # Test invalid metric
-        index_config = cyborgdb.IndexDiskIVF(dimension=128)
         with self.assertRaises(Exception):
             self.client.create_index(
-                index_name, index_key, index_config, metric="invalid_metric"
+                index_name, index_key, dimension=128, metric="invalid_metric"
             )
 
     def test_network_connectivity_issues(self):
@@ -184,12 +183,11 @@ class TestErrorHandling(unittest.TestCase):
 
     def test_invalid_vector_dimensions(self):
         """Test handling of invalid vector dimensions"""
-        index_config = cyborgdb.IndexDiskIVF(dimension=128)
         index_name = generate_unique_name()
         index_key = self.client.generate_key()
 
         index = self.client.create_index(
-            index_name, index_key, index_config, metric="euclidean"
+            index_name, index_key, dimension=128, metric="euclidean"
         )
 
         try:
@@ -204,13 +202,12 @@ class TestErrorHandling(unittest.TestCase):
         """Test handling of server error responses"""
         # Test with empty index name (should cause an error)
         index_key = self.client.generate_key()
-        index_config = cyborgdb.IndexDiskIVF(dimension=128)
 
         with self.assertRaises(Exception):
             self.client.create_index(
                 "",  # Empty name should cause error
                 index_key,
-                index_config,
+                dimension=128,
                 metric="euclidean",
             )
 
@@ -219,7 +216,7 @@ class TestErrorHandling(unittest.TestCase):
             self.client.create_index(
                 generate_unique_name(),
                 b"invalid_short_key",  # Invalid key length
-                cyborgdb.IndexDiskIVF(dimension=128),
+                dimension=128,
                 metric="euclidean",
             )
 
@@ -231,11 +228,10 @@ class TestEdgeCases(unittest.TestCase):
         self.client = create_client()
         self.index_name = generate_unique_name()
         self.index_key = self.client.generate_key()
-        self.index_config = cyborgdb.IndexDiskIVF(dimension=128)
         self.index = self.client.create_index(
             self.index_name,
             self.index_key,
-            self.index_config,
+            dimension=128,
             metric="euclidean",
         )
 
@@ -316,10 +312,9 @@ class TestEdgeCases(unittest.TestCase):
         # Create index
         test_index_name = generate_unique_name()
         test_index_key = self.client.generate_key()
-        test_config = cyborgdb.IndexDiskIVF(dimension=128)
 
         test_index = self.client.create_index(
-            test_index_name, test_index_key, test_config, metric="euclidean"
+            test_index_name, test_index_key, dimension=128, metric="euclidean"
         )
 
         # Delete index
@@ -362,11 +357,10 @@ class TestBackendCompatibility(unittest.TestCase):
         self.client = create_client()
         self.index_name = generate_unique_name()
         self.index_key = self.client.generate_key()
-        self.index_config = cyborgdb.IndexDiskIVF(dimension=128)
         self.index = self.client.create_index(
             self.index_name,
             self.index_key,
-            self.index_config,
+            dimension=128,
             metric="euclidean",
         )
 
@@ -382,12 +376,11 @@ class TestBackendCompatibility(unittest.TestCase):
         """Test feature availability between backend variants"""
         client = create_client()
 
-        index_config = cyborgdb.IndexDiskIVF(dimension=128)
         index_name = generate_unique_name()
         index_key = client.generate_key()
 
         index = client.create_index(
-            index_name, index_key, index_config, metric="euclidean"
+            index_name, index_key, dimension=128, metric="euclidean"
         )
         index.delete_index()
 

@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 import secrets
 import logging
 import binascii
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 # Import from the OpenAPI generated models
 from cyborgdb.openapi_client.models import (
@@ -34,18 +34,9 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "Client",
     "EncryptedIndex",
-    "IndexDiskIVF",
 ]
 
 CreateIndexRequest = _OpenAPICreateIndexRequest
-
-
-class IndexDiskIVF(BaseModel):
-    """SDK-level config for a DiskIVF index."""
-
-    type: str = "disk_ivf"
-    dimension: Optional[int] = None
-    storage_precision: Optional[str] = None
 
 
 class Client:
@@ -159,12 +150,13 @@ class Client:
         self,
         index_name: str,
         index_key: bytes,
-        index_config: Optional[IndexDiskIVF] = None,
+        dimension: Optional[int] = None,
         embedding_model: Optional[str] = None,
         metric: Optional[str] = None,
+        storage_precision: Optional[str] = None,
     ) -> EncryptedIndex:
         """
-        Create and return a new encrypted index based on the provided configuration.
+        Create and return a new encrypted DiskIVF index.
         """
         # Validate index_key
         if not isinstance(index_key, bytes) or len(index_key) != 32:
@@ -174,17 +166,14 @@ class Client:
             # Convert binary key to hex string
             key_hex = binascii.hexlify(index_key).decode("ascii")
 
-            if index_config is None:
-                index_config = IndexDiskIVF()  # Default config
-
             # Create the complete request object
             request = CreateIndexRequest(
                 index_name=index_name,
                 index_key=key_hex,
-                dimension=index_config.dimension,
+                dimension=dimension,
                 embedding_model=embedding_model,
                 metric=metric,
-                storage_precision=index_config.storage_precision,
+                storage_precision=storage_precision,
             )
 
             # Call the generated API method

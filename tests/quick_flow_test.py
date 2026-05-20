@@ -163,14 +163,16 @@ class TestUnitFlow(unittest.TestCase):
         cls.n_lists = 100
 
         # CYBORDB SETUP: Create the index once (shared state).
-        cls.index_config = cyborgdb.IndexDiskIVF(dimension=cls.dimension)
         cls.client = cyborgdb.Client(
             base_url="http://localhost:8000", api_key=os.getenv("CYBORGDB_API_KEY", "")
         )
         cls.index_name = generate_unique_name()
         cls.index_key = cyborgdb.Client.generate_key()
         cls.index = cls.client.create_index(
-            cls.index_name, cls.index_key, cls.index_config, metric="euclidean"
+            cls.index_name,
+            cls.index_key,
+            dimension=cls.dimension,
+            metric="euclidean",
         )
 
     @classmethod

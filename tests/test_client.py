@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import time
 from dotenv import load_dotenv
-from cyborgdb import Client, EncryptedIndex, IndexDiskIVF
+from cyborgdb import Client, EncryptedIndex
 
 # Load environment variables from .env.local
 load_dotenv(".env.local")
@@ -27,11 +27,9 @@ class ClientIntegrationTest(unittest.TestCase):
 
         # Create a test index
         self.index_name = f"test_index_{int(time.time())}"
-        self.index_config = IndexDiskIVF(dimension=128)
 
-        # try:
         self.index = self.client.create_index(
-            self.index_name, self.test_key, self.index_config, metric="euclidean"
+            self.index_name, self.test_key, dimension=128, metric="euclidean"
         )
 
     def tearDown(self):
