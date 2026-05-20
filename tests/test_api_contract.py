@@ -141,7 +141,6 @@ class TestAPIContract(unittest.TestCase):
 
         # Define expected exports (core + optional)
         required_exports = {
-            "CachePolicy",
             "Client",
             "EncryptedIndex",
             "IndexDiskIVF",
@@ -318,7 +317,6 @@ class TestAPIContract(unittest.TestCase):
         self.assertIsInstance(config1, cyborgdb.IndexDiskIVF)
         self.assertEqual(config1.dimension, self.dimension)
         self.assertEqual(config1.type, "disk_ivf")
-        self.assertIsNone(config1.cache_policy)
         self.assertIsNone(config1.storage_precision)
 
         # Default constructor (dimension auto-detected from first upsert)
@@ -326,16 +324,11 @@ class TestAPIContract(unittest.TestCase):
         self.assertIsInstance(config2, cyborgdb.IndexDiskIVF)
         self.assertEqual(config2.type, "disk_ivf")
 
-        # With cache_policy and storage_precision
-        cache_policy = cyborgdb.CachePolicy(vectors=True, metadata=False, ids=True)
+        # With storage_precision
         config3 = cyborgdb.IndexDiskIVF(
             dimension=self.dimension,
-            cache_policy=cache_policy,
             storage_precision="float16",
         )
-        self.assertEqual(config3.cache_policy.vectors, True)
-        self.assertEqual(config3.cache_policy.metadata, False)
-        self.assertEqual(config3.cache_policy.ids, True)
         self.assertEqual(config3.storage_precision, "float16")
 
     def test_08_client_create_index(self):
@@ -383,10 +376,9 @@ class TestAPIContract(unittest.TestCase):
         index.delete_index()
         time.sleep(1)
 
-        # Test with cache_policy and storage_precision
+        # Test with storage_precision
         index_config = cyborgdb.IndexDiskIVF(
             dimension=self.dimension,
-            cache_policy=cyborgdb.CachePolicy(vectors=True, metadata=True, ids=True),
             storage_precision="float16",
         )
 

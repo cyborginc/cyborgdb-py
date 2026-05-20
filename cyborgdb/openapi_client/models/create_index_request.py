@@ -19,23 +19,21 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
-from cyborgdb.openapi_client.models.cache_policy_model import CachePolicyModel
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
 class CreateIndexRequest(BaseModel):
     """
-    Request model for creating a new encrypted DiskIVF index.  Attributes:     index_key (str): A 32-byte encryption key as a hex string.     index_name (str): The name/identifier of the index.     dimension (Optional[int]): Dimensionality of the vectors. Auto-detected         from the first upsert if omitted.     embedding_model (Optional[str]): Optional embedding model name.     metric (Optional[str]): Optional distance metric.     cache_policy (Optional[CachePolicyModel]): Per-keystore RAM cache policy.     storage_precision (Optional[Literal[\"float32\", \"float16\"]]): On-disk         rerank-vector dtype. Defaults to float32 in core.
+    Request model for creating a new encrypted DiskIVF index.  Attributes:     index_key (str): A 32-byte encryption key as a hex string.     index_name (str): The name/identifier of the index.     dimension (Optional[int]): Dimensionality of the vectors. Auto-detected         from the first upsert if omitted.     embedding_model (Optional[str]): Optional embedding model name.     metric (Optional[str]): Optional distance metric.     storage_precision (Optional[Literal[\"float32\", \"float16\"]]): On-disk         rerank-vector dtype. Defaults to float32 in core.
     """ # noqa: E501
     index_key: StrictStr = Field(description="32-byte encryption key as hex string")
     index_name: StrictStr = Field(description="ID name")
     dimension: Optional[StrictInt] = None
     embedding_model: Optional[StrictStr] = None
     metric: Optional[StrictStr] = None
-    cache_policy: Optional[CachePolicyModel] = None
     storage_precision: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["index_key", "index_name", "dimension", "embedding_model", "metric", "cache_policy", "storage_precision"]
+    __properties: ClassVar[List[str]] = ["index_key", "index_name", "dimension", "embedding_model", "metric", "storage_precision"]
 
     @field_validator('storage_precision')
     def storage_precision_validate_enum(cls, value):
@@ -86,9 +84,6 @@ class CreateIndexRequest(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of cache_policy
-        if self.cache_policy:
-            _dict['cache_policy'] = self.cache_policy.to_dict()
         # set to None if dimension (nullable) is None
         # and model_fields_set contains the field
         if self.dimension is None and "dimension" in self.model_fields_set:
@@ -103,11 +98,6 @@ class CreateIndexRequest(BaseModel):
         # and model_fields_set contains the field
         if self.metric is None and "metric" in self.model_fields_set:
             _dict['metric'] = None
-
-        # set to None if cache_policy (nullable) is None
-        # and model_fields_set contains the field
-        if self.cache_policy is None and "cache_policy" in self.model_fields_set:
-            _dict['cache_policy'] = None
 
         # set to None if storage_precision (nullable) is None
         # and model_fields_set contains the field
@@ -131,7 +121,6 @@ class CreateIndexRequest(BaseModel):
             "dimension": obj.get("dimension"),
             "embedding_model": obj.get("embedding_model"),
             "metric": obj.get("metric"),
-            "cache_policy": CachePolicyModel.from_dict(obj["cache_policy"]) if obj.get("cache_policy") is not None else None,
             "storage_precision": obj.get("storage_precision")
         })
         return _obj
