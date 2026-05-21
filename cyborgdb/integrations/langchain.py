@@ -25,9 +25,6 @@ try:
     from cyborgdb import (
         Client,
         EncryptedIndex,
-        IndexIVFFlat,
-        IndexIVFPQ,
-        IndexIVFSQ,
     )
 
     class CyborgVectorStore(VectorStore):
@@ -90,8 +87,6 @@ try:
             api_key: str,
             base_url: str,
             embedding: Union[str, Embeddings, SentenceTransformer],
-            index_type: str = "ivfflat",
-            index_config_params: Optional[Dict[str, Any]] = None,
             dimension: Optional[int] = None,
             metric: str = "cosine",
             verify_ssl: Optional[bool] = None,
@@ -108,8 +103,6 @@ try:
                     - String model name (for SentenceTransformer)
                     - SentenceTransformer instance
                     - LangChain Embeddings instance
-                index_type: Type of index - "ivfflat", "ivfpq", or "ivfsq"
-                index_config_params: Additional index configuration parameters
                 dimension: Embedding dimension (auto-detected if not provided)
                 metric: Distance metric - "cosine", "euclidean", or "squared_euclidean"
                 verify_ssl: SSL verification (None for auto-detect, True/False to override)
@@ -131,12 +124,7 @@ try:
             )
 
             # Initialize or load index
-            self._initialize_index(
-                index_type=index_type,
-                index_config_params=index_config_params or {},
-                dimension=dimension,
-                metric=metric,
-            )
+            self._initialize_index(dimension=dimension, metric=metric)
 
         def _setup_embedding_model(
             self, embedding: Union[str, Embeddings, SentenceTransformer]
@@ -155,8 +143,6 @@ try:
 
         def _initialize_index(
             self,
-            index_type: str,
-            index_config_params: Dict[str, Any],
             dimension: Optional[int],
             metric: str,
         ) -> None:
@@ -174,9 +160,7 @@ try:
                 self._load_existing_index()
             else:
                 # Create new index
-                self._create_new_index(
-                    index_type, index_config_params, dimension, metric
-                )
+                self._create_new_index(dimension, metric)
 
         def _load_existing_index(self) -> None:
             """Load an existing index."""
@@ -189,8 +173,6 @@ try:
 
         def _create_new_index(
             self,
-            index_type: str,
-            index_config_params: Dict[str, Any],
             dimension: Optional[int],
             metric: Optional[str],
         ) -> None:
@@ -199,16 +181,11 @@ try:
             if dimension is None:
                 dimension = self._detect_embedding_dimension()
 
-            # Create index configuration
-            config = self._create_index_config(
-                index_type, dimension, index_config_params
-            )
-
             # Create the index
             self.index = self.client.create_index(
                 index_name=self.index_name,
                 index_key=self.index_key,
-                index_config=config,
+                dimension=dimension,
                 embedding_model=self.embedding_model_name
                 if self.embedding_model_name
                 else None,
@@ -243,31 +220,6 @@ try:
                     len(dummy)
                     if isinstance(dummy, list)
                     else np.asarray(dummy).shape[0]
-                )
-
-        def _create_index_config(
-            self, index_type: str, dimension: int, params: Dict[str, Any]
-        ) -> Union[IndexIVFPQ, IndexIVFFlat, IndexIVFSQ]:
-            """Create the appropriate index configuration."""
-            if index_type == "ivfpq":
-                pq_dim = params.get("pq_dim", 8)
-                pq_bits = params.get("pq_bits", 8)
-                return IndexIVFPQ(
-                    dimension=dimension,
-                    pq_dim=pq_dim,
-                    pq_bits=pq_bits,
-                )
-            elif index_type == "ivfflat":
-                return IndexIVFFlat(dimension=dimension)
-            elif index_type == "ivfsq":
-                sq_bits = params.get("sq_bits", 16)
-                return IndexIVFSQ(
-                    dimension=dimension,
-                    sq_bits=sq_bits,
-                )
-            else:
-                raise ValueError(
-                    f"Invalid index type: {index_type}. Must be 'ivfpq', 'ivfflat', or 'ivfsq'"
                 )
 
         def get_embeddings(self, texts: Union[str, List[str]]) -> np.ndarray:
@@ -897,7 +849,6 @@ try:
                     - api_key: CyborgDB API key
                     - base_url: CyborgDB API URL
                     - ids: Optional IDs for texts
-                    - index_type: Type of index
                     - metric: Distance metric
                     - and more...
 
@@ -919,16 +870,9 @@ try:
                 raise ValueError("api_key must be provided for CyborgDB.")
 
             # Extract optional parameters
-            index_type = kwargs.pop("index_type", "ivfflat")
             metric = kwargs.pop("metric", "cosine")
             dimension = kwargs.pop("dimension", None)
             verify_ssl = kwargs.pop("verify_ssl", None)
-
-            # Handle index config
-            index_config_params = kwargs.pop("index_config_params", {})
-            for key in {"pq_dim", "pq_bits", "sq_bits"}:
-                if key in kwargs:
-                    index_config_params[key] = kwargs.pop(key)
 
             # If embeddings are provided and dimension is not, infer it
             if embeddings is not None and dimension is None:
@@ -950,8 +894,6 @@ try:
                 api_key=api_key,
                 base_url=base_url,
                 embedding=embedding,
-                index_type=index_type,
-                index_config_params=index_config_params,
                 dimension=dimension,
                 metric=metric,
                 verify_ssl=verify_ssl,

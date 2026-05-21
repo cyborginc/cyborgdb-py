@@ -3,13 +3,7 @@
 """CyborgDB: A vector database platform."""
 
 # Re-export classes from client module
-from .client.client import (
-    Client,
-    IndexConfig,
-    IndexIVFPQ,
-    IndexIVFFlat,
-    IndexIVFSQ,
-)
+from .client.client import Client
 
 # Re-export from encrypted_index.py
 from .client.encrypted_index import EncryptedIndex
@@ -46,10 +40,6 @@ except PackageNotFoundError:
 __all__ = [
     "Client",
     "EncryptedIndex",
-    "IndexConfig",
-    "IndexIVFPQ",
-    "IndexIVFFlat",
-    "IndexIVFSQ",
     "CyborgVectorStore",
     "get_demo_api_key",
     "__version__",
