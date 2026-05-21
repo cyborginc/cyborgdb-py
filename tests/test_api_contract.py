@@ -263,11 +263,12 @@ class TestAPIContract(unittest.TestCase):
             self.client.create_index,
             {
                 "index_name": {"position": 0, "default": inspect.Parameter.empty},
-                "index_key": {"position": 1, "default": inspect.Parameter.empty},
-                "dimension": {"position": 2, "default": None},
-                "embedding_model": {"position": 3, "default": None},
-                "metric": {"position": 4, "default": None},
-                "storage_precision": {"position": 5, "default": None},
+                "index_key": {"position": 1, "default": None},
+                "kms_name": {"position": 2, "default": None},
+                "dimension": {"position": 3, "default": None},
+                "embedding_model": {"position": 4, "default": None},
+                "metric": {"position": 5, "default": None},
+                "storage_precision": {"position": 6, "default": None},
             },
             "Client.create_index",
         )
@@ -276,7 +277,7 @@ class TestAPIContract(unittest.TestCase):
             self.client.load_index,
             {
                 "index_name": {"position": 0, "default": inspect.Parameter.empty},
-                "index_key": {"position": 1, "default": inspect.Parameter.empty},
+                "index_key": {"position": 1, "default": None},
             },
             "Client.load_index",
         )
@@ -312,11 +313,11 @@ class TestAPIContract(unittest.TestCase):
         """Test Client.create_index() with strict parameter validation."""
         # Test with all parameters
         index = self.client.create_index(
-            self.index_name,
-            self.index_key,
-            self.dimension,
-            None,  # embedding_model
-            "cosine",  # metric - different from default
+            index_name=self.index_name,
+            index_key=self.index_key,
+            dimension=self.dimension,
+            embedding_model=None,
+            metric="cosine",
         )
         self.assertIsInstance(index, cyborgdb.EncryptedIndex)
 

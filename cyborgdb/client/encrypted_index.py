@@ -48,14 +48,20 @@ class EncryptedIndex:
     """
 
     def __init__(
-        self, index_name: str, index_key: bytes, api: DefaultApi, api_client: ApiClient
+        self,
+        index_name: str,
+        index_key: Optional[bytes],
+        api: DefaultApi,
+        api_client: ApiClient,
     ):
         """
         Initialize with API access to an index.
 
         Args:
             index_name: Name of the index
-            index_key: Encryption key for the index
+            index_key: Encryption key for the index. ``None`` for KMS-backed
+                indexes where the service resolves the KEK from the stored
+                ``KMSBlob``.
             api: API client instance
             api_client: The lower-level API client
         """
@@ -846,6 +852,9 @@ class EncryptedIndex:
             logger.error(error_msg)
             raise ValueError(error_msg)
 
-    def _key_to_hex(self) -> str:
-        """Convert the binary key to a hex string for API calls."""
+    def _key_to_hex(self) -> Optional[str]:
+        """Convert the binary key to a hex string for API calls, or ``None``
+        when the index is KMS-backed and no SDK-side key is held."""
+        if self._index_key is None:
+            return None
         return binascii.hexlify(self._index_key).decode("ascii")
