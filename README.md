@@ -156,6 +156,16 @@ index = client.create_index(
 )
 ```
 
+> **How slots are configured.** A `kms.registry` slot is added to the
+> service's `cyborgdb.yaml` by your **cyborgdb-service operator** — not
+> from the SDK. Each slot declares one provider (`aws-kms`, `aws`,
+> or `none`) plus the AWS identifiers needed to wrap/unwrap data keys.
+> For real-KMS slots (`aws-kms` / `aws`), set-up also requires IAM
+> work on the customer's AWS account; see `BYOK.md` in the
+> cyborgdb-service repo for the full operator + customer walkthrough.
+> From the SDK side, you only need the slot name your operator
+> provisioned.
+
 ## Documentation
 
 For more information on CyborgDB, see the [Cyborg Docs](https://docs.cyborg.co).
