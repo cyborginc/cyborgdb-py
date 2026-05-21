@@ -470,7 +470,7 @@ class TestLangChainIntegration(unittest.TestCase):
                 api_key=self.api_key,
                 base_url=self.base_url,
                 embedding=MockEmbeddings(self.dimension),
-                )
+            )
 
             # Async add texts
             ids = await vectorstore.aadd_texts(
@@ -851,7 +851,7 @@ class TestLangChainIntegration(unittest.TestCase):
                 api_key=self.api_key,
                 base_url=self.base_url,
                 embedding=mock_embedder,
-                )
+            )
 
             # Async add texts with pre-computed embeddings
             ids = await vectorstore.aadd_texts(
