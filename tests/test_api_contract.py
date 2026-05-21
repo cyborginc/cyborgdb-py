@@ -1106,5 +1106,77 @@ class TestAPIContract(unittest.TestCase):
         self.__class__.index = None
 
 
+class TestSDKConstructionOffline(unittest.TestCase):
+    """SDK-side construction and validation tests that do not require a live
+    cyborgdb-service. These exercise the new optional-key / KMS paths added
+    when the service moved to per-index KMS routing."""
+
+    def setUp(self):
+        # Client.__init__ does not make any network calls; it only configures
+        # the underlying api_client. Safe to instantiate without a server.
+        self.client = cyborgdb.Client(
+            base_url="http://localhost:8000", api_key="offline-test-key"
+        )
+
+    def test_create_index_requires_key_or_kms_name(self):
+        """create_index must raise ValueError when both index_key and kms_name are absent."""
+        with self.assertRaises(ValueError) as ctx:
+            self.client.create_index(index_name="x")
+        self.assertIn("index_key", str(ctx.exception))
+        self.assertIn("kms_name", str(ctx.exception))
+
+    def test_create_index_request_serializes_kms_name(self):
+        """CreateIndexRequest with kms_name only must omit index_key from the
+        outgoing payload and include kms_name."""
+        from cyborgdb.openapi_client.models import CreateIndexRequest
+
+        req = CreateIndexRequest(index_name="x", kms_name="vendor-slot")
+        payload = req.to_dict()
+
+        self.assertEqual(payload["index_name"], "x")
+        self.assertEqual(payload["kms_name"], "vendor-slot")
+        # index_key was not set, so it should be absent (exclude_none) from the
+        # serialized payload — the service treats absence as "KMS-resolved."
+        self.assertNotIn("index_key", payload)
+
+    def test_load_index_without_key_builds_keyless_request(self):
+        """IndexOperationRequest must accept an absent index_key for the
+        KMS-backed load path, and the serialized payload must omit it."""
+        from cyborgdb.openapi_client.models import IndexOperationRequest
+
+        req = IndexOperationRequest(index_name="x")
+        payload = req.to_dict()
+
+        self.assertEqual(payload["index_name"], "x")
+        self.assertNotIn("index_key", payload)
+
+    def test_encrypted_index_handles_none_key(self):
+        """EncryptedIndex constructed without a key (KMS-backed) must not crash
+        on _key_to_hex(); the request models must then receive index_key=None."""
+        from cyborgdb.openapi_client.models import IndexOperationRequest
+
+        # load_index validates and returns an EncryptedIndex; here we want to
+        # bypass the index_type sanity check (which would hit the network), so
+        # we construct EncryptedIndex directly.
+        idx = cyborgdb.EncryptedIndex(
+            index_name="x",
+            index_key=None,
+            api=self.client.api,
+            api_client=self.client.api_client,
+        )
+        self.assertIsNone(idx._key_to_hex())
+
+        # Request construction with the resulting None must succeed. On the
+        # wire, an explicitly-set None pydantic field serializes as null
+        # (distinct from omission); the service treats both as "no key,
+        # resolve via KMS."
+        req = IndexOperationRequest(
+            index_name=idx.index_name, index_key=idx._key_to_hex()
+        )
+        payload = req.to_dict()
+        self.assertEqual(payload["index_name"], "x")
+        self.assertIsNone(payload.get("index_key"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
