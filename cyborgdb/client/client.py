@@ -39,6 +39,12 @@ __all__ = [
 CreateIndexRequest = _OpenAPICreateIndexRequest
 
 
+def _validate_index_key(index_key: bytes) -> None:
+    """Raise ValueError unless ``index_key`` is a 32-byte ``bytes`` object."""
+    if not isinstance(index_key, bytes) or len(index_key) != 32:
+        raise ValueError("index_key must be a 32-byte bytes object")
+
+
 class Client:
     """
     Client for interacting with CyborgDB via REST API.
@@ -171,12 +177,10 @@ class Client:
         """
         if index_key is None and kms_name is None:
             raise ValueError(
-                "must provide index_key, kms_name, or both"
+                "create_index requires index_key, kms_name, or both"
             )
-        if index_key is not None and (
-            not isinstance(index_key, bytes) or len(index_key) != 32
-        ):
-            raise ValueError("index_key must be a 32-byte bytes object")
+        if index_key is not None:
+            _validate_index_key(index_key)
 
         try:
             key_hex = (
@@ -195,7 +199,6 @@ class Client:
                 storage_precision=storage_precision,
             )
 
-            # Call the generated API method
             self.api.create_index_v1_indexes_create_post(
                 create_index_request=request,
                 _headers={
@@ -234,10 +237,8 @@ class Client:
         stored ``KMSBlob``, so ``index_key`` can be omitted.
         """
 
-        if index_key is not None and (
-            not isinstance(index_key, bytes) or len(index_key) != 32
-        ):
-            raise ValueError("index_key must be a 32-byte bytes object")
+        if index_key is not None:
+            _validate_index_key(index_key)
 
         try:
             index = EncryptedIndex(

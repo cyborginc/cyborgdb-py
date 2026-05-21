@@ -67,6 +67,11 @@ class EncryptedIndex:
         """
         self._index_name = index_name
         self._index_key = index_key
+        self._index_key_hex = (
+            binascii.hexlify(index_key).decode("ascii")
+            if index_key is not None
+            else None
+        )
         self._api = api
         self._api_client = api_client
         self._index_config = None
@@ -853,8 +858,6 @@ class EncryptedIndex:
             raise ValueError(error_msg)
 
     def _key_to_hex(self) -> Optional[str]:
-        """Convert the binary key to a hex string for API calls, or ``None``
-        when the index is KMS-backed and no SDK-side key is held."""
-        if self._index_key is None:
-            return None
-        return binascii.hexlify(self._index_key).decode("ascii")
+        """Hex-encoded key for API calls, or ``None`` for KMS-backed indexes.
+        Computed once in ``__init__`` since the key never changes."""
+        return self._index_key_hex

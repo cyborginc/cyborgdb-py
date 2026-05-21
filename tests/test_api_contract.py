@@ -1106,6 +1106,18 @@ class TestAPIContract(unittest.TestCase):
         self.__class__.index = None
 
 
+from cyborgdb.openapi_client.models import (
+    CreateIndexRequest,
+    DeleteRequest,
+    GetRequest,
+    IndexOperationRequest,
+    ListIDsRequest,
+    QueryRequest,
+    TrainRequest,
+    UpsertRequest,
+)
+
+
 class TestSDKConstructionOffline(unittest.TestCase):
     """SDK-side construction and validation tests that do not require a live
     cyborgdb-service. These exercise the new optional-key / KMS paths added
@@ -1128,8 +1140,6 @@ class TestSDKConstructionOffline(unittest.TestCase):
     def test_create_index_request_serializes_kms_name(self):
         """CreateIndexRequest with kms_name only must omit index_key from the
         outgoing payload and include kms_name."""
-        from cyborgdb.openapi_client.models import CreateIndexRequest
-
         req = CreateIndexRequest(index_name="x", kms_name="vendor-slot")
         payload = req.to_dict()
 
@@ -1142,22 +1152,32 @@ class TestSDKConstructionOffline(unittest.TestCase):
     def test_load_index_without_key_builds_keyless_request(self):
         """IndexOperationRequest must accept an absent index_key for the
         KMS-backed load path, and the serialized payload must omit it."""
-        from cyborgdb.openapi_client.models import IndexOperationRequest
-
         req = IndexOperationRequest(index_name="x")
         payload = req.to_dict()
 
         self.assertEqual(payload["index_name"], "x")
         self.assertNotIn("index_key", payload)
 
+    def test_load_index_explicit_none_matches_omitted(self):
+        """Client.load_index(name, None) must behave the same as load_index(name).
+        Internally we pass index_key=None into EncryptedIndex; the offline check
+        here is that the explicit-None path doesn't trip key-length validation."""
+        # No ApiException context manager: Client.load_index normally pings the
+        # service via index.index_type to validate existence. Without a live
+        # server that raises an ApiException, which Client wraps as ValueError.
+        # The assertion that matters is that validation does NOT fire for
+        # explicit None — so a ValueError mentioning "32-byte" would be the
+        # regression. Any other failure mode is acceptable here.
+        try:
+            self.client.load_index("x", None)
+        except ValueError as e:
+            self.assertNotIn("32-byte", str(e))
+        except Exception:
+            pass  # network failure (no server) — fine
+
     def test_encrypted_index_handles_none_key(self):
         """EncryptedIndex constructed without a key (KMS-backed) must not crash
         on _key_to_hex(); the request models must then receive index_key=None."""
-        from cyborgdb.openapi_client.models import IndexOperationRequest
-
-        # load_index validates and returns an EncryptedIndex; here we want to
-        # bypass the index_type sanity check (which would hit the network), so
-        # we construct EncryptedIndex directly.
         idx = cyborgdb.EncryptedIndex(
             index_name="x",
             index_key=None,
@@ -1166,16 +1186,38 @@ class TestSDKConstructionOffline(unittest.TestCase):
         )
         self.assertIsNone(idx._key_to_hex())
 
-        # Request construction with the resulting None must succeed. On the
-        # wire, an explicitly-set None pydantic field serializes as null
-        # (distinct from omission); the service treats both as "no key,
-        # resolve via KMS."
+        # Explicitly-set None pydantic field serializes as null (distinct from
+        # omission); the service treats both as "no key, resolve via KMS."
         req = IndexOperationRequest(
             index_name=idx.index_name, index_key=idx._key_to_hex()
         )
         payload = req.to_dict()
         self.assertEqual(payload["index_name"], "x")
         self.assertIsNone(payload.get("index_key"))
+
+    def test_all_data_plane_requests_accept_none_key(self):
+        """Every data-plane request model the SDK constructs must accept
+        ``index_key=None`` so KMS-backed indexes can use them without an SDK
+        key. Regression risk: if the openapi regen changed `index_key` back
+        to required on any of these, the SDK breaks at runtime, not at type-
+        check time."""
+        # Each request model lists every field the SDK touches on the keyless
+        # path. We only construct + serialize; no network call.
+        models_and_kwargs = [
+            (QueryRequest, {"index_name": "x", "query_vectors": [0.0]}),
+            (UpsertRequest, {"index_name": "x", "items": []}),
+            (GetRequest, {"index_name": "x", "ids": ["a"]}),
+            (DeleteRequest, {"index_name": "x", "ids": ["a"]}),
+            (TrainRequest, {"index_name": "x"}),
+            (ListIDsRequest, {"index_name": "x"}),
+        ]
+        for model_cls, kwargs in models_and_kwargs:
+            with self.subTest(model=model_cls.__name__):
+                req = model_cls(index_key=None, **kwargs)
+                payload = req.to_dict()
+                # index_key is either absent or null on the wire — both are
+                # equivalent to the service's "no key" path.
+                self.assertIsNone(payload.get("index_key"))
 
 
 if __name__ == "__main__":
