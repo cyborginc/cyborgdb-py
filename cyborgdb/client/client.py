@@ -174,7 +174,7 @@ class Client:
                 embedding_model=embedding_model,
                 metric=metric,
                 storage_precision=storage_precision,
-            )
+            ) 
 
             # Call the generated API method
             self.api.create_index_v1_indexes_create_post(
