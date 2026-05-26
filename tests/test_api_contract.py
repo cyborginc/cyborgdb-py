@@ -16,9 +16,20 @@ import inspect
 import numpy as np
 from typing import List, Dict, Any
 import unittest
+import urllib3
 from dotenv import load_dotenv
 
 import cyborgdb
+from cyborgdb.openapi_client.models import (
+    CreateIndexRequest,
+    DeleteRequest,
+    GetRequest,
+    IndexOperationRequest,
+    ListIDsRequest,
+    QueryRequest,
+    TrainRequest,
+    UpsertRequest,
+)
 
 # Load environment variables from .env.local
 load_dotenv(".env.local")
@@ -1106,18 +1117,6 @@ class TestAPIContract(unittest.TestCase):
         self.__class__.index = None
 
 
-from cyborgdb.openapi_client.models import (
-    CreateIndexRequest,
-    DeleteRequest,
-    GetRequest,
-    IndexOperationRequest,
-    ListIDsRequest,
-    QueryRequest,
-    TrainRequest,
-    UpsertRequest,
-)
-
-
 class TestSDKConstructionOffline(unittest.TestCase):
     """SDK-side construction and validation tests that do not require a live
     cyborgdb-service. These exercise the new optional-key / KMS paths added
@@ -1149,6 +1148,53 @@ class TestSDKConstructionOffline(unittest.TestCase):
         # serialized payload — the service treats absence as "KMS-resolved."
         self.assertNotIn("index_key", payload)
 
+    def test_create_index_request_serializes_both_key_and_kms_name(self):
+        """provider:none mixed mode: both index_key and kms_name are present
+        on the wire. The SDK must serialize both — index_key as 64-char hex,
+        kms_name as the slot name — and not drop either."""
+        key_hex = "ab" * 32
+        req = CreateIndexRequest(
+            index_name="x", index_key=key_hex, kms_name="plain"
+        )
+        payload = req.to_dict()
+
+        self.assertEqual(payload["index_name"], "x")
+        self.assertEqual(payload["index_key"], key_hex)
+        self.assertEqual(payload["kms_name"], "plain")
+
+    def test_create_index_forwards_both_key_and_kms_name(self):
+        """The SDK must NOT pre-emptively reject index_key + kms_name together.
+        That combination is valid for provider:none slots; whether it's
+        accepted or 400'd is the service's call, not the client's. We assert
+        create_index forwards both fields untouched instead of raising."""
+        key = cyborgdb.Client.generate_key()
+        captured = {}
+
+        def fake_create(create_index_request, **kwargs):
+            captured["req"] = create_index_request
+
+        self.client.api.create_index_v1_indexes_create_post = fake_create
+
+        index = self.client.create_index(
+            index_name="x", index_key=key, kms_name="plain", dimension=8
+        )
+        self.assertIsInstance(index, cyborgdb.EncryptedIndex)
+
+        payload = captured["req"].to_dict()
+        self.assertEqual(payload["kms_name"], "plain")
+        self.assertEqual(len(payload["index_key"]), 64)  # 32-byte key as hex
+
+    def test_index_name_readable_on_keyless_index(self):
+        """EncryptedIndex.index_name must be publicly readable for KMS-backed
+        (keyless) indexes — callers rely on it after load_index(name)."""
+        idx = cyborgdb.EncryptedIndex(
+            index_name="kms-index",
+            index_key=None,
+            api=self.client.api,
+            api_client=self.client.api_client,
+        )
+        self.assertEqual(idx.index_name, "kms-index")
+
     def test_load_index_without_key_builds_keyless_request(self):
         """IndexOperationRequest must accept an absent index_key for the
         KMS-backed load path, and the serialized payload must omit it."""
@@ -1165,9 +1211,12 @@ class TestSDKConstructionOffline(unittest.TestCase):
         try:
             self.client.load_index("x", None)
         except ValueError as e:
+            # Server reachable: load_index wraps the describe ApiException
+            # (401/404/etc.) as ValueError. The only client-side regression
+            # we guard against is a key-length check firing on None.
             self.assertNotIn("32-byte", str(e))
-        except Exception:
-            pass  # network failure (no server) — fine
+        except urllib3.exceptions.HTTPError:
+            pass  # server unreachable (no live service) — not a key-path bug
 
     def test_encrypted_index_handles_none_key(self):
         """EncryptedIndex constructed without a key (KMS-backed) must not crash

@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import secrets
 import logging
-import binascii
 from pydantic import ValidationError
 
 # Import from the OpenAPI generated models
@@ -186,15 +185,18 @@ class Client:
             _validate_index_key(index_key)
 
         try:
-            key_hex = (
-                binascii.hexlify(index_key).decode("ascii")
-                if index_key is not None
-                else None
+            # Build the handle first (no network I/O); it owns the single
+            # hex encoding of the key, which we reuse for the request below.
+            index = EncryptedIndex(
+                index_name=index_name,
+                index_key=index_key,
+                api=self.api,
+                api_client=self.api_client,
             )
 
             request = CreateIndexRequest(
                 index_name=index_name,
-                index_key=key_hex,
+                index_key=index._key_to_hex(),
                 kms_name=kms_name,
                 dimension=dimension,
                 embedding_model=embedding_model,
@@ -211,12 +213,7 @@ class Client:
                 },
             )
 
-            return EncryptedIndex(
-                index_name=index_name,
-                index_key=index_key,
-                api=self.api,
-                api_client=self.api_client,
-            )
+            return index
 
         except ApiException as e:
             error_msg = f"Failed to create index: {e}"
@@ -250,7 +247,10 @@ class Client:
                 api_client=self.api_client,
             )
 
-            _ = index.index_type  # Access for validation; value not used.
+            # Probe the describe endpoint so a missing/inaccessible index
+            # raises here instead of silently returning a phantom handle.
+            # index_type now lets ApiException propagate — caught below.
+            _ = index.index_type
 
             return index
 

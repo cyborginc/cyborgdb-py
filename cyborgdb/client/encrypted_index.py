@@ -83,41 +83,25 @@ class EncryptedIndex:
 
     @property
     def index_type(self) -> str:
-        """Get the type of the index."""
-        # Retrieve index info if not already cached
+        """Get the type of the index. Raises ApiException if the describe
+        call fails (e.g. index doesn't exist, auth error, service down)."""
         if not hasattr(self, "_index_type_cached"):
-            try:
-                request = IndexOperationRequest(
-                    index_key=self._key_to_hex(), index_name=self._index_name
-                )
-
-                response = self._api.get_index_info_v1_indexes_describe_post(
-                    index_operation_request=request
-                )
-                self._index_type_cached = response.index_type
-            except ApiException as e:
-                logger.error(f"Failed to retrieve index type: {e}")
-                self._index_type_cached = "unknown"
+            response = self._api.get_index_info_v1_indexes_describe_post(
+                index_operation_request=self._ior()
+            )
+            self._index_type_cached = response.index_type
 
         return self._index_type_cached
 
     @property
     def index_config(self) -> Dict[str, Any]:
-        """Get the configuration of the index as a dictionary."""
-        # Retrieve index info if not already cached
+        """Get the configuration of the index as a dictionary. Raises
+        ApiException if the describe call fails."""
         if not self._index_config:
-            try:
-                request = IndexOperationRequest(
-                    index_key=self._key_to_hex(), index_name=self._index_name
-                )
-
-                response = self._api.get_index_info_v1_indexes_describe_post(
-                    index_operation_request=request
-                )
-                self._index_config = response.index_config
-            except ApiException as e:
-                logger.error(f"Failed to retrieve index config: {e}")
-                self._index_config = {}
+            response = self._api.get_index_info_v1_indexes_describe_post(
+                index_operation_request=self._ior()
+            )
+            self._index_config = response.index_config
 
         return self._index_config
 
@@ -129,12 +113,8 @@ class EncryptedIndex:
             bool: True if the index is trained, otherwise False.
         """
         try:
-            request = IndexOperationRequest(
-                index_key=self._key_to_hex(), index_name=self._index_name
-            )
-
             response = self._api.get_index_info_v1_indexes_describe_post(
-                index_operation_request=request
+                index_operation_request=self._ior()
             )
             return response.is_trained
         except ApiException as e:
@@ -152,12 +132,8 @@ class EncryptedIndex:
             ValueError: If the index could not be deleted.
         """
         try:
-            request = IndexOperationRequest(
-                index_key=self._key_to_hex(), index_name=self._index_name
-            )
-
             self._api.delete_index_v1_indexes_delete_post(
-                index_operation_request=request
+                index_operation_request=self._ior()
             )
         except ApiException as e:
             error_msg = f"Failed to delete index: {e}"
@@ -861,3 +837,9 @@ class EncryptedIndex:
         """Hex-encoded key for API calls, or ``None`` for KMS-backed indexes.
         Computed once in ``__init__`` since the key never changes."""
         return self._index_key_hex
+
+    def _ior(self) -> IndexOperationRequest:
+        """Build the name+key request used by describe/delete-style endpoints."""
+        return IndexOperationRequest(
+            index_key=self._key_to_hex(), index_name=self._index_name
+        )
