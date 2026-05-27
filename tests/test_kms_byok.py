@@ -193,5 +193,39 @@ class TestProviderNone(_KMSRoundTripBase, unittest.TestCase):
         self.assertEqual(loaded.index_type, "disk_ivf")
 
 
+@unittest.skipUnless(
+    KMS_NAME_REAL,
+    "CYBORGDB_KMS_NAME_REAL not set — skipping real-provider negative test.",
+)
+class TestKMSRealRejectsSDKKey(unittest.TestCase):
+    """A real-provider slot generates the KEK itself, so supplying index_key
+    alongside kms_name is contradictory. The service rejects it with a 400,
+    which the SDK surfaces as a ValueError. The SDK forwards both fields
+    untouched — the rejection is the server's call, not the client's.
+    (provider:none, where both fields ARE valid, is covered by
+    TestProviderNone.)"""
+
+    def setUp(self):
+        self.client = cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
+        self.index_name = f"test_kms_neg_{uuid.uuid4().hex[:8]}"
+
+    def tearDown(self):
+        # Best-effort: if the service unexpectedly created the index, clean up.
+        try:
+            self.client.load_index(self.index_name).delete_index()
+        except Exception:
+            pass
+
+    def test_create_index_with_real_kms_and_key_is_rejected(self):
+        with self.assertRaises(ValueError):
+            self.client.create_index(
+                index_name=self.index_name,
+                index_key=cyborgdb.Client.generate_key(),
+                kms_name=KMS_NAME_REAL,
+                dimension=DIMENSION,
+                metric="euclidean",
+            )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
