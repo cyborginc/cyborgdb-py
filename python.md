@@ -148,8 +148,8 @@ def _validate_index_key(index_key: bytes) -> None:
 
 #### Rewrite `Client.create_index`
 
-Three-mode contract (`index_key` only / `kms_name` only / both for
-`provider: none`):
+Two-mode contract (`index_key` only / `kms_name` only — exactly one;
+supplying both is a service-side 400):
 
 ```python
 def create_index(
@@ -165,17 +165,20 @@ def create_index(
     """
     Create and return a new encrypted DiskIVF index.
 
-    At least one of ``index_key`` or ``kms_name`` must be provided.
+    At least one of ``index_key`` or ``kms_name`` must be provided, and
+    the service accepts exactly one of them:
 
-    - ``index_key`` only — SDK supplies the 32-byte key; the service treats
-      it as the DEK and does no KMS round-trips.
-    - ``kms_name`` only — the service generates a fresh DEK and wraps it
-      under the named ``kms.registry`` entry; the SDK never sees the DEK.
-    - ``index_key`` + ``kms_name`` — only valid when ``kms_name`` references
-      a ``provider: none`` registry entry, in which case ``index_key`` is
-      the wrapping KEK. Passing both against a real-KMS slot
-      (``provider: aws-kms`` / ``aws``) is rejected by the service with
-      a 400.
+    - ``index_key`` only — the SDK supplies the 32-byte wrapping key; the
+      service records the index as ``provider: none`` and does no KMS
+      round-trips. The same key must be re-supplied to ``load_index``.
+    - ``kms_name`` only — the service generates the key and wraps it under
+      the named ``kms.registry`` entry (``aws-kms`` / ``aws``); the SDK
+      never sees the plaintext key, and ``load_index`` needs no key.
+
+    Supplying both is forwarded as-is and rejected by the service with a
+    400, for every provider: the named slot already determines the key
+    source. Note that ``none`` is not a registry slot type — the no-KMS
+    path is reached by omitting ``kms_name``.
     """
     if index_key is None and kms_name is None:
         raise ValueError(
@@ -452,7 +455,7 @@ combinations that posture supports:
 |---|---|---|---|
 | `TestKMSReal` | `KMS_NAME_REAL` | none | `client.load_index(name)` (no key) |
 | `TestKMSSecretsManager` | `KMS_NAME_SM` | none | `client.load_index(name)` (no key) |
-| `TestProviderNone` | `KMS_NAME_NONE` | `cyborgdb.Client.generate_key()` | `client.load_index(name, key)` |
+| `TestProviderNone` | *(omitted)* | `cyborgdb.Client.generate_key()` | `client.load_index(name, key)` |
 
 Skip cleanly via `@unittest.skipUnless(KMS_NAME_X, "...")` when the
 env var isn't set. Pull `.env.local` via
@@ -497,12 +500,11 @@ loaded = client.load_index("kms-backed-index")
 ```
 
 ```python
-# provider: none — SDK supplies the KEK on every call. Pass both
-# index_key and kms_name.
+# No-KMS path — SDK supplies the key. Pass index_key only, omit kms_name
+# (the service records this index as provider: none). Supplying both is a 400.
 index = client.create_index(
     index_name="sdk-keyed-index",
     index_key=my_key_bytes,
-    kms_name="plain",       # registry slot with provider: none
     dimension=128,
 )
 ```
@@ -517,7 +519,7 @@ cyborgdb-service for the AWS IAM + `kms.registry` setup.
 ```
 Hand-written:
   cyborgdb/client/client.py            — _validate_index_key helper, create_index
-                                          + load_index three-mode contract
+                                          + load_index two-mode contract
   cyborgdb/client/encrypted_index.py   — Optional[bytes] __init__, cached _index_key_hex,
                                           _key_to_hex returns Optional[str]
   README.md                            — BYOK section
@@ -567,7 +569,8 @@ Expected wire-shape behavior for the offline test (matches the Go SDK):
   with `exclude_none=True` semantics).
 - `index_key` only → `index_key` present as 64-char hex, `kms_name`
   absent.
-- Both set → both present (the `provider: none` shape).
+- Both set → both present on the wire (the SDK forwards them unchanged); the
+  service then rejects the pair with a 400 — no provider accepts both.
 - Neither set → `client.create_index` raises `ValueError` mentioning
   both `index_key` and `kms_name` before any wire traffic.
 
@@ -631,5 +634,5 @@ what their semantics are) is defined in:
 - `cyborgdb-service/BYOK.md` — operator + customer setup walkthrough.
 - `cyborgdb-service/cyborgdb.example.yaml` — `kms.registry` shape.
 - `cyborgdb-service/cyborgdb_service/api/routes/indexes.py::_resolve_kek`
-  — the authoritative server-side validator for the three modes +
-  the rejected fourth (both-against-real-KMS → 400).
+  — the authoritative server-side validator: exactly one of `index_key` /
+  `kms_name`; supplying both is a 400 for every provider.

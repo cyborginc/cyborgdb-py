@@ -144,22 +144,28 @@ loaded = client.load_index(index_name='kms-backed-index')
 loaded.upsert(items)
 ```
 
-For `provider: none` registry entries, the SDK still supplies the KEK on
-every call — pass both `index_key` and `kms_name`:
+Alternatively, the SDK can supply the key itself — pass `index_key` and omit
+`kms_name`. This is the no-KMS path, which the service records internally as
+`provider: none`:
 
 ```python
 index = client.create_index(
     index_name='sdk-keyed-index',
     index_key=index_key,
-    kms_name='plain',   # registry slot with provider: none
     dimension=128,
 )
 ```
 
+Supply **exactly one** of `index_key` / `kms_name` — passing both is rejected
+by the service with a 400, since the named slot already determines the key
+source.
+
 > **How slots are configured.** A `kms.registry` slot is added to the
 > service's `cyborgdb.yaml` by your **cyborgdb-service operator** — not
-> from the SDK. Each slot declares one provider (`aws-kms`, `aws`,
-> or `none`) plus the AWS identifiers needed to wrap/unwrap data keys.
+> from the SDK. Each slot declares one real provider (`aws-kms` or `aws`)
+> plus the AWS identifiers needed to wrap/unwrap data keys. (`none` is not a
+> configurable slot type; it is the label the service records for the no-KMS,
+> SDK-supplied-key path above.)
 > For real-KMS slots (`aws-kms` / `aws`), set-up also requires IAM
 > work on the customer's AWS account; see `BYOK.md` in the
 > cyborgdb-service repo for the full operator + customer walkthrough.

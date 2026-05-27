@@ -164,17 +164,21 @@ class Client:
         """
         Create and return a new encrypted DiskIVF index.
 
-        At least one of ``index_key`` or ``kms_name`` must be provided.
+        At least one of ``index_key`` or ``kms_name`` must be provided, and
+        the service accepts exactly one of them:
 
-        - ``index_key`` only — SDK supplies the 32-byte key; the service treats
-          it as the DEK and does no KMS round-trips.
-        - ``kms_name`` only — the service generates a fresh DEK and wraps it
-          under the named ``kms.registry`` entry; the SDK never sees the DEK.
-        - ``index_key`` + ``kms_name`` — only valid when ``kms_name`` references
-          a ``provider: none`` registry entry, in which case ``index_key`` is
-          the wrapping KEK. Passing both against a real-KMS slot
-          (``provider: aws-kms`` / ``aws``) is rejected by the service with
-          a 400.
+        - ``index_key`` only — the SDK supplies the 32-byte wrapping key; the
+          service records the index as ``provider: none`` and does no KMS
+          round-trips. The same key must be re-supplied to ``load_index``.
+        - ``kms_name`` only — the service generates the key and wraps it under
+          the named ``kms.registry`` entry (``aws-kms`` / ``aws``); the SDK
+          never sees the plaintext key, and ``load_index`` needs no key.
+
+        Supplying both is forwarded as-is and rejected by the service with a
+        400, for every provider: the named slot already determines the key
+        source, so an SDK-supplied key is contradictory. Note that ``none`` is
+        not a registry slot type — the no-KMS path is reached by omitting
+        ``kms_name``, not by naming a ``provider: none`` slot.
         """
         if index_key is None and kms_name is None:
             raise ValueError(
