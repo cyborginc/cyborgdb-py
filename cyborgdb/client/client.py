@@ -251,8 +251,10 @@ class Client:
 
             # Probe the describe endpoint so a missing/inaccessible index
             # raises here instead of silently returning a phantom handle.
-            # ApiException propagates and is caught below.
-            _ = index.index_config
+            # `dimension` fires the lazy describe and caches it for
+            # subsequent reads. ApiException propagates and is caught
+            # below.
+            _ = index.dimension
 
             return index
 

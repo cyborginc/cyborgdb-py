@@ -74,7 +74,21 @@ class EncryptedIndex:
         )
         self._api = api
         self._api_client = api_client
-        self._index_config = None
+        # Lazy-cached describe-derived metadata. `dimension` and `metric`
+        # are immutable post-creation, so the first describe populates
+        # both and we reuse the values. `n_lists` is fetched fresh on
+        # every read because training mutates it (default 1 → trained
+        # cluster count).
+        self._dimension: Optional[int] = None
+        self._metric: Optional[str] = None
+
+    def _describe(self):
+        """Fire the describe endpoint with this index's key (None for
+        KMS-backed indexes). Shared by the lazy property accessors and
+        by `Client.load_index`'s existence probe."""
+        return self._api.get_index_info_v1_indexes_describe_post(
+            index_operation_request=self._ior()
+        )
 
     @property
     def index_name(self) -> str:
@@ -82,16 +96,33 @@ class EncryptedIndex:
         return self._index_name
 
     @property
-    def index_config(self) -> Dict[str, Any]:
-        """Get the configuration of the index as a dictionary. Raises
-        ApiException if the describe call fails."""
-        if not self._index_config:
-            response = self._api.get_index_info_v1_indexes_describe_post(
-                index_operation_request=self._ior()
-            )
-            self._index_config = response.index_config
+    def dimension(self) -> int:
+        """Vector dimensionality. `0` if create_index was called
+        without an explicit dimension and the first upsert hasn't
+        happened yet; otherwise the real dimension. Cached on first
+        read."""
+        if self._dimension is None:
+            response = self._describe()
+            self._dimension = response.dimension
+            self._metric = response.metric
+        return self._dimension
 
-        return self._index_config
+    @property
+    def metric(self) -> str:
+        """Distance metric (`euclidean`, `cosine`, or
+        `squared_euclidean`). Cached on first read."""
+        if self._metric is None:
+            response = self._describe()
+            self._dimension = response.dimension
+            self._metric = response.metric
+        return self._metric
+
+    @property
+    def n_lists(self) -> int:
+        """Number of inverted lists. `1` for untrained indexes; set to
+        the trained cluster count after `train()`. Fetched fresh on
+        every read so post-training callers see the new value."""
+        return self._describe().n_lists
 
     def is_trained(self) -> bool:
         """

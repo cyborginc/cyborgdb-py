@@ -692,14 +692,10 @@ try:
             Returns:
                 Normalized similarity score
             """
-            # Get metric from index config
+            # Read the metric off the index; default to cosine on any
+            # describe failure (network, missing index, etc.).
             try:
-                config = self.index.index_config
-                metric = (
-                    config.get("metric", "cosine")
-                    if isinstance(config, dict)
-                    else getattr(config, "metric", "cosine")
-                )
+                metric = self.index.metric
             except Exception:
                 metric = "cosine"
 

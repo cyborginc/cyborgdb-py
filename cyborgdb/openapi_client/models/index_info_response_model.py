@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
@@ -25,12 +25,14 @@ from pydantic_core import to_jsonable_python
 
 class IndexInfoResponseModel(BaseModel):
     """
-    Response model for retrieving information about an index.  Attributes:     index_name (str): The name of the index.     is_trained (bool): Indicates whether the index has been trained.     index_config (Dict[str, Any]): The full configuration details of the index.
+    Response model for retrieving information about an index.  Attributes:     index_name (str): The name of the index.     is_trained (bool): Indicates whether the index has been trained.     dimension (int): Dimensionality of the vectors. `0` before the         first upsert when create_index was called without an explicit         dimension (auto-detect).     metric (str): Distance metric (`euclidean`, `cosine`, or         `squared_euclidean`).     n_lists (int): Number of inverted lists in the IVF index. `1`         for untrained indexes.
     """ # noqa: E501
-    index_config: Dict[str, Any]
+    dimension: StrictInt
     index_name: StrictStr
     is_trained: StrictBool
-    __properties: ClassVar[List[str]] = ["index_config", "index_name", "is_trained"]
+    metric: StrictStr
+    n_lists: StrictInt
+    __properties: ClassVar[List[str]] = ["dimension", "index_name", "is_trained", "metric", "n_lists"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -83,9 +85,11 @@ class IndexInfoResponseModel(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "index_config": obj.get("index_config"),
+            "dimension": obj.get("dimension"),
             "index_name": obj.get("index_name"),
-            "is_trained": obj.get("is_trained")
+            "is_trained": obj.get("is_trained"),
+            "metric": obj.get("metric"),
+            "n_lists": obj.get("n_lists")
         })
         return _obj
 

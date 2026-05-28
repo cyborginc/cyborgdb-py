@@ -332,11 +332,9 @@ class TestAPIContract(unittest.TestCase):
         )
         self.assertIsInstance(index, cyborgdb.EncryptedIndex)
 
-        # Check index config
-        created_config = index.index_config
         self.assertEqual(index.index_name, self.index_name)
-        self.assertEqual(created_config.get("dimension"), self.dimension)
-        self.assertEqual(created_config.get("metric"), "cosine")
+        self.assertEqual(index.dimension, self.dimension)
+        self.assertEqual(index.metric, "cosine")
 
         # Clean up this index
         index.delete_index()
@@ -348,11 +346,9 @@ class TestAPIContract(unittest.TestCase):
             index_key=self.index_key,
         )
 
-        # Check index config
-        created_config = index.index_config
         self.assertEqual(index.index_name, self.index_name)
-        self.assertEqual(created_config.get("dimension"), 0)
-        self.assertEqual(created_config.get("metric"), "euclidean")
+        self.assertEqual(index.dimension, 0)
+        self.assertEqual(index.metric, "euclidean")
 
         # Clean up this index
         index.delete_index()
@@ -366,8 +362,7 @@ class TestAPIContract(unittest.TestCase):
             storage_precision="float16",
         )
 
-        created_config = index.index_config
-        self.assertEqual(created_config.get("dimension"), self.dimension)
+        self.assertEqual(index.dimension, self.dimension)
 
         # Clean up this index
         index.delete_index()
@@ -381,13 +376,9 @@ class TestAPIContract(unittest.TestCase):
         )
         self.assertIsInstance(index, cyborgdb.EncryptedIndex)
 
-        # Check index config
-        created_config = index.index_config
         self.assertEqual(index.index_name, self.index_name)
-        self.assertEqual(
-            created_config.get("dimension"), 384
-        )  # all-MiniLM-L6-v2 dimension
-        self.assertEqual(created_config.get("metric"), "euclidean")
+        self.assertEqual(index.dimension, 384)  # all-MiniLM-L6-v2 dimension
+        self.assertEqual(index.metric, "euclidean")
 
         # Store this one for later tests
         self.__class__.index_name = self.index_name
@@ -491,11 +482,10 @@ class TestAPIContract(unittest.TestCase):
         self.assertIsInstance(name, str)
         self.assertEqual(name, self.index_name)
 
-        # Test index_config property
-        config = self.index.index_config
-        self.assertIsInstance(config, dict)
-        # Config should have certain keys
-        self.assertIn("dimension", config)
+        # Test the flat config properties (dimension/metric/n_lists)
+        self.assertIsInstance(self.index.dimension, int)
+        self.assertIsInstance(self.index.metric, str)
+        self.assertIsInstance(self.index.n_lists, int)
 
     def test_10_encrypted_index_is_trained(self):
         """Test EncryptedIndex.is_trained() exact behavior."""

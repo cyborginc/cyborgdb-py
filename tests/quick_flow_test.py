@@ -413,8 +413,7 @@ class TestUnitFlow(unittest.TestCase):
         )
 
         # Verify final state - n_lists should match what we specified
-        final_config = self.index.index_config
-        final_n_lists = final_config.get("n_lists")
+        final_n_lists = self.index.n_lists
         print(f"Final n_lists: {final_n_lists}")
         self.assertEqual(
             final_n_lists,
@@ -427,11 +426,13 @@ class TestUnitFlow(unittest.TestCase):
         # Debug: Check index state before query
         num_ids = len(self.index.list_ids())
         is_trained = self.index.is_trained()
-        index_config = self.index.index_config
         print("\n=== DEBUG: Index state before query ===")
         print(f"Total IDs in index: {num_ids}")
         print(f"Is trained: {is_trained}")
-        print(f"Index config: {index_config}")
+        print(
+            f"Dimension: {self.index.dimension}, metric: {self.index.metric}, "
+            f"n_lists: {self.index.n_lists}"
+        )
 
         results = self.index.query(
             query_vectors=self.queries, top_k=100, n_probes=self.n_lists
@@ -637,9 +638,9 @@ class TestUnitFlow(unittest.TestCase):
         self.assertEqual(
             self.index.index_name, self.index_name, "Index name does not match"
         )
-        self.assertIsInstance(
-            self.index.index_config, dict, "Index config is not a dictionary"
-        )
+        self.assertIsInstance(self.index.dimension, int)
+        self.assertIsInstance(self.index.metric, str)
+        self.assertIsInstance(self.index.n_lists, int)
 
     def test_19_load_index(self):
         # Test loading an existing index.
