@@ -37,21 +37,6 @@ jobs:
       contents: read
       id-token: write
 
-    services:
-      postgres:
-        image: postgres:15-alpine
-        ports:
-          - 5432:5432
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: cyborgdb
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - name: Checkout SDK code
         uses: actions/checkout@v4
@@ -119,8 +104,7 @@ jobs:
         run: |
           echo "=== Running Tests with local CyborgDB Service ==="
           # Set up environment for Standard
-          export CYBORGDB_DB_TYPE=postgres
-          export CYBORGDB_CONNECTION_STRING="host=localhost port=5432 dbname=cyborgdb user=postgres password=postgres"
+          export CYBORGDB_DB_TYPE=standalone
           export CYBORGDB_SERVICE_LOG_LEVEL=DEBUG
           
           # Start the service

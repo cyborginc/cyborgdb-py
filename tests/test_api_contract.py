@@ -1153,9 +1153,7 @@ class TestSDKConstructionOffline(unittest.TestCase):
         on the wire. The SDK must serialize both — index_key as 64-char hex,
         kms_name as the slot name — and not drop either."""
         key_hex = "ab" * 32
-        req = CreateIndexRequest(
-            index_name="x", index_key=key_hex, kms_name="plain"
-        )
+        req = CreateIndexRequest(index_name="x", index_key=key_hex, kms_name="plain")
         payload = req.to_dict()
 
         self.assertEqual(payload["index_name"], "x")

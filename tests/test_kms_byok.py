@@ -79,9 +79,7 @@ class _KMSRoundTripBase:
     def setUpClass(cls):
         cls.client = cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
         cls.index_name = f"test_kms_{cls.kms_name}_{uuid.uuid4().hex[:8]}"
-        cls.index_key = (
-            cyborgdb.Client.generate_key() if cls.needs_sdk_key else None
-        )
+        cls.index_key = cyborgdb.Client.generate_key() if cls.needs_sdk_key else None
         cls.index = None
 
     @classmethod
@@ -236,7 +234,9 @@ class TestKMSRealRejectsSDKKey(unittest.TestCase):
             pass
 
     def test_create_index_with_real_kms_and_key_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, "index_key must not be supplied alongside"):
+        with self.assertRaisesRegex(
+            ValueError, "index_key must not be supplied alongside"
+        ):
             self.client.create_index(
                 index_name=self.index_name,
                 index_key=cyborgdb.Client.generate_key(),
@@ -267,12 +267,14 @@ class TestStrictMutexFiresBeforeSlotLookup(unittest.TestCase):
     def test_unknown_slot_plus_index_key_returns_mutex_400(self):
         # 32-byte KEK as hex — same shape the SDK would put on the wire.
         index_key_hex = cyborgdb.Client.generate_key().hex()
-        payload = json.dumps({
-            "index_name": f"test_kms_mutex_{uuid.uuid4().hex[:8]}",
-            "index_key": index_key_hex,
-            "kms_name": "definitely-not-a-registered-slot",
-            "dimension": DIMENSION,
-        }).encode("utf-8")
+        payload = json.dumps(
+            {
+                "index_name": f"test_kms_mutex_{uuid.uuid4().hex[:8]}",
+                "index_key": index_key_hex,
+                "kms_name": "definitely-not-a-registered-slot",
+                "dimension": DIMENSION,
+            }
+        ).encode("utf-8")
 
         req = urllib.request.Request(
             f"{BASE_URL}/v1/indexes/create",

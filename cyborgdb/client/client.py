@@ -181,9 +181,7 @@ class Client:
         ``kms_name``, not by naming a ``provider: none`` slot.
         """
         if index_key is None and kms_name is None:
-            raise ValueError(
-                "create_index requires index_key, kms_name, or both"
-            )
+            raise ValueError("create_index requires index_key, kms_name, or both")
 
         if index_key is not None:
             _validate_index_key(index_key)
