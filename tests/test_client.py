@@ -75,8 +75,6 @@ class ClientIntegrationTest(unittest.TestCase):
 
         # Check if the loaded index is the same as the original
         self.assertEqual(loaded_index.index_name, self.index_name)
-
-        # Check if the index type is correct
         self.assertIsInstance(loaded_index, EncryptedIndex)
 
     def test_upsert_with_numpy_array(self):

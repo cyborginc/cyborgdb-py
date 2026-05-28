@@ -251,8 +251,8 @@ class Client:
 
             # Probe the describe endpoint so a missing/inaccessible index
             # raises here instead of silently returning a phantom handle.
-            # index_type now lets ApiException propagate — caught below.
-            _ = index.index_type
+            # ApiException propagates and is caught below.
+            _ = index.index_config
 
             return index
 

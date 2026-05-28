@@ -336,7 +336,6 @@ class TestAPIContract(unittest.TestCase):
         created_config = index.index_config
         self.assertEqual(index.index_name, self.index_name)
         self.assertEqual(created_config.get("dimension"), self.dimension)
-        self.assertEqual(created_config.get("index_type"), "disk_ivf")
         self.assertEqual(created_config.get("metric"), "cosine")
 
         # Clean up this index
@@ -353,7 +352,6 @@ class TestAPIContract(unittest.TestCase):
         created_config = index.index_config
         self.assertEqual(index.index_name, self.index_name)
         self.assertEqual(created_config.get("dimension"), 0)
-        self.assertEqual(created_config.get("index_type"), "disk_ivf")
         self.assertEqual(created_config.get("metric"), "euclidean")
 
         # Clean up this index
@@ -370,7 +368,6 @@ class TestAPIContract(unittest.TestCase):
 
         created_config = index.index_config
         self.assertEqual(created_config.get("dimension"), self.dimension)
-        self.assertEqual(created_config.get("index_type"), "disk_ivf")
 
         # Clean up this index
         index.delete_index()
@@ -390,7 +387,6 @@ class TestAPIContract(unittest.TestCase):
         self.assertEqual(
             created_config.get("dimension"), 384
         )  # all-MiniLM-L6-v2 dimension
-        self.assertEqual(created_config.get("index_type"), "disk_ivf")
         self.assertEqual(created_config.get("metric"), "euclidean")
 
         # Store this one for later tests
@@ -494,10 +490,6 @@ class TestAPIContract(unittest.TestCase):
         name = self.index.index_name
         self.assertIsInstance(name, str)
         self.assertEqual(name, self.index_name)
-
-        # Test index_type property
-        index_type = self.index.index_type
-        self.assertIsInstance(index_type, str)
 
         # Test index_config property
         config = self.index.index_config

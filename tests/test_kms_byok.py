@@ -149,8 +149,6 @@ class _RealKMSRoundTrip(_KMSRoundTripBase):
         loaded = self.client.load_index(self.index_name)
         self.assertIsInstance(loaded, cyborgdb.EncryptedIndex)
         self.assertIsNone(loaded._index_key)
-        # Sanity: index_type is fetched via the keyless describe path.
-        self.assertEqual(loaded.index_type, "disk_ivf")
 
 
 @unittest.skipUnless(
@@ -207,7 +205,6 @@ class TestSDKSuppliedKEK(_KMSRoundTripBase, unittest.TestCase):
         loaded = self.client.load_index(self.index_name, self.index_key)
         self.assertIsInstance(loaded, cyborgdb.EncryptedIndex)
         self.assertEqual(loaded._index_key, self.index_key)
-        self.assertEqual(loaded.index_type, "disk_ivf")
 
 
 @unittest.skipUnless(

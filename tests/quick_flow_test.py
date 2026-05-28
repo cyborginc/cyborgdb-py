@@ -640,7 +640,6 @@ class TestUnitFlow(unittest.TestCase):
         self.assertIsInstance(
             self.index.index_config, dict, "Index config is not a dictionary"
         )
-        self.assertEqual(self.index.index_type, "disk_ivf", "Index type is not DiskIVF")
 
     def test_19_load_index(self):
         # Test loading an existing index.

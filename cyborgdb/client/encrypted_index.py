@@ -82,18 +82,6 @@ class EncryptedIndex:
         return self._index_name
 
     @property
-    def index_type(self) -> str:
-        """Get the type of the index. Raises ApiException if the describe
-        call fails (e.g. index doesn't exist, auth error, service down)."""
-        if not hasattr(self, "_index_type_cached"):
-            response = self._api.get_index_info_v1_indexes_describe_post(
-                index_operation_request=self._ior()
-            )
-            self._index_type_cached = response.index_type
-
-        return self._index_type_cached
-
-    @property
     def index_config(self) -> Dict[str, Any]:
         """Get the configuration of the index as a dictionary. Raises
         ApiException if the describe call fails."""

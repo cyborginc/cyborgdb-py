@@ -394,7 +394,7 @@ class TestSDKConstructionOffline(unittest.TestCase):
         self.assertNotIn("index_key", payload)
 
     def test_load_index_explicit_none_matches_omitted(self):
-        # Client.load_index normally pings the service via index.index_type
+        # Client.load_index normally pings the service via a describe call
         # to validate existence. Without a live server we just need to confirm
         # that explicit None doesn't trip key-length validation.
         try:
@@ -473,8 +473,8 @@ Full reference at the equivalent file in the Go SDK
 
 ### 5.3 No deletions needed
 
-`Diskivf #75` already removed `TestMixedIndexTypesOneClient` and the
-IVF tests from `comprehensive_test.py` etc. Nothing further to delete.
+`Diskivf #75` already removed the mixed-type tests and the IVF tests
+from `comprehensive_test.py` etc. Nothing further to delete.
 
 ---
 
