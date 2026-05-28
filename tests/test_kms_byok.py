@@ -1,23 +1,37 @@
 """
 KMS BYOK integration tests for the CyborgDB Python SDK.
 
-These tests are gated on environment variables that name entries in the
-running cyborgdb-service's `kms.registry`. Set the variable to opt the
-corresponding registry slot in; leave it unset to skip.
+The service supports two wire encodings for index encryption keys, and
+``kms_name`` + ``index_key`` are strictly mutually exclusive on the
+create request (the server returns 400 regardless of which slot
+``kms_name`` resolves to):
 
-- CYBORGDB_KMS_NAME_REAL — real-provider entry with `provider: aws-kms`
-  (HSM-resident KEK; service generates the DEK and asks the HSM to wrap it).
-- CYBORGDB_KMS_NAME_SM   — real-provider entry with `provider: aws`
-  (Secrets Manager-resident KEK; service generates the DEK and AES-GCM-
-  wraps it locally under the SM-fetched key).
-- CYBORGDB_KMS_NAME_NONE — entry with `provider: none`. The SDK supplies
-  the KEK on every request; service does no KMS round-trips.
+  * **SDK-supplied KEK** — ``index_key`` alone, no ``kms_name``. Service
+    records the envelope as ``provider="none"`` and the SDK re-supplies
+    the same key on every subsequent request. No KMS registry slot is
+    referenced.
+  * **KMS-managed KEK** — ``kms_name`` alone, no ``index_key``. Service
+    generates a random KEK, wraps it via the named registry slot, and
+    resolves it server-side on every subsequent request.
 
-All three exercise the SDK round-trip introduced when create_index and
-load_index moved to optional index_key + kms_name routing.
+The KMS-managed suites are gated on the registry slot envs because they
+require a configured kms.registry entry:
+
+  - CYBORGDB_KMS_NAME_REAL — real-provider entry with ``provider: aws-kms``
+    (HSM-resident KEK; service asks the HSM to wrap the per-index KEK).
+  - CYBORGDB_KMS_NAME_SM   — real-provider entry with ``provider: aws``
+    (Secrets Manager-resident KEK; service AES-GCM-wraps locally under
+    the SM-fetched key).
+
+The SDK-supplied path needs no registry slot and is exercised live
+whenever ``CYBORGDB_API_KEY`` is set; it used to be gated on a
+``provider: none`` slot that has since been removed from the registry —
+strict mutex made that slot unreachable from the SDK anyway.
 """
 
+import json
 import os
+import urllib.request
 import uuid
 import unittest
 
@@ -34,7 +48,6 @@ BASE_URL = os.getenv("CYBORGDB_BASE_URL", "http://localhost:8000")
 API_KEY = os.getenv("CYBORGDB_API_KEY", "")
 KMS_NAME_REAL = os.getenv("CYBORGDB_KMS_NAME_REAL")
 KMS_NAME_SM = os.getenv("CYBORGDB_KMS_NAME_SM")
-KMS_NAME_NONE = os.getenv("CYBORGDB_KMS_NAME_NONE")
 
 DIMENSION = 128
 NUM_VECTORS = 10
@@ -163,21 +176,27 @@ class TestKMSSecretsManager(_RealKMSRoundTrip, unittest.TestCase):
 
 
 @unittest.skipUnless(
-    KMS_NAME_NONE,
-    "CYBORGDB_KMS_NAME_NONE not set — skipping provider:none round-trip.",
+    API_KEY,
+    "CYBORGDB_API_KEY not set — skipping SDK-supplied KEK round-trip.",
 )
-class TestProviderNone(_KMSRoundTripBase, unittest.TestCase):
-    """provider:none slot: SDK supplies the KEK; service does no KMS calls.
-    Validates the mixed mode where both index_key and kms_name are passed."""
+class TestSDKSuppliedKEK(_KMSRoundTripBase, unittest.TestCase):
+    """SDK-supplied KEK path: ``index_key`` alone, no ``kms_name``.
 
-    kms_name = KMS_NAME_NONE or ""
+    The persisted envelope is ``provider="none"``; the SDK re-supplies
+    the same key on every request. No KMS registry slot is referenced
+    on the wire — strict mutex made the ``kms_name`` + ``index_key``
+    combo a 400 regardless of slot type.
+    """
+
+    # ``kms_name`` is intentionally unset — exercising the no-slot wire
+    # encoding is the whole point of this suite.
+    kms_name = ""
     needs_sdk_key = True
 
-    def test_01_create_index_key_plus_kms_name(self):
+    def test_01_create_index_with_sdk_key(self):
         index = self.client.create_index(
             index_name=self.index_name,
             index_key=self.index_key,
-            kms_name=self.kms_name,
             dimension=DIMENSION,
             metric="euclidean",
         )
@@ -198,12 +217,12 @@ class TestProviderNone(_KMSRoundTripBase, unittest.TestCase):
     "CYBORGDB_KMS_NAME_REAL not set — skipping real-provider negative test.",
 )
 class TestKMSRealRejectsSDKKey(unittest.TestCase):
-    """A real-provider slot generates the KEK itself, so supplying index_key
-    alongside kms_name is contradictory. The service rejects it with a 400,
-    which the SDK surfaces as a ValueError. The SDK forwards both fields
-    untouched — the rejection is the server's call, not the client's.
-    (provider:none, where both fields ARE valid, is covered by
-    TestProviderNone.)"""
+    """A real-provider slot generates the KEK itself, so supplying
+    ``index_key`` alongside ``kms_name`` is contradictory. The service
+    rejects it with a 400, which the SDK surfaces as a ``ValueError``
+    whose message includes the server's ``detail`` text. The SDK
+    forwards both fields untouched — the rejection is the server's
+    call, not the client's."""
 
     def setUp(self):
         self.client = cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
@@ -217,7 +236,7 @@ class TestKMSRealRejectsSDKKey(unittest.TestCase):
             pass
 
     def test_create_index_with_real_kms_and_key_is_rejected(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "index_key must not be supplied alongside"):
             self.client.create_index(
                 index_name=self.index_name,
                 index_key=cyborgdb.Client.generate_key(),
@@ -225,6 +244,50 @@ class TestKMSRealRejectsSDKKey(unittest.TestCase):
                 dimension=DIMENSION,
                 metric="euclidean",
             )
+
+
+@unittest.skipUnless(
+    API_KEY,
+    "CYBORGDB_API_KEY not set — skipping strict-mutex coverage.",
+)
+class TestStrictMutexFiresBeforeSlotLookup(unittest.TestCase):
+    """The ``kms_name`` + ``index_key`` mutex check runs before the
+    registry lookup, so an unknown slot combined with an ``index_key``
+    returns the *mutex* 400 (not an "unknown slot" 400). Pins down
+    "mutex first, slot resolution second" so a future server refactor
+    can't silently swap the ordering and let the combination through
+    for an as-yet-unknown slot.
+
+    Hits the endpoint directly via ``urllib`` — bypassing the SDK
+    helper so we can inspect the server's ``detail`` field, which the
+    generated client wraps inside a longer message. Direct probe keeps
+    the assertion precise.
+    """
+
+    def test_unknown_slot_plus_index_key_returns_mutex_400(self):
+        # 32-byte KEK as hex — same shape the SDK would put on the wire.
+        index_key_hex = cyborgdb.Client.generate_key().hex()
+        payload = json.dumps({
+            "index_name": f"test_kms_mutex_{uuid.uuid4().hex[:8]}",
+            "index_key": index_key_hex,
+            "kms_name": "definitely-not-a-registered-slot",
+            "dimension": DIMENSION,
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            f"{BASE_URL}/v1/indexes/create",
+            data=payload,
+            headers={"Content-Type": "application/json", "X-API-Key": API_KEY},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req) as resp:
+                self.fail(f"expected 400, got {resp.status}")
+        except urllib.error.HTTPError as exc:
+            self.assertEqual(exc.code, 400)
+            body = json.loads(exc.read().decode("utf-8"))
+            self.assertIn("detail", body)
+            self.assertIn("index_key must not be supplied alongside", body["detail"])
 
 
 if __name__ == "__main__":
