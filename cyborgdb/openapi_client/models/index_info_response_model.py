@@ -84,12 +84,17 @@ class IndexInfoResponseModel(BaseModel):
         if not isinstance(obj, dict):
             return cls.model_validate(obj)
 
+        # Accept both the flat shape and the legacy nested
+        # `index_config: {dimension, metric, n_lists}` shape the service
+        # still returns on /v1/indexes/describe.
+        nested = obj.get("index_config") or {}
+
         _obj = cls.model_validate({
-            "dimension": obj.get("dimension"),
+            "dimension": obj.get("dimension", nested.get("dimension")),
             "index_name": obj.get("index_name"),
             "is_trained": obj.get("is_trained"),
-            "metric": obj.get("metric"),
-            "n_lists": obj.get("n_lists")
+            "metric": obj.get("metric", nested.get("metric")),
+            "n_lists": obj.get("n_lists", nested.get("n_lists"))
         })
         return _obj
 
