@@ -14,10 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: '3.13'
           
@@ -39,15 +39,15 @@ jobs:
 
     steps:
       - name: Checkout SDK code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
       - name: Load secrets from 1Password
-        uses: 1password/load-secrets-action@v2
+        uses: 1password/load-secrets-action@v4
         with:
           export-env: true
         env:
@@ -55,7 +55,7 @@ jobs:
           CYBORGDB_API_KEY: "op://CyborgDB/CyborgDB Dev/CYBORGDB_API_KEY"
 
       - name: Load CodeArtifact account ID from 1Password
-        uses: 1password/load-secrets-action@v2
+        uses: 1password/load-secrets-action@v4
         with:
           export-env: true
         env:
@@ -74,7 +74,7 @@ jobs:
         run: echo "PIP_INDEX_URL=${{ steps.ca-url.outputs.pip-index-url }}" >> $GITHUB_ENV
 
       - name: Checkout cyborgdb-service repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: cyborginc/cyborgdb-service
           ref: main
@@ -151,7 +151,7 @@ jobs:
           fi
           
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v6
         with:
           file: ./coverage.xml
           flags: unittests
