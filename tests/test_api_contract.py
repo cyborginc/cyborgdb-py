@@ -16,9 +16,20 @@ import inspect
 import numpy as np
 from typing import List, Dict, Any
 import unittest
+import urllib3
 from dotenv import load_dotenv
 
 import cyborgdb
+from cyborgdb.openapi_client.models import (
+    CreateIndexRequest,
+    DeleteRequest,
+    GetRequest,
+    IndexOperationRequest,
+    ListIDsRequest,
+    QueryRequest,
+    TrainRequest,
+    UpsertRequest,
+)
 
 # Load environment variables from .env.local
 load_dotenv(".env.local")
@@ -263,11 +274,12 @@ class TestAPIContract(unittest.TestCase):
             self.client.create_index,
             {
                 "index_name": {"position": 0, "default": inspect.Parameter.empty},
-                "index_key": {"position": 1, "default": inspect.Parameter.empty},
-                "dimension": {"position": 2, "default": None},
-                "embedding_model": {"position": 3, "default": None},
-                "metric": {"position": 4, "default": None},
-                "storage_precision": {"position": 5, "default": None},
+                "index_key": {"position": 1, "default": None},
+                "kms_name": {"position": 2, "default": None},
+                "dimension": {"position": 3, "default": None},
+                "embedding_model": {"position": 4, "default": None},
+                "metric": {"position": 5, "default": None},
+                "storage_precision": {"position": 6, "default": None},
             },
             "Client.create_index",
         )
@@ -276,7 +288,7 @@ class TestAPIContract(unittest.TestCase):
             self.client.load_index,
             {
                 "index_name": {"position": 0, "default": inspect.Parameter.empty},
-                "index_key": {"position": 1, "default": inspect.Parameter.empty},
+                "index_key": {"position": 1, "default": None},
             },
             "Client.load_index",
         )
@@ -312,20 +324,17 @@ class TestAPIContract(unittest.TestCase):
         """Test Client.create_index() with strict parameter validation."""
         # Test with all parameters
         index = self.client.create_index(
-            self.index_name,
-            self.index_key,
-            self.dimension,
-            None,  # embedding_model
-            "cosine",  # metric - different from default
+            index_name=self.index_name,
+            index_key=self.index_key,
+            dimension=self.dimension,
+            embedding_model=None,
+            metric="cosine",
         )
         self.assertIsInstance(index, cyborgdb.EncryptedIndex)
 
-        # Check index config
-        created_config = index.index_config
         self.assertEqual(index.index_name, self.index_name)
-        self.assertEqual(created_config.get("dimension"), self.dimension)
-        self.assertEqual(created_config.get("index_type"), "disk_ivf")
-        self.assertEqual(created_config.get("metric"), "cosine")
+        self.assertEqual(index.dimension, self.dimension)
+        self.assertEqual(index.metric, "cosine")
 
         # Clean up this index
         index.delete_index()
@@ -337,12 +346,9 @@ class TestAPIContract(unittest.TestCase):
             index_key=self.index_key,
         )
 
-        # Check index config
-        created_config = index.index_config
         self.assertEqual(index.index_name, self.index_name)
-        self.assertEqual(created_config.get("dimension"), 0)
-        self.assertEqual(created_config.get("index_type"), "disk_ivf")
-        self.assertEqual(created_config.get("metric"), "euclidean")
+        self.assertEqual(index.dimension, 0)
+        self.assertEqual(index.metric, "euclidean")
 
         # Clean up this index
         index.delete_index()
@@ -356,9 +362,7 @@ class TestAPIContract(unittest.TestCase):
             storage_precision="float16",
         )
 
-        created_config = index.index_config
-        self.assertEqual(created_config.get("dimension"), self.dimension)
-        self.assertEqual(created_config.get("index_type"), "disk_ivf")
+        self.assertEqual(index.dimension, self.dimension)
 
         # Clean up this index
         index.delete_index()
@@ -372,14 +376,9 @@ class TestAPIContract(unittest.TestCase):
         )
         self.assertIsInstance(index, cyborgdb.EncryptedIndex)
 
-        # Check index config
-        created_config = index.index_config
         self.assertEqual(index.index_name, self.index_name)
-        self.assertEqual(
-            created_config.get("dimension"), 384
-        )  # all-MiniLM-L6-v2 dimension
-        self.assertEqual(created_config.get("index_type"), "disk_ivf")
-        self.assertEqual(created_config.get("metric"), "euclidean")
+        self.assertEqual(index.dimension, 384)  # all-MiniLM-L6-v2 dimension
+        self.assertEqual(index.metric, "euclidean")
 
         # Store this one for later tests
         self.__class__.index_name = self.index_name
@@ -483,15 +482,10 @@ class TestAPIContract(unittest.TestCase):
         self.assertIsInstance(name, str)
         self.assertEqual(name, self.index_name)
 
-        # Test index_type property
-        index_type = self.index.index_type
-        self.assertIsInstance(index_type, str)
-
-        # Test index_config property
-        config = self.index.index_config
-        self.assertIsInstance(config, dict)
-        # Config should have certain keys
-        self.assertIn("dimension", config)
+        # Test the flat config properties (dimension/metric/n_lists)
+        self.assertIsInstance(self.index.dimension, int)
+        self.assertIsInstance(self.index.metric, str)
+        self.assertIsInstance(self.index.n_lists, int)
 
     def test_10_encrypted_index_is_trained(self):
         """Test EncryptedIndex.is_trained() exact behavior."""
@@ -1103,6 +1097,148 @@ class TestAPIContract(unittest.TestCase):
 
         # Clear reference
         self.__class__.index = None
+
+
+class TestSDKConstructionOffline(unittest.TestCase):
+    """SDK-side construction and validation tests that do not require a live
+    cyborgdb-service. These exercise the new optional-key / KMS paths added
+    when the service moved to per-index KMS routing."""
+
+    def setUp(self):
+        # Client.__init__ does not make any network calls; it only configures
+        # the underlying api_client. Safe to instantiate without a server.
+        self.client = cyborgdb.Client(
+            base_url="http://localhost:8000", api_key="offline-test-key"
+        )
+
+    def test_create_index_requires_key_or_kms_name(self):
+        """create_index must raise ValueError when both index_key and kms_name are absent."""
+        with self.assertRaises(ValueError) as ctx:
+            self.client.create_index(index_name="x")
+        self.assertIn("index_key", str(ctx.exception))
+        self.assertIn("kms_name", str(ctx.exception))
+
+    def test_create_index_request_serializes_kms_name(self):
+        """CreateIndexRequest with kms_name only must omit index_key from the
+        outgoing payload and include kms_name."""
+        req = CreateIndexRequest(index_name="x", kms_name="vendor-slot")
+        payload = req.to_dict()
+
+        self.assertEqual(payload["index_name"], "x")
+        self.assertEqual(payload["kms_name"], "vendor-slot")
+        # index_key was not set, so it should be absent (exclude_none) from the
+        # serialized payload — the service treats absence as "KMS-resolved."
+        self.assertNotIn("index_key", payload)
+
+    def test_create_index_request_serializes_both_key_and_kms_name(self):
+        """provider:none mixed mode: both index_key and kms_name are present
+        on the wire. The SDK must serialize both — index_key as 64-char hex,
+        kms_name as the slot name — and not drop either."""
+        key_hex = "ab" * 32
+        req = CreateIndexRequest(index_name="x", index_key=key_hex, kms_name="plain")
+        payload = req.to_dict()
+
+        self.assertEqual(payload["index_name"], "x")
+        self.assertEqual(payload["index_key"], key_hex)
+        self.assertEqual(payload["kms_name"], "plain")
+
+    def test_create_index_forwards_both_key_and_kms_name(self):
+        """The SDK must NOT pre-emptively reject index_key + kms_name together.
+        That combination is valid for provider:none slots; whether it's
+        accepted or 400'd is the service's call, not the client's. We assert
+        create_index forwards both fields untouched instead of raising."""
+        key = cyborgdb.Client.generate_key()
+        captured = {}
+
+        def fake_create(create_index_request, **kwargs):
+            captured["req"] = create_index_request
+
+        self.client.api.create_index_v1_indexes_create_post = fake_create
+
+        index = self.client.create_index(
+            index_name="x", index_key=key, kms_name="plain", dimension=8
+        )
+        self.assertIsInstance(index, cyborgdb.EncryptedIndex)
+
+        payload = captured["req"].to_dict()
+        self.assertEqual(payload["kms_name"], "plain")
+        self.assertEqual(len(payload["index_key"]), 64)  # 32-byte key as hex
+
+    def test_index_name_readable_on_keyless_index(self):
+        """EncryptedIndex.index_name must be publicly readable for KMS-backed
+        (keyless) indexes — callers rely on it after load_index(name)."""
+        idx = cyborgdb.EncryptedIndex(
+            index_name="kms-index",
+            index_key=None,
+            api=self.client.api,
+            api_client=self.client.api_client,
+        )
+        self.assertEqual(idx.index_name, "kms-index")
+
+    def test_load_index_without_key_builds_keyless_request(self):
+        """IndexOperationRequest must accept an absent index_key for the
+        KMS-backed load path, and the serialized payload must omit it."""
+        req = IndexOperationRequest(index_name="x")
+        payload = req.to_dict()
+
+        self.assertEqual(payload["index_name"], "x")
+        self.assertNotIn("index_key", payload)
+
+    def test_load_index_explicit_none_matches_omitted(self):
+        """Client.load_index(name, None) must behave the same as load_index(name).
+        Internally we pass index_key=None into EncryptedIndex; the offline check
+        here is that the explicit-None path doesn't trip key-length validation."""
+        try:
+            self.client.load_index("x", None)
+        except ValueError as e:
+            # Server reachable: load_index wraps the describe ApiException
+            # (401/404/etc.) as ValueError. The only client-side regression
+            # we guard against is a key-length check firing on None.
+            self.assertNotIn("32-byte", str(e))
+        except urllib3.exceptions.HTTPError:
+            pass  # server unreachable (no live service) — not a key-path bug
+
+    def test_encrypted_index_handles_none_key(self):
+        """EncryptedIndex constructed without a key (KMS-backed) must not crash
+        on _key_to_hex(); the request models must then receive index_key=None."""
+        idx = cyborgdb.EncryptedIndex(
+            index_name="x",
+            index_key=None,
+            api=self.client.api,
+            api_client=self.client.api_client,
+        )
+        self.assertIsNone(idx._key_to_hex())
+
+        # Explicitly-set None pydantic field serializes as null (distinct from
+        # omission); the service treats both as "no key, resolve via KMS."
+        req = IndexOperationRequest(
+            index_name=idx.index_name, index_key=idx._key_to_hex()
+        )
+        payload = req.to_dict()
+        self.assertEqual(payload["index_name"], "x")
+        self.assertIsNone(payload.get("index_key"))
+
+    def test_all_data_plane_requests_accept_none_key(self):
+        """Every data-plane request model the SDK constructs must accept
+        ``index_key=None`` so KMS-backed indexes can use them without an SDK
+        key. Regression risk: if the openapi regen changed `index_key` back
+        to required on any of these, the SDK breaks at runtime, not at type-
+        check time."""
+        models_and_kwargs = [
+            (QueryRequest, {"index_name": "x", "query_vectors": [0.0]}),
+            (UpsertRequest, {"index_name": "x", "items": []}),
+            (GetRequest, {"index_name": "x", "ids": ["a"]}),
+            (DeleteRequest, {"index_name": "x", "ids": ["a"]}),
+            (TrainRequest, {"index_name": "x"}),
+            (ListIDsRequest, {"index_name": "x"}),
+        ]
+        for model_cls, kwargs in models_and_kwargs:
+            with self.subTest(model=model_cls.__name__):
+                req = model_cls(index_key=None, **kwargs)
+                payload = req.to_dict()
+                # index_key is either absent or null on the wire — both are
+                # equivalent to the service's "no key" path.
+                self.assertIsNone(payload.get("index_key"))
 
 
 if __name__ == "__main__":

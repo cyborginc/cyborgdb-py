@@ -48,22 +48,47 @@ class EncryptedIndex:
     """
 
     def __init__(
-        self, index_name: str, index_key: bytes, api: DefaultApi, api_client: ApiClient
+        self,
+        index_name: str,
+        index_key: Optional[bytes],
+        api: DefaultApi,
+        api_client: ApiClient,
     ):
         """
         Initialize with API access to an index.
 
         Args:
             index_name: Name of the index
-            index_key: Encryption key for the index
+            index_key: Encryption key for the index. ``None`` for KMS-backed
+                indexes where the service resolves the KEK from the stored
+                ``KMSBlob``.
             api: API client instance
             api_client: The lower-level API client
         """
         self._index_name = index_name
         self._index_key = index_key
+        self._index_key_hex = (
+            binascii.hexlify(index_key).decode("ascii")
+            if index_key is not None
+            else None
+        )
         self._api = api
         self._api_client = api_client
-        self._index_config = None
+        # Lazy-cached describe-derived metadata. `dimension` and `metric`
+        # are immutable post-creation, so the first describe populates
+        # both and we reuse the values. `n_lists` is fetched fresh on
+        # every read because training mutates it (default 1 → trained
+        # cluster count).
+        self._dimension: Optional[int] = None
+        self._metric: Optional[str] = None
+
+    def _describe(self):
+        """Fire the describe endpoint with this index's key (None for
+        KMS-backed indexes). Shared by the lazy property accessors and
+        by `Client.load_index`'s existence probe."""
+        return self._api.get_index_info_v1_indexes_describe_post(
+            index_operation_request=self._ior()
+        )
 
     @property
     def index_name(self) -> str:
@@ -71,44 +96,33 @@ class EncryptedIndex:
         return self._index_name
 
     @property
-    def index_type(self) -> str:
-        """Get the type of the index."""
-        # Retrieve index info if not already cached
-        if not hasattr(self, "_index_type_cached"):
-            try:
-                request = IndexOperationRequest(
-                    index_key=self._key_to_hex(), index_name=self._index_name
-                )
-
-                response = self._api.get_index_info_v1_indexes_describe_post(
-                    index_operation_request=request
-                )
-                self._index_type_cached = response.index_type
-            except ApiException as e:
-                logger.error(f"Failed to retrieve index type: {e}")
-                self._index_type_cached = "unknown"
-
-        return self._index_type_cached
+    def dimension(self) -> int:
+        """Vector dimensionality. `0` if create_index was called
+        without an explicit dimension and the first upsert hasn't
+        happened yet; otherwise the real dimension. Cached on first
+        read."""
+        if self._dimension is None:
+            response = self._describe()
+            self._dimension = response.dimension
+            self._metric = response.metric
+        return self._dimension
 
     @property
-    def index_config(self) -> Dict[str, Any]:
-        """Get the configuration of the index as a dictionary."""
-        # Retrieve index info if not already cached
-        if not self._index_config:
-            try:
-                request = IndexOperationRequest(
-                    index_key=self._key_to_hex(), index_name=self._index_name
-                )
+    def metric(self) -> str:
+        """Distance metric (`euclidean`, `cosine`, or
+        `squared_euclidean`). Cached on first read."""
+        if self._metric is None:
+            response = self._describe()
+            self._dimension = response.dimension
+            self._metric = response.metric
+        return self._metric
 
-                response = self._api.get_index_info_v1_indexes_describe_post(
-                    index_operation_request=request
-                )
-                self._index_config = response.index_config
-            except ApiException as e:
-                logger.error(f"Failed to retrieve index config: {e}")
-                self._index_config = {}
-
-        return self._index_config
+    @property
+    def n_lists(self) -> int:
+        """Number of inverted lists. `1` for untrained indexes; set to
+        the trained cluster count after `train()`. Fetched fresh on
+        every read so post-training callers see the new value."""
+        return self._describe().n_lists
 
     def is_trained(self) -> bool:
         """
@@ -118,12 +132,8 @@ class EncryptedIndex:
             bool: True if the index is trained, otherwise False.
         """
         try:
-            request = IndexOperationRequest(
-                index_key=self._key_to_hex(), index_name=self._index_name
-            )
-
             response = self._api.get_index_info_v1_indexes_describe_post(
-                index_operation_request=request
+                index_operation_request=self._ior()
             )
             return response.is_trained
         except ApiException as e:
@@ -141,12 +151,8 @@ class EncryptedIndex:
             ValueError: If the index could not be deleted.
         """
         try:
-            request = IndexOperationRequest(
-                index_key=self._key_to_hex(), index_name=self._index_name
-            )
-
             self._api.delete_index_v1_indexes_delete_post(
-                index_operation_request=request
+                index_operation_request=self._ior()
             )
         except ApiException as e:
             error_msg = f"Failed to delete index: {e}"
@@ -846,6 +852,13 @@ class EncryptedIndex:
             logger.error(error_msg)
             raise ValueError(error_msg)
 
-    def _key_to_hex(self) -> str:
-        """Convert the binary key to a hex string for API calls."""
-        return binascii.hexlify(self._index_key).decode("ascii")
+    def _key_to_hex(self) -> Optional[str]:
+        """Hex-encoded key for API calls, or ``None`` for KMS-backed indexes.
+        Computed once in ``__init__`` since the key never changes."""
+        return self._index_key_hex
+
+    def _ior(self) -> IndexOperationRequest:
+        """Build the name+key request used by describe/delete-style endpoints."""
+        return IndexOperationRequest(
+            index_key=self._key_to_hex(), index_name=self._index_name
+        )

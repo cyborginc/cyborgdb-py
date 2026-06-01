@@ -14,16 +14,25 @@ if [ ! -f "openapi.json" ]; then
     exit 1
 fi
 
-# Check if openapi-generator is installed
-if ! command -v openapi-generator &> /dev/null; then
-    echo "❌😱🛠️🔍🚫🦾🤖❗❗ Error: openapi-generator not found ❌😱🛠️🔍🚫🦾🤖❗❗"
-    echo "🍺💻🔧🦾🤖⚡ Please install it with: brew install openapi-generator 🍺💻🔧🦾🤖⚡"
+# Pick a generator binary.  Prefer the npm wrapper (openapi-generator-cli)
+# because it pins its generator version via openapitools.json, making
+# regenerations reproducible across machines.  Fall back to the brew
+# Java binary (openapi-generator) if that's what the environment has.
+if command -v openapi-generator-cli &> /dev/null; then
+    GENERATOR=openapi-generator-cli
+elif command -v openapi-generator &> /dev/null; then
+    GENERATOR=openapi-generator
+else
+    echo "❌😱🛠️🔍🚫🦾🤖❗❗ Error: no OpenAPI generator found ❌😱🛠️🔍🚫🦾🤖❗❗"
+    echo "🍺💻🔧🦾🤖⚡ Install one of:"
+    echo "    npm install -g @openapitools/openapi-generator-cli   (recommended)"
+    echo "    brew install openapi-generator"
     exit 1
 fi
 
 # Generate the client (will overwrite existing files)
-echo "⚡🦾🤖🔄🛠️📝🧬✨🚀 Generating client... ⚡🦾🤖🔄🛠️📝🧬✨🚀"
-openapi-generator generate \
+echo "⚡🦾🤖🔄🛠️📝🧬✨🚀 Generating client with $GENERATOR... ⚡🦾🤖🔄🛠️📝🧬✨🚀"
+"$GENERATOR" generate \
     -i openapi.json \
     -g python \
     -o . \

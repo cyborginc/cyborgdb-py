@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import secrets
 import logging
-import binascii
 from pydantic import ValidationError
 
 # Import from the OpenAPI generated models
@@ -37,6 +36,12 @@ __all__ = [
 ]
 
 CreateIndexRequest = _OpenAPICreateIndexRequest
+
+
+def _validate_index_key(index_key: bytes) -> None:
+    """Raise ValueError unless ``index_key`` is a 32-byte ``bytes`` object."""
+    if not isinstance(index_key, bytes) or len(index_key) != 32:
+        raise ValueError("index_key must be a 32-byte bytes object")
 
 
 class Client:
@@ -149,7 +154,8 @@ class Client:
     def create_index(
         self,
         index_name: str,
-        index_key: bytes,
+        index_key: Optional[bytes] = None,
+        kms_name: Optional[str] = None,
         dimension: Optional[int] = None,
         embedding_model: Optional[str] = None,
         metric: Optional[str] = None,
@@ -157,26 +163,49 @@ class Client:
     ) -> EncryptedIndex:
         """
         Create and return a new encrypted DiskIVF index.
+
+        At least one of ``index_key`` or ``kms_name`` must be provided, and
+        the service accepts exactly one of them:
+
+        - ``index_key`` only — the SDK supplies the 32-byte wrapping key; the
+          service records the index as ``provider: none`` and does no KMS
+          round-trips. The same key must be re-supplied to ``load_index``.
+        - ``kms_name`` only — the service generates the key and wraps it under
+          the named ``kms.registry`` entry (``aws-kms`` / ``aws``); the SDK
+          never sees the plaintext key, and ``load_index`` needs no key.
+
+        Supplying both is forwarded as-is and rejected by the service with a
+        400, for every provider: the named slot already determines the key
+        source, so an SDK-supplied key is contradictory. Note that ``none`` is
+        not a registry slot type — the no-KMS path is reached by omitting
+        ``kms_name``, not by naming a ``provider: none`` slot.
         """
-        # Validate index_key
-        if not isinstance(index_key, bytes) or len(index_key) != 32:
-            raise ValueError("index_key must be a 32-byte bytes object")
+        if index_key is None and kms_name is None:
+            raise ValueError("create_index requires index_key, kms_name, or both")
+
+        if index_key is not None:
+            _validate_index_key(index_key)
 
         try:
-            # Convert binary key to hex string
-            key_hex = binascii.hexlify(index_key).decode("ascii")
+            # Build the handle first (no network I/O); it owns the single
+            # hex encoding of the key, which we reuse for the request below.
+            index = EncryptedIndex(
+                index_name=index_name,
+                index_key=index_key,
+                api=self.api,
+                api_client=self.api_client,
+            )
 
-            # Create the complete request object
             request = CreateIndexRequest(
                 index_name=index_name,
-                index_key=key_hex,
+                index_key=index._key_to_hex(),
+                kms_name=kms_name,
                 dimension=dimension,
                 embedding_model=embedding_model,
                 metric=metric,
                 storage_precision=storage_precision,
             )
 
-            # Call the generated API method
             self.api.create_index_v1_indexes_create_post(
                 create_index_request=request,
                 _headers={
@@ -186,12 +215,7 @@ class Client:
                 },
             )
 
-            return EncryptedIndex(
-                index_name=index_name,
-                index_key=index_key,
-                api=self.api,
-                api_client=self.api_client,
-            )
+            return index
 
         except ApiException as e:
             error_msg = f"Failed to create index: {e}"
@@ -202,18 +226,22 @@ class Client:
             logger.error(error_msg)
             raise ValueError(error_msg)
 
-    def load_index(self, index_name: str, index_key: bytes) -> EncryptedIndex:
+    def load_index(
+        self,
+        index_name: str,
+        index_key: Optional[bytes] = None,
+    ) -> EncryptedIndex:
         """
-        Load an existing encrypted index by name and key.
-        """
+        Load an existing encrypted index by name.
 
-        # Validate index_key
-        if not isinstance(index_key, bytes) or len(index_key) != 32:
-            raise ValueError("index_key must be a 32-byte bytes object")
+        ``index_key`` is required for ``provider: none`` indexes (the SDK owns
+        the KEK). For KMS-backed indexes the service resolves the DEK via the
+        stored ``KMSBlob``, so ``index_key`` can be omitted.
+        """
+        if index_key is not None:
+            _validate_index_key(index_key)
 
         try:
-            # Convert binary key to hex string
-
             index = EncryptedIndex(
                 index_name=index_name,
                 index_key=index_key,
@@ -221,11 +249,13 @@ class Client:
                 api_client=self.api_client,
             )
 
-            # Attempt to access index.index_type to validate existence.
-            # This will raise an exception if the index does not exist.
-            _ = index.index_type  # Access for validation; value not used.
+            # Probe the describe endpoint so a missing/inaccessible index
+            # raises here instead of silently returning a phantom handle.
+            # `dimension` fires the lazy describe and caches it for
+            # subsequent reads. ApiException propagates and is caught
+            # below.
+            _ = index.dimension
 
-            # Create the EncryptedIndex instance
             return index
 
         except ApiException as e:
