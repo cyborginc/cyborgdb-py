@@ -129,15 +129,24 @@ jobs:
         if: needs.compute_version.outputs.env != 'prod'
         run: echo "PIP_INDEX_URL=${{ steps.ca-url.outputs.pip-index-url }}" >> $GITHUB_ENV
 
+      - name: Checkout cyborgdb-service repository
+        uses: actions/checkout@v6
+        with:
+          repository: cyborginc/cyborgdb-service
+          ref: main
+          path: cyborgdb-service
+          token: ${{ secrets.CYBORGDB_SERVICE_TOKEN }}
+
       - name: Install cyborgdb-service
         run: |
           # Install CPU-only torch
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           # Install optional test dependencies
           pip install sentence-transformers
-          # For dev/staging, PIP_INDEX_URL points at CodeArtifact (PyPI upstream).
-          # For prod, it is unset and pip falls back to PyPI.
-          pip install "cyborgdb-service[embeddings]" --pre
+          # Install the server from source (cyborgdb-service@main) so CI runs the
+          # current code rather than a possibly-stale published wheel.
+          # PIP_INDEX_URL points at CodeArtifact (PyPI upstream) for dependencies.
+          pip install ./cyborgdb-service[embeddings]
 
       - name: Install SDK and test dependencies
         run: |
