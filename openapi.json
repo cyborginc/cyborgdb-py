@@ -1192,6 +1192,92 @@
         ],
         "title": "SuccessResponseModel",
         "type": "object"
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "title": "CreateUserRequest",
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "description": "Subset of {\"read\", \"write\"}; at least one."
+          },
+          "index_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Key",
+            "description": "Index KEK (hex) for SDK-supplied indexes. Omit for KMS-backed indexes \u2014 the service resolves the KEK server-side."
+          }
+        }
+      },
+      "CreateUserResponse": {
+        "type": "object",
+        "title": "CreateUserResponse",
+        "required": [
+          "user_id",
+          "api_key"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "Hex-encoded user id."
+          },
+          "api_key": {
+            "type": "string",
+            "title": "Api Key",
+            "description": "The cdbk_ user API key. Returned once; never stored."
+          }
+        }
+      },
+      "UserInfo": {
+        "type": "object",
+        "title": "UserInfo",
+        "required": [
+          "user_id",
+          "permissions"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions"
+          }
+        }
+      },
+      "ListUsersResponse": {
+        "type": "object",
+        "title": "ListUsersResponse",
+        "required": [
+          "users"
+        ],
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserInfo"
+            },
+            "title": "Users"
+          }
+        }
       }
     },
     "securitySchemes": {
@@ -2099,6 +2185,305 @@
           }
         ],
         "summary": "Add Items to Encrypted Index (Binary Format)"
+      }
+    },
+    "/v1/indexes/{index_name}/users": {
+      "post": {
+        "summary": "Create a user for an index",
+        "description": "Mint a user API key with the given permissions, scoped to this index. Root API key required. The api_key is returned once and never stored.",
+        "operationId": "create_user_v1_indexes__index_name__users_post",
+        "parameters": [
+          {
+            "name": "index_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Index Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateUserResponse"
+                }
+              }
+            },
+            "description": "User created; api_key returned once"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseModel"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseModel"
+                }
+              }
+            },
+            "description": "Root API key required (RBAC)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseModel"
+                }
+              }
+            },
+            "description": "Index not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseModel"
+                }
+              }
+            },
+            "description": "Unexpected server error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      },
+      "get": {
+        "summary": "List an index's users",
+        "description": "List the users provisioned for this index. Root API key required.",
+        "operationId": "list_users_v1_indexes__index_name__users_get",
+        "parameters": [
+          {
+            "name": "index_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Index Name"
+            }
+          },
+          {
+            "name": "index_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Index Key"
+            },
+            "description": "Index KEK (hex) for SDK-supplied indexes; omit for KMS-backed indexes."
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListUsersResponse"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseModel"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseModel"
+                }
+              }
+            },
+            "description": "Root API key required (RBAC)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseModel"
+                }
+              }
+            },
+            "description": "Index not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseModel"
+                }
+              }
+            },
+            "description": "Unexpected server error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/indexes/{index_name}/users/{user_id}": {
+      "delete": {
+        "summary": "Delete (revoke) a user",
+        "description": "Revoke a user, erasing their wrapped keys for this index. Root API key required.",
+        "operationId": "delete_user_v1_indexes__index_name__users__user_id__delete",
+        "parameters": [
+          {
+            "name": "index_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Index Name"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "index_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Index Key"
+            },
+            "description": "Index KEK (hex) for SDK-supplied indexes; omit for KMS-backed indexes."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "User revoked"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseModel"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseModel"
+                }
+              }
+            },
+            "description": "Root API key required (RBAC)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseModel"
+                }
+              }
+            },
+            "description": "Index not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseModel"
+                }
+              }
+            },
+            "description": "Unexpected server error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
       }
     }
   }

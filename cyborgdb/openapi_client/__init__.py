@@ -36,6 +36,8 @@ __all__ = [
     "BinaryVectorBatchContentsInner",
     "Contents",
     "CreateIndexRequest",
+    "CreateUserRequest",
+    "CreateUserResponse",
     "CyborgdbServiceApiSchemasIndexSuccessResponseModel",
     "CyborgdbServiceApiSchemasVectorsSuccessResponseModel",
     "DeleteRequest",
@@ -50,6 +52,7 @@ __all__ = [
     "IndexTrainingStatusResponseModel",
     "ListIDsRequest",
     "ListIDsResponse",
+    "ListUsersResponse",
     "LocationInner",
     "QueryRequest",
     "QueryResponse",
@@ -58,6 +61,7 @@ __all__ = [
     "Results",
     "TrainRequest",
     "UpsertRequest",
+    "UserInfo",
     "ValidationError",
     "VectorItem",
 ]
@@ -85,6 +89,8 @@ from cyborgdb.openapi_client.models.binary_vector_batch import BinaryVectorBatch
 from cyborgdb.openapi_client.models.binary_vector_batch_contents_inner import BinaryVectorBatchContentsInner as BinaryVectorBatchContentsInner
 from cyborgdb.openapi_client.models.contents import Contents as Contents
 from cyborgdb.openapi_client.models.create_index_request import CreateIndexRequest as CreateIndexRequest
+from cyborgdb.openapi_client.models.create_user_request import CreateUserRequest as CreateUserRequest
+from cyborgdb.openapi_client.models.create_user_response import CreateUserResponse as CreateUserResponse
 from cyborgdb.openapi_client.models.cyborgdb_service_api_schemas_index_success_response_model import CyborgdbServiceApiSchemasIndexSuccessResponseModel as CyborgdbServiceApiSchemasIndexSuccessResponseModel
 from cyborgdb.openapi_client.models.cyborgdb_service_api_schemas_vectors_success_response_model import CyborgdbServiceApiSchemasVectorsSuccessResponseModel as CyborgdbServiceApiSchemasVectorsSuccessResponseModel
 from cyborgdb.openapi_client.models.delete_request import DeleteRequest as DeleteRequest
@@ -99,6 +105,7 @@ from cyborgdb.openapi_client.models.index_operation_request import IndexOperatio
 from cyborgdb.openapi_client.models.index_training_status_response_model import IndexTrainingStatusResponseModel as IndexTrainingStatusResponseModel
 from cyborgdb.openapi_client.models.list_ids_request import ListIDsRequest as ListIDsRequest
 from cyborgdb.openapi_client.models.list_ids_response import ListIDsResponse as ListIDsResponse
+from cyborgdb.openapi_client.models.list_users_response import ListUsersResponse as ListUsersResponse
 from cyborgdb.openapi_client.models.location_inner import LocationInner as LocationInner
 from cyborgdb.openapi_client.models.query_request import QueryRequest as QueryRequest
 from cyborgdb.openapi_client.models.query_response import QueryResponse as QueryResponse
@@ -107,6 +114,7 @@ from cyborgdb.openapi_client.models.request import Request as Request
 from cyborgdb.openapi_client.models.results import Results as Results
 from cyborgdb.openapi_client.models.train_request import TrainRequest as TrainRequest
 from cyborgdb.openapi_client.models.upsert_request import UpsertRequest as UpsertRequest
+from cyborgdb.openapi_client.models.user_info import UserInfo as UserInfo
 from cyborgdb.openapi_client.models.validation_error import ValidationError as ValidationError
 from cyborgdb.openapi_client.models.vector_item import VectorItem as VectorItem
 

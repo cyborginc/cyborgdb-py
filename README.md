@@ -172,6 +172,44 @@ source.
 > From the SDK side, you only need the slot name your operator
 > provisioned.
 
+#### Role-Based Access Control (RBAC)
+
+When the service runs with a root admin key (`CYBORGDB_ROOT_API_KEY`) set, RBAC
+is enabled. The root can mint **per-user API keys** scoped to a single index,
+each with a `read` / `write` permission set. Permissions are enforced
+*cryptographically* by the service: the wrapped data-encryption keys that exist
+for a user **are** their permission set, so a read-only user simply cannot
+decrypt for a write operation, and revoking a user erases their keys.
+
+```python
+# Admin (root) client: mint users on an existing index.
+admin = cyborgdb.Client(base_url, api_key=ROOT_API_KEY)
+index = admin.load_index(index_name='kms-backed-index')   # KMS-backed (see BYOK)
+
+reader = index.create_user(permissions=['read'])
+writer = index.create_user(permissions=['read', 'write'])
+# Each returns {'user_id': '<hex>', 'api_key': 'cdbk_...'} — the api_key is
+# shown ONCE and never stored by the service. Hand it to the user securely.
+
+index.list_users()                 # [{'user_id': ..., 'permissions': [...]}, ...]
+index.delete_user(reader['user_id'])   # revoke; the key stops working immediately
+```
+
+A user authenticates with their `cdbk_` key and needs no index key of their own
+— they load the index by name and the service resolves its key:
+
+```python
+user = cyborgdb.Client(base_url, api_key=reader['api_key'])
+idx = user.load_index(index_name='kms-backed-index')   # no index_key
+idx.query(query_vectors=[...], top_k=5)                # allowed for 'read'
+idx.upsert(items)                                      # raises for read-only users
+```
+
+> User keys resolve the index key server-side, so they work against
+> **KMS-backed** indexes. SDK-supplied-key indexes (`provider: none`) have no
+> server-side key for the service to resolve on a user's behalf. See the
+> service's `rbac.md` for the full design.
+
 ## Documentation
 
 For more information on CyborgDB, see the [Cyborg Docs](https://docs.cyborg.co).

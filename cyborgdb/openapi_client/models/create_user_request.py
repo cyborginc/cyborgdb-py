@@ -17,24 +17,19 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
-class IndexTrainingStatusResponseModel(BaseModel):
+class CreateUserRequest(BaseModel):
     """
-    Response model for retrieving the training status of indexes.  Attributes:     training_indexes (List[str]): List of index names currently being trained or queued.     retrain_threshold (int): The multiplier used for the retraining threshold.     currently_training (Optional[str]): Name of the index currently being trained.     queued_indexes (List[str]): List of indexes queued for training.     worker_running (bool): Whether the training worker thread is running.     worker_pid (int): Deprecated - kept for backward compatibility with SDK.     global_training (Dict[str, Any]): Deprecated - kept for backward compatibility with SDK.
+    CreateUserRequest
     """ # noqa: E501
-    currently_training: Optional[StrictStr] = None
-    global_training: Optional[Dict[str, Any]] = None
-    queued_indexes: Optional[List[Optional[StrictStr]]] = None
-    retrain_threshold: StrictInt
-    training_indexes: List[StrictStr]
-    worker_pid: Optional[StrictInt] = 0
-    worker_running: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["currently_training", "global_training", "queued_indexes", "retrain_threshold", "training_indexes", "worker_pid", "worker_running"]
+    permissions: List[StrictStr] = Field(description="Subset of {\"read\", \"write\"}; at least one.")
+    index_key: Optional[StrictStr] = Field(default=None, description="Index KEK (hex) for SDK-supplied indexes. Omit for KMS-backed indexes — the service resolves the KEK server-side.")
+    __properties: ClassVar[List[str]] = ["permissions", "index_key"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -54,7 +49,7 @@ class IndexTrainingStatusResponseModel(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of IndexTrainingStatusResponseModel from a JSON string"""
+        """Create an instance of CreateUserRequest from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -75,16 +70,16 @@ class IndexTrainingStatusResponseModel(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if currently_training (nullable) is None
+        # set to None if index_key (nullable) is None
         # and model_fields_set contains the field
-        if self.currently_training is None and "currently_training" in self.model_fields_set:
-            _dict['currently_training'] = None
+        if self.index_key is None and "index_key" in self.model_fields_set:
+            _dict['index_key'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of IndexTrainingStatusResponseModel from a dict"""
+        """Create an instance of CreateUserRequest from a dict"""
         if obj is None:
             return None
 
@@ -92,13 +87,8 @@ class IndexTrainingStatusResponseModel(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "currently_training": obj.get("currently_training"),
-            "global_training": obj.get("global_training"),
-            "queued_indexes": obj.get("queued_indexes"),
-            "retrain_threshold": obj.get("retrain_threshold"),
-            "training_indexes": obj.get("training_indexes"),
-            "worker_pid": obj.get("worker_pid") if obj.get("worker_pid") is not None else 0,
-            "worker_running": obj.get("worker_running") if obj.get("worker_running") is not None else False
+            "permissions": obj.get("permissions"),
+            "index_key": obj.get("index_key")
         })
         return _obj
 
