@@ -104,7 +104,7 @@ jobs:
         run: |
           echo "=== Running Tests with local CyborgDB Service ==="
           # Set up environment for Standard
-          export CYBORGDB_DB_TYPE=standalone
+          export CYBORGDB_DB_TYPE=disk
           export CYBORGDB_SERVICE_LOG_LEVEL=DEBUG
           
           # Start the service
