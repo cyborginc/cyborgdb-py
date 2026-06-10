@@ -30,7 +30,6 @@ import os
 import unittest
 import uuid
 
-import numpy as np
 from dotenv import load_dotenv
 
 import cyborgdb
