@@ -40,7 +40,9 @@ load_dotenv(".env.local")
 # The e2e nightly sets CYBORGDB_URL; the KMS BYOK suite uses CYBORGDB_BASE_URL.
 # Accept either so this runs unchanged in both places.
 BASE_URL = (
-    os.getenv("CYBORGDB_URL") or os.getenv("CYBORGDB_BASE_URL") or "http://localhost:8000"
+    os.getenv("CYBORGDB_URL")
+    or os.getenv("CYBORGDB_BASE_URL")
+    or "http://localhost:8000"
 )
 ROOT_API_KEY = os.getenv("CYBORGDB_ROOT_API_KEY")
 KMS_NAME = os.getenv("CYBORGDB_KMS_NAME")
