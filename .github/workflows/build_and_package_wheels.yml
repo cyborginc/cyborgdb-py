@@ -291,13 +291,14 @@ jobs:
           packages-dir: dist/
           skip-existing: true
 
-  publish_to_cloudsmith:
+  upload_to_codeartifact:
     needs: [compute_version, build_distributions]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (needs.compute_version.outputs.env == 'dev' || needs.compute_version.outputs.env == 'staging')
     environment:
       name: ${{ needs.compute_version.outputs.env }}
     permissions:
+      id-token: write
       contents: read
 
     steps:
@@ -315,34 +316,39 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Load Cloudsmith Credentials from 1Password
+      - name: Load CodeArtifact account ID from 1Password
         uses: 1password/load-secrets-action@v4
         with:
           export-env: true
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_TOKEN }}
-          CLOUDSMITH_API_KEY: "op://CyborgDB/Cloudsmith ${{ needs.compute_version.outputs.env == 'dev' && 'Dev' || 'Staging' }}/API_KEY"
-          CLOUDSMITH_REPO: "op://CyborgDB/Cloudsmith ${{ needs.compute_version.outputs.env == 'dev' && 'Dev' || 'Staging' }}/REPO_NAME"
-          CLOUDSMITH_ORG: "op://CyborgDB/Cloudsmith ${{ needs.compute_version.outputs.env == 'dev' && 'Dev' || 'Staging' }}/ORG_NAME"
+          CA_AWS_ACCOUNT_ID: "op://CyborgDB/CyborgDB ${{ needs.compute_version.outputs.env == 'dev' && 'Dev' || 'Staging' }}/CA_AWS_ACCOUNT_ID"
 
-      - name: Publish to Cloudsmith (Private PyPI)
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ env.CA_AWS_ACCOUNT_ID }}:role/CyborgGitHubActionsS3Role
+          aws-region: us-east-1
+
+      - name: Get CodeArtifact token
         run: |
-          set -e
-          pip install cloudsmith-cli
+          TOKEN=$(aws codeartifact get-authorization-token \
+            --domain cyborg \
+            --domain-owner ${{ env.CA_AWS_ACCOUNT_ID }} \
+            --query authorizationToken \
+            --output text)
+          echo "::add-mask::$TOKEN"
+          echo "CA_TOKEN=$TOKEN" >> $GITHUB_ENV
 
-          echo "Uploading packages to ${CLOUDSMITH_ORG}/${CLOUDSMITH_REPO}..."
-          UPLOAD_COUNT=0
+      - name: Install twine
+        run: pip install --upgrade "twine>=6.2.0" "packaging>=24.2"
 
-          for package in dist/*.{whl,tar.gz}; do
-            if [ -f "$package" ]; then
-              echo "Uploading $package to Cloudsmith..."
-              cloudsmith push python \
-                --api-key "$CLOUDSMITH_API_KEY" \
-                --republish \
-                "${CLOUDSMITH_ORG}/${CLOUDSMITH_REPO}" \
-                "$package"
-              UPLOAD_COUNT=$((UPLOAD_COUNT + 1))
-            fi
-          done
-
-          echo "Successfully uploaded $UPLOAD_COUNT packages to Cloudsmith"
+      - name: Upload to CodeArtifact
+        env:
+          CA_REPO: ${{ needs.compute_version.outputs.env == 'dev' && 'cyborg-dev' || 'cyborg-staging' }}
+        run: |
+          twine upload \
+            --repository-url "https://cyborg-${{ env.CA_AWS_ACCOUNT_ID }}.d.codeartifact.us-east-1.amazonaws.com/pypi/${CA_REPO}/" \
+            --username aws \
+            --password "$CA_TOKEN" \
+            dist/*
