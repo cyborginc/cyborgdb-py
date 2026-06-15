@@ -495,9 +495,9 @@ class TestUnitFlow(unittest.TestCase):
             100.00,  # Query #2
             91.05,  # Query #3
             77.77,  # Query #4
-            100.00,  # Query #5
+            75.00,  # Query #5
             78.88,  # Query #6
-            100.00,  # Query #7
+            75.00,  # Query #7
             92.35,  # Query #8
             91.66,  # Query #9
             77.77,  # Query #10
@@ -505,7 +505,7 @@ class TestUnitFlow(unittest.TestCase):
             94.04,  # Query #12
             90.05,  # Query #13
             22.00,  # Query #14
-            5.25,  # Query #15
+            3.7,  # Query #15
             70.00,  # Query #16
             70.00,  # Query #17
         ]

@@ -526,6 +526,7 @@ class EncryptedIndex:
         filters: Optional[Dict[str, Any]] = None,
         include: Optional[List[str]] = None,
         greedy: Optional[bool] = None,
+        rerank_mult: Optional[int] = None,
     ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
         """
         Retrieve the nearest neighbors for given query vectors.
@@ -550,6 +551,7 @@ class EncryptedIndex:
                             filters=filters,
                             include=include,
                             greedy=greedy,
+                            rerank_mult=rerank_mult,
                         )
                     else:
                         raise ValueError(
@@ -589,6 +591,8 @@ class EncryptedIndex:
                     query_kwargs["n_probes"] = n_probes
                 if greedy is not None:
                     query_kwargs["greedy"] = greedy
+                if rerank_mult is not None:
+                    query_kwargs["rerank_mult"] = rerank_mult
                 if filters is not None:
                     query_kwargs["filters"] = filters
                 if include is not None:
@@ -608,6 +612,8 @@ class EncryptedIndex:
                     query_kwargs["n_probes"] = n_probes
                 if greedy is not None:
                     query_kwargs["greedy"] = greedy
+                if rerank_mult is not None:
+                    query_kwargs["rerank_mult"] = rerank_mult
                 if filters is not None:
                     query_kwargs["filters"] = filters
                 if include is not None:
@@ -713,6 +719,7 @@ class EncryptedIndex:
         filters: Optional[Dict[str, Any]] = None,
         include: Optional[List[str]] = None,
         greedy: Optional[bool] = None,
+        rerank_mult: Optional[int] = None,
     ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
         """
         Retrieve the nearest neighbors for given query vectors using binary format.
@@ -728,6 +735,7 @@ class EncryptedIndex:
             filters: Dictionary specifying metadata filters.
             include: List of fields to include in the response.
             greedy: Whether to use greedy search.
+            rerank_mult: Multiplier for stage 1 retrieval in reranking indexes.
 
         Returns:
             For single query (1D input): List of result dictionaries.
@@ -779,6 +787,8 @@ class EncryptedIndex:
             request_kwargs["include"] = include
         if greedy is not None:
             request_kwargs["greedy"] = greedy
+        if rerank_mult is not None:
+            request_kwargs["rerank_mult"] = rerank_mult
         request = BinaryQueryRequest(**request_kwargs)
 
         try:

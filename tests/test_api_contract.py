@@ -453,6 +453,7 @@ class TestAPIContract(unittest.TestCase):
             "filters",
             "include",
             "greedy",
+            "rerank_mult",
         ]
         for param_name in expected_query_params:
             if param_name in params:
