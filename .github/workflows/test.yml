@@ -62,6 +62,22 @@ jobs:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_TOKEN }}
           CA_AWS_ACCOUNT_ID: "op://CyborgDB/CyborgDB Dev/CA_AWS_ACCOUNT_ID"
 
+      # BYOK creds for the KMS registry slots committed in cyborgdb-service's
+      # cyborgdb.yaml (aws-kms-self-test / aws-secrets-self-test). export-env is
+      # false so these AWS creds stay out of the job/pytest env and are scoped to
+      # the service-start env block below, mirroring cyborgdb-service e2e-test.yml.
+      - name: Load BYOK secrets from 1Password
+        id: byok
+        uses: 1password/load-secrets-action@v4
+        with:
+          export-env: false
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_TOKEN }}
+          BYOK_AWS_ACCESS_KEY_ID: "op://CyborgDB/CyborgDB Dev/BYOK_AWS_ACCESS_KEY_ID"
+          BYOK_AWS_SECRET_ACCESS_KEY: "op://CyborgDB/CyborgDB Dev/BYOK_AWS_SECRET_ACCESS_KEY"
+          CYBORGDB_BYOK_ROLE_ARN: "op://CyborgDB/CyborgDB Dev/CYBORGDB_BYOK_ROLE_ARN"
+          CYBORGDB_BYOK_EXTERNAL_ID: "op://CyborgDB/CyborgDB Dev/CYBORGDB_BYOK_EXTERNAL_ID"
+
       - name: Get CodeArtifact pip index URL
         id: ca-url
         uses: ./.github/workflows/actions/codeartifact-pip-url
@@ -101,12 +117,28 @@ jobs:
           pip install pytest pytest-cov pytest-asyncio
 
       - name: Test
+        env:
+          # KMS slot names the SDK's test_kms_byok.py gates on — they name the
+          # registry slots committed in cyborgdb-service/cyborgdb.yaml.
+          CYBORGDB_KMS_NAME_REAL: aws-kms-self-test
+          CYBORGDB_KMS_NAME_SM: aws-secrets-self-test
+          # Point the service at the committed registry config.
+          CYBORGDB_CONFIG_FILE: ${{ github.workspace }}/cyborgdb-service/cyborgdb.yaml
+          # Static BYOK creds the slots' role_arn/external_id are assumed with.
+          AWS_ACCESS_KEY_ID: ${{ steps.byok.outputs.BYOK_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.byok.outputs.BYOK_AWS_SECRET_ACCESS_KEY }}
+          CYBORGDB_BYOK_ROLE_ARN: ${{ steps.byok.outputs.CYBORGDB_BYOK_ROLE_ARN }}
+          CYBORGDB_BYOK_EXTERNAL_ID: ${{ steps.byok.outputs.CYBORGDB_BYOK_EXTERNAL_ID }}
         run: |
           echo "=== Running Tests with local CyborgDB Service ==="
+          # The static BYOK key must not be combined with the OIDC session token
+          # left in the env by the CodeArtifact step — that would assume the wrong
+          # principal when the service tries to reach KMS / Secrets Manager.
+          unset AWS_SESSION_TOKEN
           # Set up environment for Standard
           export CYBORGDB_DB_TYPE=disk
           export CYBORGDB_SERVICE_LOG_LEVEL=DEBUG
-          
+
           # Start the service
           nohup cyborgdb-service > server-standard.log 2>&1 &
           echo $! > server-standard.pid
@@ -128,7 +160,7 @@ jobs:
           
           # Run all tests
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            pytest tests/quick_flow_test.py -v --cov=cyborgdb --cov-report=term-missing --cov-append
+            pytest tests/quick_flow_test.py tests/test_kms_byok.py -v --cov=cyborgdb --cov-report=term-missing --cov-append
           else
             pytest tests/ -v --cov=cyborgdb --cov-report=term-missing --cov-append --ignore=tests/test_api_contract.py
           fi
