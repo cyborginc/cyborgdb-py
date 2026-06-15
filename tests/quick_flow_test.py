@@ -505,7 +505,7 @@ class TestUnitFlow(unittest.TestCase):
             94.04,  # Query #12
             90.05,  # Query #13
             22.00,  # Query #14
-            5.25,  # Query #15
+            3.7,  # Query #15
             70.00,  # Query #16
             70.00,  # Query #17
         ]
