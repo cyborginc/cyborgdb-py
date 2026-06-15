@@ -31,6 +31,7 @@ try:
     from cyborgdb.openapi_client.models.binary_vector_batch import BinaryVectorBatch
     from cyborgdb.openapi_client.models.binary_query_request import BinaryQueryRequest
     from cyborgdb.openapi_client.models.binary_query_batch import BinaryQueryBatch
+    from cyborgdb.openapi_client.models.create_user_request import CreateUserRequest
 except ImportError:
     raise ImportError(
         "Failed to import openapi_client. Make sure the OpenAPI client library is properly installed."
@@ -859,6 +860,102 @@ class EncryptedIndex:
 
         except ApiException as e:
             error_msg = f"Failed to get index training status: {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+    # ------------------------------------------------------------------
+    # RBAC — user management (root API key required)
+    #
+    # A user is scoped to this one index with a permission set drawn from
+    # {"read", "write"}, enforced cryptographically by the service: the
+    # wrapped data-encryption keys that exist for a user *are* their
+    # permission set, so there is no policy blob to keep in sync and
+    # revoking a user erases their keys. These routes are only accepted
+    # when the service runs with CYBORGDB_ROOT_API_KEY set and this client
+    # was constructed with that root key.
+    # ------------------------------------------------------------------
+
+    def create_user(self, permissions: List[str]) -> Dict[str, str]:
+        """Mint a user API key scoped to this index.
+
+        Args:
+            permissions: Non-empty subset of ``{"read", "write"}``. The
+                grant is enforced cryptographically by the service, not by
+                a checked policy field.
+
+        Returns:
+            ``{"user_id": "<hex>", "api_key": "cdbk_..."}``. The ``api_key``
+            is returned **exactly once** and is never stored by the
+            service — capture it now, it cannot be recovered. Hand it to
+            the user; they authenticate by passing it as ``api_key`` to
+            ``Client`` and need no index key of their own.
+
+        Raises:
+            ValueError: If the user could not be created (e.g. the client
+                is not using the root key, or ``permissions`` is invalid).
+        """
+        # SDK-supplied-KEK indexes: the service needs the index key to
+        # unwrap the root DEK and re-wrap it under the new user's key.
+        # KMS-backed indexes resolve it server-side, so index_key is None.
+        request = CreateUserRequest(
+            permissions=permissions, index_key=self._index_key_hex
+        )
+        try:
+            response = self._api.create_user_v1_indexes_index_name_users_post(
+                index_name=self._index_name, create_user_request=request
+            )
+            return {"user_id": response.user_id, "api_key": response.api_key}
+        except ApiException as e:
+            error_msg = f"Failed to create user: {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+    def list_users(self) -> List[Dict[str, Any]]:
+        """List the users provisioned for this index.
+
+        Returns:
+            A list of ``{"user_id": "<hex>", "permissions": [...]}`` dicts.
+            Permissions are derived from which wrapped keys exist for each
+            user (the cryptographic source of truth), not a stored field.
+
+        Raises:
+            ValueError: If the users could not be listed (e.g. the client
+                is not using the root key).
+        """
+        try:
+            response = self._api.list_users_v1_indexes_index_name_users_get(
+                index_name=self._index_name, index_key=self._index_key_hex
+            )
+            return [
+                {"user_id": u.user_id, "permissions": u.permissions}
+                for u in response.users
+            ]
+        except ApiException as e:
+            error_msg = f"Failed to list users: {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+    def delete_user(self, user_id: str) -> None:
+        """Revoke a user, erasing their wrapped keys for this index.
+
+        After this returns, the user's API key is rejected on the next
+        request — the service can no longer unwrap any key for them.
+
+        Args:
+            user_id: The hex ``user_id`` returned by ``create_user`` (also
+                surfaced by ``list_users``).
+
+        Raises:
+            ValueError: If the user could not be deleted.
+        """
+        try:
+            self._api.delete_user_v1_indexes_index_name_users_user_id_delete(
+                index_name=self._index_name,
+                user_id=user_id,
+                index_key=self._index_key_hex,
+            )
+        except ApiException as e:
+            error_msg = f"Failed to delete user: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
 

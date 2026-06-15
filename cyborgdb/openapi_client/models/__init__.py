@@ -21,6 +21,8 @@ from cyborgdb.openapi_client.models.binary_vector_batch import BinaryVectorBatch
 from cyborgdb.openapi_client.models.binary_vector_batch_contents_inner import BinaryVectorBatchContentsInner
 from cyborgdb.openapi_client.models.contents import Contents
 from cyborgdb.openapi_client.models.create_index_request import CreateIndexRequest
+from cyborgdb.openapi_client.models.create_user_request import CreateUserRequest
+from cyborgdb.openapi_client.models.create_user_response import CreateUserResponse
 from cyborgdb.openapi_client.models.cyborgdb_service_api_schemas_index_success_response_model import CyborgdbServiceApiSchemasIndexSuccessResponseModel
 from cyborgdb.openapi_client.models.cyborgdb_service_api_schemas_vectors_success_response_model import CyborgdbServiceApiSchemasVectorsSuccessResponseModel
 from cyborgdb.openapi_client.models.delete_request import DeleteRequest
@@ -35,6 +37,7 @@ from cyborgdb.openapi_client.models.index_operation_request import IndexOperatio
 from cyborgdb.openapi_client.models.index_training_status_response_model import IndexTrainingStatusResponseModel
 from cyborgdb.openapi_client.models.list_ids_request import ListIDsRequest
 from cyborgdb.openapi_client.models.list_ids_response import ListIDsResponse
+from cyborgdb.openapi_client.models.list_users_response import ListUsersResponse
 from cyborgdb.openapi_client.models.location_inner import LocationInner
 from cyborgdb.openapi_client.models.query_request import QueryRequest
 from cyborgdb.openapi_client.models.query_response import QueryResponse
@@ -43,6 +46,7 @@ from cyborgdb.openapi_client.models.request import Request
 from cyborgdb.openapi_client.models.results import Results
 from cyborgdb.openapi_client.models.train_request import TrainRequest
 from cyborgdb.openapi_client.models.upsert_request import UpsertRequest
+from cyborgdb.openapi_client.models.user_info import UserInfo
 from cyborgdb.openapi_client.models.validation_error import ValidationError
 from cyborgdb.openapi_client.models.vector_item import VectorItem
 

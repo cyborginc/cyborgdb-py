@@ -15,11 +15,14 @@ from pydantic import validate_call, Field, StrictFloat, StrictStr, StrictInt
 from typing import Any, Dict, List, Optional, Tuple, Union
 from typing_extensions import Annotated
 
-from pydantic import StrictStr
-from typing import Dict
+from pydantic import Field, StrictStr
+from typing import Dict, Optional
+from typing_extensions import Annotated
 from cyborgdb.openapi_client.models.binary_query_request import BinaryQueryRequest
 from cyborgdb.openapi_client.models.binary_upsert_request import BinaryUpsertRequest
 from cyborgdb.openapi_client.models.create_index_request import CreateIndexRequest
+from cyborgdb.openapi_client.models.create_user_request import CreateUserRequest
+from cyborgdb.openapi_client.models.create_user_response import CreateUserResponse
 from cyborgdb.openapi_client.models.cyborgdb_service_api_schemas_index_success_response_model import CyborgdbServiceApiSchemasIndexSuccessResponseModel
 from cyborgdb.openapi_client.models.cyborgdb_service_api_schemas_vectors_success_response_model import CyborgdbServiceApiSchemasVectorsSuccessResponseModel
 from cyborgdb.openapi_client.models.delete_request import DeleteRequest
@@ -31,6 +34,7 @@ from cyborgdb.openapi_client.models.index_operation_request import IndexOperatio
 from cyborgdb.openapi_client.models.index_training_status_response_model import IndexTrainingStatusResponseModel
 from cyborgdb.openapi_client.models.list_ids_request import ListIDsRequest
 from cyborgdb.openapi_client.models.list_ids_response import ListIDsResponse
+from cyborgdb.openapi_client.models.list_users_response import ListUsersResponse
 from cyborgdb.openapi_client.models.query_response import QueryResponse
 from cyborgdb.openapi_client.models.request import Request
 from cyborgdb.openapi_client.models.train_request import TrainRequest
@@ -341,6 +345,310 @@ class DefaultApi:
 
 
     @validate_call
+    def create_user_v1_indexes_index_name_users_post(
+        self,
+        index_name: StrictStr,
+        create_user_request: CreateUserRequest,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> CreateUserResponse:
+        """Create a user for an index
+
+        Mint a user API key with the given permissions, scoped to this index. Root API key required. The api_key is returned once and never stored.
+
+        :param index_name: (required)
+        :type index_name: str
+        :param create_user_request: (required)
+        :type create_user_request: CreateUserRequest
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._create_user_v1_indexes_index_name_users_post_serialize(
+            index_name=index_name,
+            create_user_request=create_user_request,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "CreateUserResponse",
+            '401': "ErrorResponseModel",
+            '403': "ErrorResponseModel",
+            '404': "ErrorResponseModel",
+            '422': "HTTPValidationError",
+            '500': "ErrorResponseModel",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def create_user_v1_indexes_index_name_users_post_with_http_info(
+        self,
+        index_name: StrictStr,
+        create_user_request: CreateUserRequest,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[CreateUserResponse]:
+        """Create a user for an index
+
+        Mint a user API key with the given permissions, scoped to this index. Root API key required. The api_key is returned once and never stored.
+
+        :param index_name: (required)
+        :type index_name: str
+        :param create_user_request: (required)
+        :type create_user_request: CreateUserRequest
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._create_user_v1_indexes_index_name_users_post_serialize(
+            index_name=index_name,
+            create_user_request=create_user_request,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "CreateUserResponse",
+            '401': "ErrorResponseModel",
+            '403': "ErrorResponseModel",
+            '404': "ErrorResponseModel",
+            '422': "HTTPValidationError",
+            '500': "ErrorResponseModel",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def create_user_v1_indexes_index_name_users_post_without_preload_content(
+        self,
+        index_name: StrictStr,
+        create_user_request: CreateUserRequest,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Create a user for an index
+
+        Mint a user API key with the given permissions, scoped to this index. Root API key required. The api_key is returned once and never stored.
+
+        :param index_name: (required)
+        :type index_name: str
+        :param create_user_request: (required)
+        :type create_user_request: CreateUserRequest
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._create_user_v1_indexes_index_name_users_post_serialize(
+            index_name=index_name,
+            create_user_request=create_user_request,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "CreateUserResponse",
+            '401': "ErrorResponseModel",
+            '403': "ErrorResponseModel",
+            '404': "ErrorResponseModel",
+            '422': "HTTPValidationError",
+            '500': "ErrorResponseModel",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _create_user_v1_indexes_index_name_users_post_serialize(
+        self,
+        index_name,
+        create_user_request,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if index_name is not None:
+            _path_params['index_name'] = index_name
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+        if create_user_request is not None:
+            _body_params = create_user_request
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+        # set the HTTP header `Content-Type`
+        if _content_type:
+            _header_params['Content-Type'] = _content_type
+        else:
+            _default_content_type = (
+                self.api_client.select_header_content_type(
+                    [
+                        'application/json'
+                    ]
+                )
+            )
+            if _default_content_type is not None:
+                _header_params['Content-Type'] = _default_content_type
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'APIKeyHeader'
+        ]
+
+        return self.api_client.param_serialize(
+            method='POST',
+            resource_path='/v1/indexes/{index_name}/users',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
     def delete_index_v1_indexes_delete_post(
         self,
         index_operation_request: IndexOperationRequest,
@@ -611,6 +919,314 @@ class DefaultApi:
         return self.api_client.param_serialize(
             method='POST',
             resource_path='/v1/indexes/delete',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def delete_user_v1_indexes_index_name_users_user_id_delete(
+        self,
+        index_name: StrictStr,
+        user_id: StrictStr,
+        index_key: Annotated[Optional[StrictStr], Field(description="Index KEK (hex) for SDK-supplied indexes; omit for KMS-backed indexes.")] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> None:
+        """Delete (revoke) a user
+
+        Revoke a user, erasing their wrapped keys for this index. Root API key required.
+
+        :param index_name: (required)
+        :type index_name: str
+        :param user_id: (required)
+        :type user_id: str
+        :param index_key: Index KEK (hex) for SDK-supplied indexes; omit for KMS-backed indexes.
+        :type index_key: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._delete_user_v1_indexes_index_name_users_user_id_delete_serialize(
+            index_name=index_name,
+            user_id=user_id,
+            index_key=index_key,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '204': None,
+            '401': "ErrorResponseModel",
+            '403': "ErrorResponseModel",
+            '404': "ErrorResponseModel",
+            '422': "HTTPValidationError",
+            '500': "ErrorResponseModel",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def delete_user_v1_indexes_index_name_users_user_id_delete_with_http_info(
+        self,
+        index_name: StrictStr,
+        user_id: StrictStr,
+        index_key: Annotated[Optional[StrictStr], Field(description="Index KEK (hex) for SDK-supplied indexes; omit for KMS-backed indexes.")] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[None]:
+        """Delete (revoke) a user
+
+        Revoke a user, erasing their wrapped keys for this index. Root API key required.
+
+        :param index_name: (required)
+        :type index_name: str
+        :param user_id: (required)
+        :type user_id: str
+        :param index_key: Index KEK (hex) for SDK-supplied indexes; omit for KMS-backed indexes.
+        :type index_key: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._delete_user_v1_indexes_index_name_users_user_id_delete_serialize(
+            index_name=index_name,
+            user_id=user_id,
+            index_key=index_key,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '204': None,
+            '401': "ErrorResponseModel",
+            '403': "ErrorResponseModel",
+            '404': "ErrorResponseModel",
+            '422': "HTTPValidationError",
+            '500': "ErrorResponseModel",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def delete_user_v1_indexes_index_name_users_user_id_delete_without_preload_content(
+        self,
+        index_name: StrictStr,
+        user_id: StrictStr,
+        index_key: Annotated[Optional[StrictStr], Field(description="Index KEK (hex) for SDK-supplied indexes; omit for KMS-backed indexes.")] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Delete (revoke) a user
+
+        Revoke a user, erasing their wrapped keys for this index. Root API key required.
+
+        :param index_name: (required)
+        :type index_name: str
+        :param user_id: (required)
+        :type user_id: str
+        :param index_key: Index KEK (hex) for SDK-supplied indexes; omit for KMS-backed indexes.
+        :type index_key: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._delete_user_v1_indexes_index_name_users_user_id_delete_serialize(
+            index_name=index_name,
+            user_id=user_id,
+            index_key=index_key,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '204': None,
+            '401': "ErrorResponseModel",
+            '403': "ErrorResponseModel",
+            '404': "ErrorResponseModel",
+            '422': "HTTPValidationError",
+            '500': "ErrorResponseModel",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _delete_user_v1_indexes_index_name_users_user_id_delete_serialize(
+        self,
+        index_name,
+        user_id,
+        index_key,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if index_name is not None:
+            _path_params['index_name'] = index_name
+        if user_id is not None:
+            _path_params['user_id'] = user_id
+        # process the query parameters
+        if index_key is not None:
+            
+            _query_params.append(('index_key', index_key))
+            
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'APIKeyHeader'
+        ]
+
+        return self.api_client.param_serialize(
+            method='DELETE',
+            resource_path='/v1/indexes/{index_name}/users/{user_id}',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -2771,6 +3387,299 @@ class DefaultApi:
         return self.api_client.param_serialize(
             method='GET',
             resource_path='/v1/indexes/list',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def list_users_v1_indexes_index_name_users_get(
+        self,
+        index_name: StrictStr,
+        index_key: Annotated[Optional[StrictStr], Field(description="Index KEK (hex) for SDK-supplied indexes; omit for KMS-backed indexes.")] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ListUsersResponse:
+        """List an index's users
+
+        List the users provisioned for this index. Root API key required.
+
+        :param index_name: (required)
+        :type index_name: str
+        :param index_key: Index KEK (hex) for SDK-supplied indexes; omit for KMS-backed indexes.
+        :type index_key: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._list_users_v1_indexes_index_name_users_get_serialize(
+            index_name=index_name,
+            index_key=index_key,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "ListUsersResponse",
+            '401': "ErrorResponseModel",
+            '403': "ErrorResponseModel",
+            '404': "ErrorResponseModel",
+            '422': "HTTPValidationError",
+            '500': "ErrorResponseModel",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def list_users_v1_indexes_index_name_users_get_with_http_info(
+        self,
+        index_name: StrictStr,
+        index_key: Annotated[Optional[StrictStr], Field(description="Index KEK (hex) for SDK-supplied indexes; omit for KMS-backed indexes.")] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[ListUsersResponse]:
+        """List an index's users
+
+        List the users provisioned for this index. Root API key required.
+
+        :param index_name: (required)
+        :type index_name: str
+        :param index_key: Index KEK (hex) for SDK-supplied indexes; omit for KMS-backed indexes.
+        :type index_key: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._list_users_v1_indexes_index_name_users_get_serialize(
+            index_name=index_name,
+            index_key=index_key,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "ListUsersResponse",
+            '401': "ErrorResponseModel",
+            '403': "ErrorResponseModel",
+            '404': "ErrorResponseModel",
+            '422': "HTTPValidationError",
+            '500': "ErrorResponseModel",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def list_users_v1_indexes_index_name_users_get_without_preload_content(
+        self,
+        index_name: StrictStr,
+        index_key: Annotated[Optional[StrictStr], Field(description="Index KEK (hex) for SDK-supplied indexes; omit for KMS-backed indexes.")] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """List an index's users
+
+        List the users provisioned for this index. Root API key required.
+
+        :param index_name: (required)
+        :type index_name: str
+        :param index_key: Index KEK (hex) for SDK-supplied indexes; omit for KMS-backed indexes.
+        :type index_key: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._list_users_v1_indexes_index_name_users_get_serialize(
+            index_name=index_name,
+            index_key=index_key,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "ListUsersResponse",
+            '401': "ErrorResponseModel",
+            '403': "ErrorResponseModel",
+            '404': "ErrorResponseModel",
+            '422': "HTTPValidationError",
+            '500': "ErrorResponseModel",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _list_users_v1_indexes_index_name_users_get_serialize(
+        self,
+        index_name,
+        index_key,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if index_name is not None:
+            _path_params['index_name'] = index_name
+        # process the query parameters
+        if index_key is not None:
+            
+            _query_params.append(('index_key', index_key))
+            
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'APIKeyHeader'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/v1/indexes/{index_name}/users',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,

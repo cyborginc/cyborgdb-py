@@ -49,6 +49,23 @@ class Client:
     Client for interacting with CyborgDB via REST API.
 
     This class provides methods for creating, loading, and managing encrypted indexes.
+
+    The ``api_key`` passed at construction is sent as the ``X-API-Key`` header
+    on every request and may be any of three kinds, depending on how the
+    service is deployed:
+
+    - **Single service key** — the default; the one ``CYBORGDB_API_KEY`` the
+      service was started with. Full access, no RBAC.
+    - **Root key** — when the service runs with ``CYBORGDB_ROOT_API_KEY`` set,
+      RBAC is on. A client using the root key has admin access and can mint
+      per-user keys via :meth:`EncryptedIndex.create_user`.
+    - **User key** (``cdbk_...``) — minted by ``create_user`` and scoped to one
+      index with ``read`` / ``write`` permissions enforced cryptographically.
+      A user client calls ``load_index(name)`` with **no** ``index_key`` (the
+      service resolves it), then performs the data operations its permissions
+      allow. User keys work only against KMS-backed indexes (the service must
+      be able to resolve the index KEK server-side); SDK-supplied-KEK indexes
+      have no server-side key to resolve for a user.
     """
 
     def __init__(self, base_url, api_key, verify_ssl=None):

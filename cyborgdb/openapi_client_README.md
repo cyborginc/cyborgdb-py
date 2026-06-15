@@ -75,7 +75,9 @@ All URIs are relative to *http://localhost*
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
 *DefaultApi* | [**create_index_v1_indexes_create_post**](cyborgdb/openapi_client/docs/DefaultApi.md#create_index_v1_indexes_create_post) | **POST** /v1/indexes/create | Create Encrypted Index
+*DefaultApi* | [**create_user_v1_indexes_index_name_users_post**](cyborgdb/openapi_client/docs/DefaultApi.md#create_user_v1_indexes_index_name_users_post) | **POST** /v1/indexes/{index_name}/users | Create a user for an index
 *DefaultApi* | [**delete_index_v1_indexes_delete_post**](cyborgdb/openapi_client/docs/DefaultApi.md#delete_index_v1_indexes_delete_post) | **POST** /v1/indexes/delete | Delete Encrypted Index
+*DefaultApi* | [**delete_user_v1_indexes_index_name_users_user_id_delete**](cyborgdb/openapi_client/docs/DefaultApi.md#delete_user_v1_indexes_index_name_users_user_id_delete) | **DELETE** /v1/indexes/{index_name}/users/{user_id} | Delete (revoke) a user
 *DefaultApi* | [**delete_vectors_v1_vectors_delete_post**](cyborgdb/openapi_client/docs/DefaultApi.md#delete_vectors_v1_vectors_delete_post) | **POST** /v1/vectors/delete | Delete Items from Encrypted Index
 *DefaultApi* | [**get_index_info_v1_indexes_describe_post**](cyborgdb/openapi_client/docs/DefaultApi.md#get_index_info_v1_indexes_describe_post) | **POST** /v1/indexes/describe | Describe Encrypted Index
 *DefaultApi* | [**get_index_size_v1_vectors_num_vectors_post**](cyborgdb/openapi_client/docs/DefaultApi.md#get_index_size_v1_vectors_num_vectors_post) | **POST** /v1/vectors/num_vectors | Get the number of vectors in an index
@@ -84,6 +86,7 @@ Class | Method | HTTP request | Description
 *DefaultApi* | [**health_check_v1_health_get**](cyborgdb/openapi_client/docs/DefaultApi.md#health_check_v1_health_get) | **GET** /v1/health | Health check endpoint
 *DefaultApi* | [**list_ids_v1_vectors_list_ids_post**](cyborgdb/openapi_client/docs/DefaultApi.md#list_ids_v1_vectors_list_ids_post) | **POST** /v1/vectors/list_ids | List all IDs in an index
 *DefaultApi* | [**list_indexes_v1_indexes_list_get**](cyborgdb/openapi_client/docs/DefaultApi.md#list_indexes_v1_indexes_list_get) | **GET** /v1/indexes/list | List Encrypted Indexes
+*DefaultApi* | [**list_users_v1_indexes_index_name_users_get**](cyborgdb/openapi_client/docs/DefaultApi.md#list_users_v1_indexes_index_name_users_get) | **GET** /v1/indexes/{index_name}/users | List an index&#39;s users
 *DefaultApi* | [**query_vectors_binary_v1_vectors_query_binary_post**](cyborgdb/openapi_client/docs/DefaultApi.md#query_vectors_binary_v1_vectors_query_binary_post) | **POST** /v1/vectors/query_binary | Query Encrypted Index (Binary Format)
 *DefaultApi* | [**query_vectors_v1_vectors_query_post**](cyborgdb/openapi_client/docs/DefaultApi.md#query_vectors_v1_vectors_query_post) | **POST** /v1/vectors/query | Query Encrypted Index
 *DefaultApi* | [**train_index_v1_indexes_train_post**](cyborgdb/openapi_client/docs/DefaultApi.md#train_index_v1_indexes_train_post) | **POST** /v1/indexes/train | Train Encrypted index
@@ -101,6 +104,8 @@ Class | Method | HTTP request | Description
  - [BinaryVectorBatchContentsInner](cyborgdb/openapi_client/docs/BinaryVectorBatchContentsInner.md)
  - [Contents](cyborgdb/openapi_client/docs/Contents.md)
  - [CreateIndexRequest](cyborgdb/openapi_client/docs/CreateIndexRequest.md)
+ - [CreateUserRequest](cyborgdb/openapi_client/docs/CreateUserRequest.md)
+ - [CreateUserResponse](cyborgdb/openapi_client/docs/CreateUserResponse.md)
  - [CyborgdbServiceApiSchemasIndexSuccessResponseModel](cyborgdb/openapi_client/docs/CyborgdbServiceApiSchemasIndexSuccessResponseModel.md)
  - [CyborgdbServiceApiSchemasVectorsSuccessResponseModel](cyborgdb/openapi_client/docs/CyborgdbServiceApiSchemasVectorsSuccessResponseModel.md)
  - [DeleteRequest](cyborgdb/openapi_client/docs/DeleteRequest.md)
@@ -115,6 +120,7 @@ Class | Method | HTTP request | Description
  - [IndexTrainingStatusResponseModel](cyborgdb/openapi_client/docs/IndexTrainingStatusResponseModel.md)
  - [ListIDsRequest](cyborgdb/openapi_client/docs/ListIDsRequest.md)
  - [ListIDsResponse](cyborgdb/openapi_client/docs/ListIDsResponse.md)
+ - [ListUsersResponse](cyborgdb/openapi_client/docs/ListUsersResponse.md)
  - [LocationInner](cyborgdb/openapi_client/docs/LocationInner.md)
  - [QueryRequest](cyborgdb/openapi_client/docs/QueryRequest.md)
  - [QueryResponse](cyborgdb/openapi_client/docs/QueryResponse.md)
@@ -123,6 +129,7 @@ Class | Method | HTTP request | Description
  - [Results](cyborgdb/openapi_client/docs/Results.md)
  - [TrainRequest](cyborgdb/openapi_client/docs/TrainRequest.md)
  - [UpsertRequest](cyborgdb/openapi_client/docs/UpsertRequest.md)
+ - [UserInfo](cyborgdb/openapi_client/docs/UserInfo.md)
  - [ValidationError](cyborgdb/openapi_client/docs/ValidationError.md)
  - [VectorItem](cyborgdb/openapi_client/docs/VectorItem.md)
 
