@@ -121,13 +121,16 @@ class RBACUserTests(unittest.TestCase):
         listed = next(u for u in users if u["user_id"] == out["user_id"])
         self.assertEqual(sorted(listed["permissions"]), ["read", "write"])
 
-        # Revoke; the key must stop working on the next request.
+        # Revoke; the key must stop working immediately. The service drops the
+        # user's wrapped DEK, so even loading the index (which describes it,
+        # gated by the user-wrap check) is denied — hence load or query may
+        # raise.
         self.index.delete_user(out["user_id"])
         self.assertNotIn(
             out["user_id"], {u["user_id"] for u in self.index.list_users()}
         )
-        revoked = self._user_index(out["api_key"])
         with self.assertRaises(ValueError):
+            revoked = self._user_index(out["api_key"])
             revoked.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
 
 
