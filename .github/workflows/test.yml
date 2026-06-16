@@ -108,8 +108,9 @@ jobs:
         run: |
           # Install the server from the cloned repository.
           # PIP_INDEX_URL points at CodeArtifact (PyPI upstream), so dependencies
-          # in the private index resolve automatically.
-          pip install ./cyborgdb-service
+          # in the private index resolve automatically. The kms-aws extra pulls
+          # in boto3, which test_kms_byok.py needs to resolve KMS-backed KEKs.
+          pip install "./cyborgdb-service[kms-aws]"
           
       - name: Install SDK and test dependencies
         run: |
