@@ -347,7 +347,7 @@ jobs:
         env:
           CA_REPO: ${{ needs.compute_version.outputs.env == 'dev' && 'cyborg-dev' || 'cyborg-staging' }}
         run: |
-          twine upload \
+          twine upload --verbose \
             --repository-url "https://cyborg-${{ env.CA_AWS_ACCOUNT_ID }}.d.codeartifact.us-east-1.amazonaws.com/pypi/${CA_REPO}/" \
             --username aws \
             --password "$CA_TOKEN" \
