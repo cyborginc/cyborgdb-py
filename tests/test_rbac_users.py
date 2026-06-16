@@ -1,5 +1,4 @@
-"""RBAC user-management integration tests for the CyborgDB Python SDK.
-"""
+"""RBAC user-management integration tests for the CyborgDB Python SDK."""
 
 import os
 import unittest
