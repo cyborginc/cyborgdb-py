@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=42,<77", "setuptools-scm[toml]>=6.2", "wheel"]
+requires = ["setuptools>=42", "setuptools-scm[toml]>=6.2", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Python Client SDK for CyborgDB: The Confidential Vector Database"
 readme = "README.md"
 requires-python = ">= 3.10"
-license = { text = "MIT" }
+license = "MIT"
 authors = [
     {name = "Cyborg Inc."}
 ]
