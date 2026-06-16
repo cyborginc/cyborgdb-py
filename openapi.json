@@ -3,7 +3,7 @@
     "info": {
         "title": "CyborgDB Service",
         "description": "REST API for CyborgDB: The Confidential Vector Database",
-        "version": "0.16.3.dev1781568676"
+        "version": "0.16.3.dev1781625678"
     },
     "paths": {
         "/v1/health": {
@@ -931,10 +931,42 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Successful Response",
+                        "description": "Successful response",
                         "content": {
                             "application/json": {
-                                "schema": {}
+                                "schema": {
+                                    "$ref": "#/components/schemas/CreateUserResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponseModel"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Permission denied from license issue",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponseModel"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponseModel"
+                                }
                             }
                         }
                     },
@@ -989,10 +1021,42 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Successful Response",
+                        "description": "Successful response",
                         "content": {
                             "application/json": {
-                                "schema": {}
+                                "schema": {
+                                    "$ref": "#/components/schemas/ListUsersResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponseModel"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Permission denied from license issue",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponseModel"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponseModel"
+                                }
                             }
                         }
                     },
@@ -1058,7 +1122,37 @@
                 ],
                 "responses": {
                     "204": {
-                        "description": "Successful Response"
+                        "description": "User revoked"
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponseModel"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Permission denied from license issue",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponseModel"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponseModel"
+                                }
+                            }
+                        }
                     },
                     "422": {
                         "description": "Validation Error",
@@ -1512,7 +1606,27 @@
                 "required": [
                     "permissions"
                 ],
-                "title": "CreateUserRequest"
+                "title": "CreateUserRequest",
+                "description": "Request model for minting a user API key scoped to one index.\n\nAttributes:\n    permissions (List[str]): Subset of {\"read\", \"write\"}; at least one.\n    index_key (Optional[str]): Index KEK (hex) for SDK-supplied indexes.\n        Omit for KMS-backed indexes — the service resolves the KEK server-side."
+            },
+            "CreateUserResponse": {
+                "properties": {
+                    "user_id": {
+                        "type": "string",
+                        "title": "User Id"
+                    },
+                    "api_key": {
+                        "type": "string",
+                        "title": "Api Key"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "user_id",
+                    "api_key"
+                ],
+                "title": "CreateUserResponse",
+                "description": "Response model for user creation.\n\nAttributes:\n    user_id (str): The minted user's id (hex).\n    api_key (str): The user's API key. Returned once and never stored."
             },
             "DeleteRequest": {
                 "properties": {
@@ -1881,6 +1995,23 @@
                 "title": "ListIDsResponse",
                 "description": "Response model for listing all IDs in the index.\n\nAttributes:\n    ids (List[str]): List of all item IDs in the index.\n    count (int): Total number of IDs in the index."
             },
+            "ListUsersResponse": {
+                "properties": {
+                    "users": {
+                        "items": {
+                            "$ref": "#/components/schemas/UserInfo"
+                        },
+                        "type": "array",
+                        "title": "Users"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "users"
+                ],
+                "title": "ListUsersResponse",
+                "description": "Response model for listing an index's users.\n\nAttributes:\n    users (List[UserInfo]): The users scoped to the index."
+            },
             "QueryRequest": {
                 "properties": {
                     "index_name": {
@@ -2195,6 +2326,28 @@
                 ],
                 "title": "UpsertRequest",
                 "description": "Request model for adding or updating vectors in an encrypted index.\n\nInherits:\n    IndexOperationRequest: Includes `index_name` and `index_key`.\n\nAttributes:\n    items (List[VectorItem]): List of vector items to be inserted or updated."
+            },
+            "UserInfo": {
+                "properties": {
+                    "user_id": {
+                        "type": "string",
+                        "title": "User Id"
+                    },
+                    "permissions": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "type": "array",
+                        "title": "Permissions"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "user_id",
+                    "permissions"
+                ],
+                "title": "UserInfo",
+                "description": "Summary of a single user scoped to an index.\n\nAttributes:\n    user_id (str): The user's id (hex).\n    permissions (List[str]): Subset of {\"read\", \"write\"}."
             },
             "ValidationError": {
                 "properties": {
