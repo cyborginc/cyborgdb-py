@@ -1,29 +1,4 @@
 """RBAC user-management integration tests for the CyborgDB Python SDK.
-
-These exercise the user-key lifecycle the service exposes when it runs with
-``CYBORGDB_ROOT_API_KEY`` set (RBAC enabled, see the service's ``rbac.md``):
-
-  * the **root** client mints per-user API keys with
-    ``EncryptedIndex.create_user(permissions=[...])``;
-  * a **user** client authenticates with the returned ``cdbk_`` key and is
-    confined to that one index with ``read`` / ``write`` permissions enforced
-    *cryptographically* by the service — the wrapped data-encryption keys that
-    exist for the user ARE the permission set, so a read-only user simply
-    cannot decrypt for a write op;
-  * ``list_users`` / ``delete_user`` let the root enumerate and revoke; after a
-    delete the user's key stops working immediately.
-
-User keys resolve the index KEK server-side, so they only work against
-**KMS-backed** indexes. The suite is therefore gated on both the root key and
-a KMS registry slot:
-
-  - CYBORGDB_ROOT_API_KEY — the service's admin key (RBAC must be enabled).
-  - CYBORGDB_KMS_NAME     — a kms.registry slot the service can use to wrap the
-                            per-index KEK (e.g. the same value used by the KMS
-                            BYOK suite).
-
-Run a service with both configured, point CYBORGDB_BASE_URL at it, and these
-run live; otherwise they skip.
 """
 
 import os
@@ -45,7 +20,10 @@ BASE_URL = (
     or "http://localhost:8000"
 )
 ROOT_API_KEY = os.getenv("CYBORGDB_ROOT_API_KEY")
-KMS_NAME = os.getenv("CYBORGDB_KMS_NAME")
+# KMS slot names mirror test_kms_byok.py. CYBORGDB_KMS_NAME is the legacy single
+# var the nightly used to set — keep it as a fallback for the real-provider slot.
+KMS_NAME_REAL = os.getenv("CYBORGDB_KMS_NAME_REAL") or os.getenv("CYBORGDB_KMS_NAME")
+KMS_NAME_SM = os.getenv("CYBORGDB_KMS_NAME_SM")
 
 DIMENSION = 4
 
@@ -57,19 +35,24 @@ def _seed():
     ]
 
 
-@unittest.skipUnless(
-    ROOT_API_KEY and KMS_NAME,
-    "set CYBORGDB_ROOT_API_KEY and CYBORGDB_KMS_NAME against an RBAC-enabled service",
-)
-class RBACUserTests(unittest.TestCase):
+class _RBACUserSuite:
+    """User-key lifecycle assertions shared across index-key encodings.
+
+    Concrete subclasses implement ``_create_index`` to build the index under
+    test (KMS-backed or SDK-supplied key); everything downstream is identical.
+    This is a plain mixin (no ``TestCase`` base) so it isn't collected on its
+    own.
+    """
+
+    @classmethod
+    def _create_index(cls):
+        raise NotImplementedError
+
     @classmethod
     def setUpClass(cls):
         cls.root = cyborgdb.Client(BASE_URL, api_key=ROOT_API_KEY)
         cls.index_name = f"rbac_users_test_{uuid.uuid4().hex[:8]}"
-        # KMS-backed so user keys can resolve the index KEK server-side.
-        cls.index = cls.root.create_index(
-            index_name=cls.index_name, kms_name=KMS_NAME, dimension=DIMENSION
-        )
+        cls.index = cls._create_index()
         cls.index.upsert(_seed())
 
     @classmethod
@@ -132,6 +115,55 @@ class RBACUserTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             revoked = self._user_index(out["api_key"])
             revoked.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
+
+
+@unittest.skipUnless(
+    ROOT_API_KEY,
+    "set CYBORGDB_ROOT_API_KEY against an RBAC-enabled service",
+)
+class RBACUserSDKKeyTests(_RBACUserSuite, unittest.TestCase):
+    """RBAC on an SDK-supplied-key index (no KMS). The root supplies the KEK on
+    create and the SDK forwards it to the user-management calls so the DEK can
+    be re-wrapped under each user's KEK."""
+
+    @classmethod
+    def _create_index(cls):
+        return cls.root.create_index(
+            index_name=cls.index_name,
+            index_key=cyborgdb.Client.generate_key(),
+            dimension=DIMENSION,
+        )
+
+
+@unittest.skipUnless(
+    ROOT_API_KEY and KMS_NAME_REAL,
+    "set CYBORGDB_ROOT_API_KEY and CYBORGDB_KMS_NAME_REAL (aws-kms) against an "
+    "RBAC-enabled service",
+)
+class RBACUserKMSRealTests(_RBACUserSuite, unittest.TestCase):
+    """RBAC on an aws-kms (HSM) KMS-backed index; the service resolves the KEK
+    server-side on every request."""
+
+    @classmethod
+    def _create_index(cls):
+        return cls.root.create_index(
+            index_name=cls.index_name, kms_name=KMS_NAME_REAL, dimension=DIMENSION
+        )
+
+
+@unittest.skipUnless(
+    ROOT_API_KEY and KMS_NAME_SM,
+    "set CYBORGDB_ROOT_API_KEY and CYBORGDB_KMS_NAME_SM (aws Secrets Manager) "
+    "against an RBAC-enabled service",
+)
+class RBACUserKMSSecretsTests(_RBACUserSuite, unittest.TestCase):
+    """RBAC on an aws (Secrets Manager) KMS-backed index."""
+
+    @classmethod
+    def _create_index(cls):
+        return cls.root.create_index(
+            index_name=cls.index_name, kms_name=KMS_NAME_SM, dimension=DIMENSION
+        )
 
 
 if __name__ == "__main__":
