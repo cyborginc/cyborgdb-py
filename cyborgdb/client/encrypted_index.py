@@ -924,7 +924,7 @@ class EncryptedIndex:
         """
         try:
             response = self._api.list_users_v1_indexes_index_name_users_get(
-                index_name=self._index_name, index_key=self._index_key_hex
+                index_name=self._index_name, x_index_key=self._index_key_hex
             )
             return [
                 {"user_id": u.user_id, "permissions": u.permissions}
@@ -952,7 +952,7 @@ class EncryptedIndex:
             self._api.delete_user_v1_indexes_index_name_users_user_id_delete(
                 index_name=self._index_name,
                 user_id=user_id,
-                index_key=self._index_key_hex,
+                x_index_key=self._index_key_hex,
             )
         except ApiException as e:
             error_msg = f"Failed to delete user: {e}"
