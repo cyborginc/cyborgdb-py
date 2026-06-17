@@ -20,7 +20,8 @@ a KMS registry slot:
   - CYBORGDB_ROOT_API_KEY — the service's admin key (RBAC must be enabled).
   - CYBORGDB_KMS_NAME     — a kms.registry slot the service can use to wrap the
                             per-index KEK (e.g. the same value used by the KMS
-                            BYOK suite).
+                            BYOK suite). CYBORGDB_KMS_NAME_REAL is accepted as a
+                            fallback, matching the e2e nightly's RBAC step.
 
 Run a service with both configured, point CYBORGDB_BASE_URL at it, and these
 run live; otherwise they skip.
@@ -45,7 +46,9 @@ BASE_URL = (
     or "http://localhost:8000"
 )
 ROOT_API_KEY = os.getenv("CYBORGDB_ROOT_API_KEY")
-KMS_NAME = os.getenv("CYBORGDB_KMS_NAME")
+# The e2e nightly's RBAC step exports the slot as CYBORGDB_KMS_NAME_REAL; accept
+# the plain CYBORGDB_KMS_NAME too so this runs unchanged in either setup.
+KMS_NAME = os.getenv("CYBORGDB_KMS_NAME") or os.getenv("CYBORGDB_KMS_NAME_REAL")
 
 DIMENSION = 4
 
