@@ -636,6 +636,15 @@ class EncryptedIndex:
                     },
                 )
 
+                # _without_preload_content skips status validation, so surface
+                # 4xx/5xx (e.g. an RBAC 403) instead of parsing the error body.
+                if not 200 <= raw_response.status <= 299:
+                    raise ApiException.from_response(
+                        http_resp=raw_response,
+                        body=raw_response.data.decode("utf-8"),
+                        data=None,
+                    )
+
                 # Parse raw JSON response manually
                 response_text = raw_response.data.decode("utf-8")
                 response_json = json.loads(response_text)
