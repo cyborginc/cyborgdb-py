@@ -13,29 +13,10 @@ permissions:
 
 jobs:
   docs-review:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout SDK repo
-        uses: actions/checkout@v4
-
-      - name: Checkout internal docs
-        uses: actions/checkout@v4
-        with:
-          repository: cyborginc/cyborgdb-internal-docs
-          path: .internal-docs
-          token: ${{ secrets.INTERNAL_DOCS_PAT }}
-
-      - name: Run docs review
-        uses: anthropics/claude-code-action@beta
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          direct_prompt: |
-            You are the CyborgDB docs review agent. Your rules are in `.internal-docs/07-engineering-docs/docs-review/CLAUDE.md` — read that file first.
-
-            Steps:
-            1. Read `.internal-docs/07-engineering-docs/docs-review/CLAUDE.md`.
-            2. Run `gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path'` to get changed files.
-            3. Filter to files matching `README.md` or `docs/**/*.md` or `docs/**/*.mdx`.
-            4. For each file, read it and apply every check from the CLAUDE.md.
-            5. Post your review as a single PR comment using `gh pr comment ${{ github.event.pull_request.number }} --body "$(cat review.md)"` after writing the output to `review.md`. Follow the output format in the CLAUDE.md exactly, including the ignore-protocol footer.
+    uses: cyborginc/cyborgdb-internal-tools/.github/workflows/docs-review.yml@main
+    with:
+      pr_number: ${{ github.event.pull_request.number }}
+      repository: ${{ github.repository }}
+    secrets:
+      anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+      caller_github_token: ${{ secrets.GITHUB_TOKEN }}
