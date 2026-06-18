@@ -13,16 +13,16 @@
 ![PyPI - License](https://img.shields.io/pypi/l/cyborgdb)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/cyborgdb)
 
-The **CyborgDB Python SDK** is the Python client for [CyborgDB](https://www.cyborg.co) — the vector database that stays encrypted even while it's searching. Run similarity search directly on encrypted data with client-side keys; only the result of a query is ever decrypted, never the index. Built for Python, it drops into modern AI and data workflows.
+The **CyborgDB Python SDK** is the Python client for [CyborgDB](https://www.cyborg.co) — the vector database that stays encrypted even while it's searching. Run similarity search directly on encrypted data with client-side keys; only the result of a query is ever decrypted, never the index. Built for Python, it fits into existing AI and data workflows.
 
 This SDK talks to [`cyborgdb-service`](https://hub.docker.com/r/cyborginc/cyborgdb-service), which you self-host in your own VPC or on-prem and run alongside your app. Install and start it separately. See our [docs](https://docs.cyborg.co) for more info.
 
 ## Key Features
 
-- **Encryption-in-use**: Search runs directly on ciphertext — only the query result is decrypted, never the index or stored vectors
+- **Encryption-in-use**: Search runs directly on ciphertext; only the query result is decrypted, never the index or stored vectors
 - **Encrypted ANN**: Disk-backed encrypted DiskIVF index with recall within 2% of a plaintext baseline ([read the benchmarks](https://www.cyborg.co/performance))
 - **Filters on encrypted metadata**: Combine vector similarity with equality and range predicates in a single request
-- **BYOK / HYOK**: Bring your own key via AWS, GCP, or Azure KMS, or keep the key client-side — you control the key material
+- **BYOK / HYOK**: Wrap per-index keys with AWS KMS or AWS Secrets Manager, or hold the key client-side — you control the key material
 - **Per-tenant key isolation**: Per-index, per-user keys with cryptographic RBAC; revoke a user and their keys are erased
 - **Pythonic API**: Familiar client/index interface that integrates with existing Python AI workflows
 
@@ -188,8 +188,8 @@ When the service runs with a root admin key (`CYBORGDB_ROOT_API_KEY`) set, RBAC
 is enabled. The root can mint **per-user API keys** scoped to a single index,
 each with a `read` / `write` permission set. Permissions are enforced
 *cryptographically* by the service: the wrapped data-encryption keys that exist
-for a user **are** their permission set, so a read-only user simply cannot
-decrypt for a write operation, and revoking a user erases their keys.
+for a user **are** their permission set, so a read-only user cannot decrypt
+for a write operation, and revoking a user erases their keys.
 
 ```python
 # Admin (root) client: mint users on an existing index.
