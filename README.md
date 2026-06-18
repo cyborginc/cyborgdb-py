@@ -31,7 +31,7 @@ This SDK talks to [`cyborgdb-service`](https://hub.docker.com/r/cyborginc/cyborg
 To get started in minutes, check out our [Quickstart Guide](https://docs.cyborg.co/quickstart).
 
 
-### Installation
+### Install the SDK
 
 1. Install `cyborgdb-service`
 
@@ -50,7 +50,7 @@ pip install cyborgdb-service
 pip install cyborgdb
 ```
 
-### Usage
+### Index and query vectors
 
 ```python
 from cyborgdb import Client
@@ -92,11 +92,11 @@ results = index.query(query_vectors=query_vector,top_k=5)
 # Print the results
 for result in results:
     print(f"ID: {result['id']}, Distance: {result['distance']}")
+# ID: doc1, Distance: 1.1314
+# ID: doc2, Distance: 1.1314
 ```
 
-### Advanced Usage
-
-#### Batch Queries
+### Run batch queries
 ```python
 # Search with multiple query vectors simultaneously
 query_vectors = [
@@ -111,9 +111,16 @@ for i, query_results in enumerate(batch_results):
     print(f"\nResults for query {i}:")
     for result in query_results:
         print(f"  ID: {result['id']}, Distance: {result['distance']}")
+# Results for query 0:
+#   ID: doc1, Distance: 0.0000
+#   ID: doc2, Distance: 0.0000
+#
+# Results for query 1:
+#   ID: doc1, Distance: 1.1314
+#   ID: doc2, Distance: 1.1314
 ```
 
-#### Metadata Filtering
+### Filter results by metadata
 ```python
 # Search with metadata filters
 query_vector = [0.1] * 128
@@ -129,9 +136,10 @@ results = index.query(
 # Print the results
 for result in results:
     print(f"ID: {result['id']}, Distance: {result['distance']}, Metadata: {result['metadata']}")
+# ID: doc1, Distance: 1.1314, Metadata: {'category': 'greeting', 'language': 'en'}
 ```
 
-#### Bring Your Own Key (BYOK) via KMS
+### Bring Your Own Key (BYOK) via KMS
 
 When the service is configured with a `kms.registry` entry, the SDK can
 delegate key management entirely to the server-side KMS. The service
@@ -182,14 +190,14 @@ source.
 > From the SDK side, you only need the slot name your operator
 > provisioned.
 
-#### Role-Based Access Control (RBAC)
+### Control access with per-user keys
 
 When the service runs with a root admin key (`CYBORGDB_ROOT_API_KEY`) set, RBAC
 is enabled. The root can mint **per-user API keys** scoped to a single index,
 each with a `read` / `write` permission set. Permissions are enforced
-*cryptographically* by the service: the wrapped data-encryption keys that exist
-for a user **are** their permission set, so a read-only user cannot decrypt
-for a write operation, and revoking a user erases their keys.
+*cryptographically*: a user's wrapped data-encryption keys **are** their
+permission set. A read-only user cannot decrypt for a write operation;
+revoking a user erases their keys.
 
 ```python
 # Admin (root) client: mint users on an existing index.
@@ -212,7 +220,7 @@ A user authenticates with their `cdbk_` key and needs no index key of their own
 user = Client(base_url, api_key=reader['api_key'])
 idx = user.load_index(index_name='kms-backed-index')   # no index_key
 idx.query(query_vectors=[...], top_k=5)                # allowed for 'read'
-idx.upsert(items)                                      # raises for read-only users
+idx.upsert(items)                                      # raises ValueError for read-only users
 ```
 
 > User keys resolve the index key server-side, so they work against
