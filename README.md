@@ -1,20 +1,30 @@
+<p align="center">
+  <a href="https://www.cyborg.co">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/cyborginc/cyborgdb-py/main/assets/cyborgdb-logo-dark.svg">
+      <img src="https://raw.githubusercontent.com/cyborginc/cyborgdb-py/main/assets/cyborgdb-logo-light.svg" alt="CyborgDB" width="320">
+    </picture>
+  </a>
+</p>
+
 # CyborgDB Python SDK
 
 ![PyPI - Version](https://img.shields.io/pypi/v/cyborgdb)
 ![PyPI - License](https://img.shields.io/pypi/l/cyborgdb)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/cyborgdb)
 
-The **CyborgDB Python SDK** provides a comprehensive client library for interacting with [CyborgDB](https://docs.cyborg.co), the first Confidential Vector Database. This SDK enables you to perform encrypted vector operations including ingestion, search, and retrieval while maintaining end-to-end encryption of your vector embeddings. Built for Python applications, it offers seamless integration into modern Python applications and services.
+The **CyborgDB Python SDK** is the Python client for [CyborgDB](https://www.cyborg.co) — the vector database that stays encrypted even while it's searching. Run similarity search directly on encrypted data with client-side keys; only the result of a query is ever decrypted, never the index. Built for Python, it drops into modern AI and data workflows.
 
-This SDK provides an interface to [`cyborgdb-service`](https://pypi.org/project/cyborgdb-service/) which you will need to separately install and run in order to use the SDK. For more info, please see our [docs](https://docs.cyborg.co).
+This SDK talks to [`cyborgdb-service`](https://hub.docker.com/r/cyborginc/cyborgdb-service), which you self-host in your own VPC or on-prem and run alongside your app. Install and start it separately. See our [docs](https://docs.cyborg.co) for more info.
 
 ## Key Features
 
-- **End-to-End Encryption**: All vector operations maintain encryption with client-side keys
-- **Zero-Trust Design**: Novel architecture keeps confidential inference data secure
-- **High Performance**: GPU-accelerated indexing and retrieval with CUDA support
-- **Familiar API**: Easy integration with existing AI workflows
-- **Encrypted DiskIVF Indexing**: Disk-backed inverted-file index with customizable training parameters
+- **Encryption-in-use**: Search runs directly on ciphertext — only the query result is decrypted, never the index or stored vectors
+- **Encrypted ANN**: Disk-backed encrypted DiskIVF index with recall within 2% of a plaintext baseline ([read the benchmarks](https://www.cyborg.co/performance))
+- **Filters on encrypted metadata**: Combine vector similarity with equality and range predicates in a single request
+- **BYOK / HYOK**: Bring your own key via AWS, GCP, or Azure KMS, or keep the key client-side — you control the key material
+- **Per-tenant key isolation**: Per-index, per-user keys with cryptographic RBAC; revoke a user and their keys are erased
+- **Pythonic API**: Familiar client/index interface that integrates with existing Python AI workflows
 
 ## Getting Started
 
@@ -26,11 +36,11 @@ To get started in minutes, check out our [Quickstart Guide](https://docs.cyborg.
 1. Install `cyborgdb-service`
 
 ```bash
-# Install the CyborgDB Service
-pip install cyborgdb-service
-
-# Or via Docker
+# Pull the CyborgDB Service image
 docker pull cyborginc/cyborgdb-service
+
+# Or install via pip
+pip install cyborgdb-service
 ```
 
 2. Install `cyborgdb` SDK:
@@ -183,7 +193,7 @@ decrypt for a write operation, and revoking a user erases their keys.
 
 ```python
 # Admin (root) client: mint users on an existing index.
-admin = cyborgdb.Client(base_url, api_key=ROOT_API_KEY)
+admin = Client(base_url, api_key=ROOT_API_KEY)
 index = admin.load_index(index_name='kms-backed-index')   # KMS-backed (see BYOK)
 
 reader = index.create_user(permissions=['read'])
@@ -199,7 +209,7 @@ A user authenticates with their `cdbk_` key and needs no index key of their own
 — they load the index by name and the service resolves its key:
 
 ```python
-user = cyborgdb.Client(base_url, api_key=reader['api_key'])
+user = Client(base_url, api_key=reader['api_key'])
 idx = user.load_index(index_name='kms-backed-index')   # no index_key
 idx.query(query_vectors=[...], top_k=5)                # allowed for 'read'
 idx.upsert(items)                                      # raises for read-only users
