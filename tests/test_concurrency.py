@@ -284,6 +284,10 @@ class TestConcurrentReadsAndWrites(unittest.TestCase):
                     )
                     for r in results:
                         self.assertIn("id", r)
+                        self.assertTrue(
+                            r["id"],
+                            "torn read: query result has empty id (deleted-during-query); see go TestDeletesDuringQueries",
+                        )
                         self.assertIn("distance", r)
                         self.assertIsInstance(r["distance"], (int, float))
                         self.assertGreaterEqual(
@@ -310,6 +314,12 @@ class TestConcurrentReadsAndWrites(unittest.TestCase):
         Queries must never crash or return malformed results.
         Catches: server-side race between delete and read paths.
         """
+        # Seed baseline data so queries return a full top_k of live results
+        # throughout the run (matches go's TestDeletesDuringQueries). Without it
+        # the live pool drains to zero as the deleter runs and the torn-read
+        # detection window shrinks.
+        upsert_batch(self.index, "seed", count=100)
+
         delete_ids = [f"del_{i}" for i in range(30)]
         vectors = np.random.rand(30, DIMENSION).astype(np.float32)
         self.index.upsert(delete_ids, vectors)
@@ -336,6 +346,10 @@ class TestConcurrentReadsAndWrites(unittest.TestCase):
                     )
                     for r in results:
                         self.assertIn("id", r)
+                        self.assertTrue(
+                            r["id"],
+                            "torn read: query result has empty id (deleted-during-query); see go TestDeletesDuringQueries",
+                        )
                         self.assertIn("distance", r)
                         self.assertIsInstance(r["distance"], (int, float))
                         self.assertGreaterEqual(r["distance"], 0)
@@ -725,6 +739,10 @@ class TestStressHighConcurrency(unittest.TestCase):
                     )
                     for r in results:
                         self.assertIn("id", r)
+                        self.assertTrue(
+                            r["id"],
+                            "torn read: query result has empty id (deleted-during-query); see go TestDeletesDuringQueries",
+                        )
                         self.assertIn("distance", r)
                         self.assertGreaterEqual(r["distance"], 0)
             except Exception as e:
@@ -806,6 +824,10 @@ class TestIndexSwitchingFromOneThread(unittest.TestCase):
                 results = other_index.query(query_vectors=qv, top_k=5)
                 for r in results:
                     self.assertIn("id", r)
+                    self.assertTrue(
+                        r["id"],
+                        "torn read: query result has empty id (deleted-during-query); see go TestDeletesDuringQueries",
+                    )
 
         time.sleep(2)
 
