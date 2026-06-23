@@ -124,8 +124,17 @@ class TestErrorHandling(unittest.TestCase):
     def setUp(self):
         self.client = create_client()
 
+    @unittest.skipUnless(
+        os.environ.get("CYBORGDB_SERVICE_ROOT_KEY"),
+        "auth disabled (no CYBORGDB_SERVICE_ROOT_KEY) — the service accepts any key",
+    )
     def test_invalid_api_key(self):
-        """Test handling of invalid API keys"""
+        """Test handling of invalid API keys.
+
+        Only meaningful when the service has authentication enabled
+        (CYBORGDB_SERVICE_ROOT_KEY set). With no root key the service runs
+        auth-disabled and accepts any key, so there is nothing to reject.
+        """
         client = cyborgdb.Client(
             base_url="http://localhost:8000", api_key="invalid-key-12345"
         )
