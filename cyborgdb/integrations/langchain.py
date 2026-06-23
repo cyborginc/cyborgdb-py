@@ -84,7 +84,7 @@ try:
             self,
             index_name: str,
             index_key: bytes,
-            api_key: str,
+            api_key: Optional[str],
             base_url: str,
             embedding: Union[str, Embeddings, SentenceTransformer],
             dimension: Optional[int] = None,
@@ -97,7 +97,9 @@ try:
             Args:
                 index_name: Name for the index
                 index_key: 32-byte encryption key for the index
-                api_key: API key for CyborgDB authentication
+                api_key: API key for CyborgDB authentication. Pass ``None``
+                    when the service has authentication disabled (no
+                    ``CYBORGDB_SERVICE_ROOT_KEY`` set).
                 base_url: URL of the CyborgDB API server
                 embedding: Embedding model - can be:
                     - String model name (for SentenceTransformer)
