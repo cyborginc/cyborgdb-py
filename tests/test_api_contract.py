@@ -171,7 +171,7 @@ class TestAPIContract(unittest.TestCase):
             cyborgdb.Client.__init__,
             {
                 "base_url": {"position": 0, "default": inspect.Parameter.empty},
-                "api_key": {"position": 1, "default": inspect.Parameter.empty},
+                "api_key": {"position": 1, "default": None},
                 "verify_ssl": {"position": 2, "default": None},
             },
             "Client.__init__",
@@ -1218,6 +1218,27 @@ class TestSDKConstructionOffline(unittest.TestCase):
         payload = req.to_dict()
         self.assertEqual(payload["index_name"], "x")
         self.assertIsNone(payload.get("index_key"))
+
+    def test_client_constructs_without_api_key(self):
+        """Client.__init__ must accept an absent api_key so the SDK can talk to
+        a service running with auth disabled (no ``CYBORGDB_SERVICE_ROOT_KEY``).
+        The constructed client must not register an X-API-Key header, and
+        ``_request_headers`` must omit the key entirely rather than send an
+        empty string or KeyError on a missing config entry."""
+        client = cyborgdb.Client(base_url="http://localhost:8000")
+
+        self.assertNotIn("X-API-Key", client.api_client.default_headers)
+
+        headers = client._request_headers()
+        self.assertNotIn("X-API-Key", headers)
+        self.assertEqual(headers["Content-Type"], "application/json")
+        self.assertEqual(headers["Accept"], "application/json")
+
+    def test_client_request_headers_includes_api_key_when_set(self):
+        """When an api_key is provided, _request_headers must include it as the
+        X-API-Key header so authenticated services keep working."""
+        headers = self.client._request_headers()
+        self.assertEqual(headers["X-API-Key"], "offline-test-key")
 
     def test_all_data_plane_requests_accept_none_key(self):
         """Every data-plane request model the SDK constructs must accept

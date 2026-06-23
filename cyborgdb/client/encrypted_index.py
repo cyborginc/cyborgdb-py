@@ -91,6 +91,21 @@ class EncryptedIndex:
             index_operation_request=self._ior()
         )
 
+    def _request_headers(self) -> Dict[str, str]:
+        """Build the request headers for data-path calls. Only includes
+        ``X-API-Key`` when one is configured; when the service has auth
+        disabled (no ``CYBORGDB_SERVICE_ROOT_KEY`` set) the SDK can be
+        constructed with no api_key and we must not send an empty
+        header (and must not crash indexing into an empty config dict)."""
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        api_key = self._api_client.configuration.api_key.get("X-API-Key")
+        if api_key:
+            headers["X-API-Key"] = api_key
+        return headers
+
     @property
     def index_name(self) -> str:
         """Get the name of the index."""
@@ -190,11 +205,7 @@ class EncryptedIndex:
             )
             response = self._api.get_vectors_v1_vectors_get_post(
                 get_request=get_request,
-                _headers={
-                    "X-API-Key": self._api_client.configuration.api_key["X-API-Key"],
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                },
+                _headers=self._request_headers(),
             )
 
             # Convert API response to our format
@@ -401,11 +412,7 @@ class EncryptedIndex:
             # Make the API call with the correct parameter
             self._api.upsert_vectors_v1_vectors_upsert_post(
                 upsert_request=request,  # This is the only required parameter
-                _headers={
-                    "X-API-Key": self._api_client.configuration.api_key["X-API-Key"],
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                },
+                _headers=self._request_headers(),
             )
 
         except ApiException as e:
@@ -477,11 +484,7 @@ class EncryptedIndex:
         try:
             self._api.upsert_vectors_binary_v1_vectors_upsert_binary_post(
                 binary_upsert_request=request,
-                _headers={
-                    "X-API-Key": self._api_client.configuration.api_key["X-API-Key"],
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                },
+                _headers=self._request_headers(),
             )
         except ApiException as e:
             error_msg = f"Failed to upsert items (binary): {e}"
@@ -627,13 +630,7 @@ class EncryptedIndex:
                 # Get raw response instead of deserialized object
                 raw_response = self._api.query_vectors_v1_vectors_query_post_without_preload_content(
                     request=request,
-                    _headers={
-                        "X-API-Key": self._api_client.configuration.api_key[
-                            "X-API-Key"
-                        ],
-                        "Content-Type": "application/json",
-                        "Accept": "application/json",
-                    },
+                    _headers=self._request_headers(),
                 )
 
                 # _without_preload_content skips status validation, so surface
@@ -803,11 +800,7 @@ class EncryptedIndex:
         try:
             response = self._api.query_vectors_binary_v1_vectors_query_binary_post(
                 binary_query_request=request,
-                _headers={
-                    "X-API-Key": self._api_client.configuration.api_key["X-API-Key"],
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                },
+                _headers=self._request_headers(),
             )
 
             # Results is an anyOf wrapper - extract actual_instance
