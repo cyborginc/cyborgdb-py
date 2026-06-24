@@ -127,7 +127,7 @@ class TestUnitFlow(unittest.TestCase):
             checksum = hashlib.sha256(json_data).hexdigest()
 
             expected_checksum = (
-                "b581f18d84f8dca43d8915f81b36f8aee1d6b914ecd3338684108679ae5a81e7"
+                "f72e30b0e9b94d1987d0bfd39866f05477cc0cdae88398d85d59693f283a504e"
             )
 
             if checksum != expected_checksum:
@@ -306,9 +306,10 @@ class TestUnitFlow(unittest.TestCase):
         self.assertFalse(self.index.is_trained(), "Index should still be untrained")
 
     def test_06_upsert_to_trigger_auto_train(self):
-        # Upsert 1 vector to exceed 10,000 and trigger auto-train
-        # (RETRAIN_THRESHOLD=10000 means auto-train triggers when num_vectors > 10000)
-        auto_train_trigger = 10001
+        # Upsert enough vectors to exceed AUTO_TRAIN_MIN_VECTORS and trigger auto-train.
+        # (Service default AUTO_TRAIN_MIN_VECTORS=65536 means auto-train triggers when
+        # num_vectors > 65536.)
+        auto_train_trigger = 65537
         items = []
         for i in range(self.num_untrained_vectors, auto_train_trigger):
             items.append(
@@ -333,7 +334,7 @@ class TestUnitFlow(unittest.TestCase):
         self.assertCountEqual(results, expected_ids)
 
     def test_07_wait_for_auto_train(self):
-        # WAIT FOR AUTO TRAINING TO COMPLETE (triggered at >10,000 vectors)
+        # WAIT FOR AUTO TRAINING TO COMPLETE (triggered at >65,536 vectors)
         num_retries = 60
         trained = False
 
@@ -351,8 +352,8 @@ class TestUnitFlow(unittest.TestCase):
         self.assertTrue(trained, "Index did not become trained via auto-train in time")
 
     def test_08_upsert_remaining_vectors(self):
-        # Upsert remaining vectors (10001 to 49999) after auto-train
-        auto_train_trigger = 10001
+        # Upsert remaining vectors after auto-train (IDs auto_train_trigger to total-1)
+        auto_train_trigger = 65537
         items = []
         for i in range(auto_train_trigger, self.total_num_vectors):
             items.append(
