@@ -56,7 +56,7 @@ pip install cyborgdb
 from cyborgdb import Client
 
 # Initialize the client
-client = Client('https://localhost:8000', 'your-api-key')
+client = Client('https://localhost:8000', 'your-service-root-key')
 
 # Generate a 32-byte encryption key
 index_key = client.generate_key()
@@ -87,7 +87,7 @@ index.upsert(items)
 
 # Query the encrypted index
 query_vector = [0.2] * 128  # 128 dimensions
-results = index.query(query_vectors=query_vector,top_k=5)
+results = index.query(query_vectors=query_vector, top_k=5)
 
 # Print the results
 for result in results:
@@ -130,13 +130,13 @@ results = index.query(
     n_probes=1,
     greedy=False,
     filters={'category': 'greeting', 'language': 'en'},
-    include=['distance', 'metadata', 'contents']
+    include=['distance', 'metadata']
 )
 
 # Print the results
 for result in results:
     print(f"ID: {result['id']}, Distance: {result['distance']}, Metadata: {result['metadata']}")
-# ID: doc1, Distance: 1.1314, Metadata: {'category': 'greeting', 'language': 'en'}
+# ID: doc1, Distance: 0.0000, Metadata: {'category': 'greeting', 'language': 'en'}
 ```
 
 ### Bring Your Own Key (BYOK) via KMS
@@ -178,21 +178,9 @@ Supply **exactly one** of `index_key` / `kms_name` — passing both is rejected
 by the service with a 400, since the named slot already determines the key
 source.
 
-> **How slots are configured.** A `kms.registry` slot is added to the
-> service's `cyborgdb.yaml` by your **cyborgdb-service operator** — not
-> from the SDK. Each slot declares one real provider (`aws-kms` or `aws`)
-> plus the AWS identifiers needed to wrap/unwrap data keys. (`none` is not a
-> configurable slot type; it is the label the service records for the no-KMS,
-> SDK-supplied-key path above.)
-> For real-KMS slots (`aws-kms` / `aws`), set-up also requires IAM
-> work on the customer's AWS account; see `BYOK.md` in the
-> cyborgdb-service repo for the full operator + customer walkthrough.
-> From the SDK side, you only need the slot name your operator
-> provisioned.
-
 ### Control access with per-user keys
 
-When the service runs with a root admin key (`CYBORGDB_ROOT_API_KEY`) set, RBAC
+When the service runs with a root admin key (`CYBORGDB_SERVICE_ROOT_KEY`) set, RBAC
 is enabled. The root can mint **per-user API keys** scoped to a single index,
 each with a `read` / `write` permission set. Permissions are enforced
 *cryptographically*: a user's wrapped data-encryption keys **are** their
@@ -201,7 +189,7 @@ revoking a user erases their keys.
 
 ```python
 # Admin (root) client: mint users on an existing index.
-admin = Client(base_url, api_key=ROOT_API_KEY)
+admin = Client(base_url, api_key=SERVICE_ROOT_KEY)
 index = admin.load_index(index_name='kms-backed-index')   # KMS-backed (see BYOK)
 
 reader = index.create_user(permissions=['read'])

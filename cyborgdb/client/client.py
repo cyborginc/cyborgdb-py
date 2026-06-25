@@ -56,7 +56,7 @@ class Client:
 
     - **Single service key** — the default; the one ``CYBORGDB_API_KEY`` the
       service was started with. Full access, no RBAC.
-    - **Root key** — when the service runs with ``CYBORGDB_ROOT_API_KEY`` set,
+    - **Root key** — when the service runs with ``CYBORGDB_SERVICE_ROOT_KEY`` set,
       RBAC is on. A client using the root key has admin access and can mint
       per-user keys via :meth:`EncryptedIndex.create_user`.
     - **User key** (``cdbk_...``) — minted by ``create_user`` and scoped to one

@@ -873,7 +873,7 @@ class EncryptedIndex:
     # wrapped data-encryption keys that exist for a user *are* their
     # permission set, so there is no policy blob to keep in sync and
     # revoking a user erases their keys. These routes are only accepted
-    # when the service runs with CYBORGDB_ROOT_API_KEY set and this client
+    # when the service runs with CYBORGDB_SERVICE_ROOT_KEY set and this client
     # was constructed with that root key.
     # ------------------------------------------------------------------
 
