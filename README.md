@@ -178,21 +178,9 @@ Supply **exactly one** of `index_key` / `kms_name` — passing both is rejected
 by the service with a 400, since the named slot already determines the key
 source.
 
-> **How slots are configured.** A `kms.registry` slot is added to the
-> service's `cyborgdb.yaml` by your **cyborgdb-service operator** — not
-> from the SDK. Each slot declares one real provider (`aws-kms` or `aws`)
-> plus the AWS identifiers needed to wrap/unwrap data keys. (`none` is not a
-> configurable slot type; it is the label the service records for the no-KMS,
-> SDK-supplied-key path above.)
-> For real-KMS slots (`aws-kms` / `aws`), set-up also requires IAM
-> work on the customer's AWS account; see `BYOK.md` in the
-> cyborgdb-service repo for the full operator + customer walkthrough.
-> From the SDK side, you only need the slot name your operator
-> provisioned.
-
 ### Control access with per-user keys
 
-When the service runs with a root admin key (`CYBORGDB_ROOT_API_KEY`) set, RBAC
+When the service runs with a root admin key (`CYBORGDB_SERVICE_ROOT_KEY`) set, RBAC
 is enabled. The root can mint **per-user API keys** scoped to a single index,
 each with a `read` / `write` permission set. Permissions are enforced
 *cryptographically*: a user's wrapped data-encryption keys **are** their
