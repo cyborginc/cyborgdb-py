@@ -189,7 +189,7 @@ revoking a user erases their keys.
 
 ```python
 # Admin (root) client: mint users on an existing index.
-admin = Client(base_url, api_key=ROOT_API_KEY)
+admin = Client(base_url, api_key=SERVICE_ROOT_KEY)
 index = admin.load_index(index_name='kms-backed-index')   # KMS-backed (see BYOK)
 
 reader = index.create_user(permissions=['read'])
