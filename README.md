@@ -87,7 +87,7 @@ index.upsert(items)
 
 # Query the encrypted index
 query_vector = [0.2] * 128  # 128 dimensions
-results = index.query(query_vectors=query_vector,top_k=5)
+results = index.query(query_vectors=query_vector, top_k=5)
 
 # Print the results
 for result in results:
@@ -130,13 +130,13 @@ results = index.query(
     n_probes=1,
     greedy=False,
     filters={'category': 'greeting', 'language': 'en'},
-    include=['distance', 'metadata', 'contents']
+    include=['distance', 'metadata']
 )
 
 # Print the results
 for result in results:
     print(f"ID: {result['id']}, Distance: {result['distance']}, Metadata: {result['metadata']}")
-# ID: doc1, Distance: 1.1314, Metadata: {'category': 'greeting', 'language': 'en'}
+# ID: doc1, Distance: 0.0000, Metadata: {'category': 'greeting', 'language': 'en'}
 ```
 
 ### Bring Your Own Key (BYOK) via KMS
