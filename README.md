@@ -56,7 +56,7 @@ pip install cyborgdb
 from cyborgdb import Client
 
 # Initialize the client
-client = Client('https://localhost:8000', 'your-api-key')
+client = Client('https://localhost:8000', 'your-service-root-key')
 
 # Generate a 32-byte encryption key
 index_key = client.generate_key()

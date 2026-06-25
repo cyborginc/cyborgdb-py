@@ -1,7 +1,7 @@
 """RBAC user-management integration tests for the CyborgDB Python SDK.
 
 These exercise the user-key lifecycle the service exposes when it runs with
-``CYBORGDB_ROOT_API_KEY`` set (RBAC enabled, see the service's ``rbac.md``):
+``CYBORGDB_SERVICE_ROOT_KEY`` set (RBAC enabled, see the service's ``rbac.md``):
 
   * the **root** client mints per-user API keys with
     ``EncryptedIndex.create_user(permissions=[...])``;
@@ -17,7 +17,7 @@ User keys resolve the index KEK server-side, so they only work against
 **KMS-backed** indexes. The suite is therefore gated on both the root key and
 a KMS registry slot:
 
-  - CYBORGDB_ROOT_API_KEY — the service's admin key (RBAC must be enabled).
+  - CYBORGDB_SERVICE_ROOT_KEY — the service's admin key (RBAC must be enabled).
   - CYBORGDB_KMS_NAME     — a kms.registry slot the service can use to wrap the
                             per-index KEK (e.g. the same value used by the KMS
                             BYOK suite). CYBORGDB_KMS_NAME_REAL is accepted as a
@@ -45,7 +45,7 @@ BASE_URL = (
     or os.getenv("CYBORGDB_BASE_URL")
     or "http://localhost:8000"
 )
-ROOT_API_KEY = os.getenv("CYBORGDB_ROOT_API_KEY")
+ROOT_API_KEY = os.getenv("CYBORGDB_SERVICE_ROOT_KEY")
 # The e2e nightly's RBAC step exports the slot as CYBORGDB_KMS_NAME_REAL; accept
 # the plain CYBORGDB_KMS_NAME too so this runs unchanged in either setup.
 KMS_NAME = os.getenv("CYBORGDB_KMS_NAME") or os.getenv("CYBORGDB_KMS_NAME_REAL")
@@ -62,7 +62,7 @@ def _seed():
 
 @unittest.skipUnless(
     ROOT_API_KEY and KMS_NAME,
-    "set CYBORGDB_ROOT_API_KEY and CYBORGDB_KMS_NAME against an RBAC-enabled service",
+    "set CYBORGDB_SERVICE_ROOT_KEY and CYBORGDB_KMS_NAME against an RBAC-enabled service",
 )
 class RBACUserTests(unittest.TestCase):
     @classmethod
