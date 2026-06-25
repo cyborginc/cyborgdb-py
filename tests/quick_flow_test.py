@@ -6,7 +6,6 @@ import uuid
 import numpy as np
 from dotenv import load_dotenv
 import time
-import hashlib
 
 import cyborgdb as cyborgdb
 
@@ -117,46 +116,31 @@ def check_metadata_results(
 class TestUnitFlow(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # Construct the path to the JSON file
-        test_dir = os.path.dirname(os.path.abspath(__file__))
-        json_path = os.path.join(test_dir, "constants", "unit_test_flow_data.json")
-        with open(json_path, "rb") as f:
-            json_data = f.read()
-
-            # Compute the checksum of the file
-            checksum = hashlib.sha256(json_data).hexdigest()
-
-            expected_checksum = (
-                "f72e30b0e9b94d1987d0bfd39866f05477cc0cdae88398d85d59693f283a504e"
-            )
-
-            if checksum != expected_checksum:
-                raise ValueError(
-                    f"Checksum mismatch for {json_path}: expected {expected_checksum}, got {checksum}"
-                )
-
-            data = json.loads(json_data)
+        # Fetch the hosted sample dataset (downloaded from S3 on first use and
+        # cached locally). It carries the full ground-truth arrays this recall
+        # test needs, so it replaces the previously-committed JSON fixture.
+        data = cyborgdb.load_sample_dataset()
 
         # Load vectors and neighbors as numpy arrays
-        cls.vectors = np.array(data["vectors"], dtype=np.float32)
-        cls.queries = np.array(data["queries"], dtype=np.float32)
-        cls.untrained_neighbors = np.array(data["untrained_neighbors"], dtype=np.int32)
-        cls.trained_neighbors = np.array(data["trained_neighbors"], dtype=np.int32)
-        cls.metadata = data["metadata"]
-        cls.metadata_queries = data["metadata_queries"]
-        cls.metadata_query_names = data["metadata_query_names"]
-        cls.untrained_metadata_matches = data["untrained_metadata_matches"]
-        cls.trained_metadata_matches = data["trained_metadata_matches"]
-        cls.untrained_metadata_neighbors = data["untrained_metadata_neighbors"]
-        cls.trained_metadata_neighbors = data["trained_metadata_neighbors"]
+        cls.vectors = np.array(data.vectors, dtype=np.float32)
+        cls.queries = np.array(data.queries, dtype=np.float32)
+        cls.untrained_neighbors = np.array(data.untrained_neighbors, dtype=np.int32)
+        cls.trained_neighbors = np.array(data.trained_neighbors, dtype=np.int32)
+        cls.metadata = data.metadata
+        cls.metadata_queries = data.metadata_queries
+        cls.metadata_query_names = data.metadata_query_names
+        cls.untrained_metadata_matches = data.untrained_metadata_matches
+        cls.trained_metadata_matches = data.trained_metadata_matches
+        cls.untrained_metadata_neighbors = data.untrained_metadata_neighbors
+        cls.trained_metadata_neighbors = data.trained_metadata_neighbors
 
         # Load expected recall values (as scalars or lists)
-        cls.untrained_recall = data.get("untrained_recall")
-        cls.trained_recall = data.get("trained_recall")
+        cls.untrained_recall = data.untrained_recall
+        cls.trained_recall = data.trained_recall
 
         # Set counts and dimension
-        cls.num_untrained_vectors = data["num_untrained_vectors"]
-        cls.num_trained_vectors = data["num_trained_vectors"]
+        cls.num_untrained_vectors = data.num_untrained_vectors
+        cls.num_trained_vectors = data.num_trained_vectors
         cls.total_num_vectors = cls.num_untrained_vectors + cls.num_trained_vectors
         cls.num_queries = cls.queries.shape[0]
         cls.dimension = cls.vectors.shape[1]

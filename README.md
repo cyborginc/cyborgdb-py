@@ -53,7 +53,7 @@ pip install cyborgdb
 ### Index and query vectors
 
 ```python
-from cyborgdb import Client
+from cyborgdb import Client, load_sample_dataset
 
 # Initialize the client
 client = Client('https://localhost:8000', 'your-service-root-key')
@@ -67,34 +67,34 @@ index = client.create_index(
     index_key=index_key
 )
 
-# Add encrypted vector items
-items = [
-    {
-        'id': 'doc1',
-        'vector': [0.1] * 128,  # Replace with real embeddings
-        'contents': 'Hello world!',
-        'metadata': {'category': 'greeting', 'language': 'en'}
-    },
-    {
-        'id': 'doc2',
-        'vector': [0.1] * 128,  # Replace with real embeddings
-        'contents': 'Bonjour le monde!',
-        'metadata': {'category': 'greeting', 'language': 'fr'}
-    }
-]
+# Load the hosted sample dataset (fetched from S3 on first use, cached locally)
+dataset = load_sample_dataset()  # 75k 128-dim vectors with metadata
 
-index.upsert(items)
+# Add the encrypted vector items
+index.upsert(dataset.items)
 
-# Query the encrypted index
-query_vector = [0.2] * 128  # 128 dimensions
-results = index.query(query_vectors=query_vector, top_k=5)
+# Query the encrypted index with a sample query vector
+results = index.query(query_vectors=dataset.sample_queries[0], top_k=5)
 
-# Print the results
+# Print the results (guaranteed non-empty against the sample dataset)
 for result in results:
     print(f"ID: {result['id']}, Distance: {result['distance']}")
-# ID: doc1, Distance: 1.1314
-# ID: doc2, Distance: 1.1314
 ```
+
+> **Sample dataset:** `load_sample_dataset()` pulls a small reference dataset
+> from S3 on demand and caches it locally — it is not bundled into the SDK.
+> Each item has an explicit `id`, a 128-dim `vector`, and `metadata` with both
+> string (`string`) and numeric (`number`) fields, so the same dataset drives
+> ANN similarity search, metadata filter queries, and numeric range queries. It
+> also ships `sample_queries` (query vectors) and `example_filters` (curated,
+> guaranteed-to-match filters).
+
+> **Encryption model:** the index is encrypted at rest, but an encrypted DB
+> does **not** mean vectors are auto-hidden from you. You must pass your index
+> key on `load_index` / `get` / `query` to retrieve **decrypted** vectors and
+> metadata — without the key, only encrypted ciphertext is ever readable.
+> HYOK-level security is not implied unless you manage the key material
+> yourself (see BYOK below).
 
 ### Run batch queries
 ```python
@@ -120,23 +120,33 @@ for i, query_results in enumerate(batch_results):
 #   ID: doc2, Distance: 1.1314
 ```
 
-### Filter results by metadata
+### Filter results by metadata and range
 ```python
-# Search with metadata filters
-query_vector = [0.1] * 128
-results = index.query(
+dataset = load_sample_dataset()
+query_vector = dataset.sample_queries[0]
+
+# Equality filter on a string field
+filtered = index.query(
     query_vectors=query_vector,
     top_k=10,
-    n_probes=1,
-    greedy=False,
-    filters={'category': 'greeting', 'language': 'en'},
-    include=['distance', 'metadata']
+    filters={'string': 'string_0'},
+    include=['distance', 'metadata'],
 )
 
-# Print the results
-for result in results:
-    print(f"ID: {result['id']}, Distance: {result['distance']}, Metadata: {result['metadata']}")
-# ID: doc1, Distance: 0.0000, Metadata: {'category': 'greeting', 'language': 'en'}
+# Numeric range query (bounded) — combine similarity with a range predicate
+ranged = index.query(
+    query_vectors=query_vector,
+    top_k=10,
+    filters={'number': {'$gte': 1250, '$lte': 2500}},
+    include=['distance', 'metadata'],
+)
+
+# The dataset also ships curated, guaranteed-to-match filters:
+for example in dataset.example_filters:
+    res = index.query(
+        query_vectors=query_vector, top_k=5, filters=example['filter']
+    )
+    print(f"{example['name']}: {len(res)} results")
 ```
 
 ### Bring Your Own Key (BYOK) via KMS
