@@ -14,6 +14,8 @@ Example:
 """
 
 import gzip
+import hashlib
+import io
 import json
 import os
 from dataclasses import dataclass
@@ -31,13 +33,35 @@ SAMPLE_DATASETS_BASE_URL = "https://cyborgdb-sample-datasets.s3.amazonaws.com"
 # Default dataset returned by ``load_sample_dataset()`` with no arguments.
 DEFAULT_SAMPLE_DATASET = "quickstart-75k"
 
-# Catalog of available datasets -> their object path within the bucket.
-_DATASETS: Dict[str, str] = {
-    "quickstart-75k": "quickstart-75k/v1/dataset.json.gz",
+
+@dataclass(frozen=True)
+class _DatasetEntry:
+    """Where a dataset lives and how to verify it.
+
+    ``sha256`` is the hex SHA-256 of the decompressed JSON, pinned so a bucket
+    compromise or a poisoned local cache file can't be trusted silently. The
+    same digest is verified post-download and on cache read.
+    """
+
+    object_path: str
+    sha256: str
+
+
+# Catalog of available datasets -> their catalog entry.
+_DATASETS: Dict[str, _DatasetEntry] = {
+    "quickstart-75k": _DatasetEntry(
+        object_path="quickstart-75k/v1/dataset.json.gz",
+        sha256="6e2db96a0932f036698ebf5e25cf0871cc69b649f7fb352f9e3dddcf9af0540f",
+    ),
 }
 
 # Number of leading ``queries`` exposed as ``sample_queries`` for quick demos.
 _NUM_SAMPLE_QUERIES = 10
+
+# Upper bound on the decompressed dataset size. Guards against a decompression
+# bomb: a tiny gzip that expands to many GBs and OOMs the host. The largest
+# shipped dataset is well under this generous cap.
+_MAX_DECOMPRESSED_BYTES = 512 * 1024 * 1024
 
 
 @dataclass
@@ -88,6 +112,26 @@ class SampleDataset:
 def _default_cache_dir() -> Path:
     base = os.environ.get("XDG_CACHE_HOME") or os.path.join(Path.home(), ".cache")
     return Path(base) / "cyborgdb"
+
+
+def _sha256_hex(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _decompress_bounded(compressed: bytes, name: str) -> bytes:
+    """Gunzip ``compressed`` with a hard size cap (anti decompression-bomb).
+
+    Reads one byte past the cap so an over-limit payload is detected rather than
+    silently truncated.
+    """
+    with gzip.GzipFile(fileobj=io.BytesIO(compressed)) as gz:
+        data = gz.read(_MAX_DECOMPRESSED_BYTES + 1)
+    if len(data) > _MAX_DECOMPRESSED_BYTES:
+        raise RuntimeError(
+            f'Sample dataset "{name}" exceeds maximum decompressed size of '
+            f"{_MAX_DECOMPRESSED_BYTES} bytes"
+        )
+    return data
 
 
 def _hydrate(raw: Dict[str, Any]) -> SampleDataset:
@@ -160,23 +204,27 @@ def load_sample_dataset(
             f'Unknown sample dataset "{name}". Available datasets: {known}.'
         )
 
-    object_path = _DATASETS[name]
+    entry = _DATASETS[name]
     cache_root = Path(cache_dir) if cache_dir else _default_cache_dir()
     # Cache key mirrors the versioned object path so a dataset bump never serves
     # a stale cached copy.
-    cache_name = object_path.replace("/", "_")
+    cache_name = entry.object_path.replace("/", "_")
     if cache_name.endswith(".gz"):
         cache_name = cache_name[: -len(".gz")]
     cache_file = cache_root / cache_name
 
     if not force_download and cache_file.exists():
         try:
-            return _hydrate(json.loads(cache_file.read_text("utf-8")))
+            cached = cache_file.read_bytes()
+            # Verify the cached file against the pinned digest: a poisoned cache
+            # must not be trusted. A mismatch falls through to re-download.
+            if _sha256_hex(cached) == entry.sha256:
+                return _hydrate(json.loads(cached.decode("utf-8")))
         except (ValueError, KeyError, OSError):
             # Corrupt cache -- fall through and re-download.
             pass
 
-    url = f"{SAMPLE_DATASETS_BASE_URL}/{object_path}"
+    url = f"{SAMPLE_DATASETS_BASE_URL}/{entry.object_path}"
     try:
         response = requests.get(url, timeout=120)
         response.raise_for_status()
@@ -186,15 +234,24 @@ def load_sample_dataset(
         ) from exc
 
     # The object is stored as an opaque gzip blob (no Content-Encoding: gzip),
-    # so requests does not auto-decompress -- we own the gunzip step.
-    text = gzip.decompress(response.content).decode("utf-8")
-    raw = json.loads(text)
+    # so requests does not auto-decompress -- we own the gunzip step (with a
+    # size cap against decompression bombs).
+    data = _decompress_bounded(response.content, name)
+
+    digest = _sha256_hex(data)
+    if digest != entry.sha256:
+        raise RuntimeError(
+            f'Integrity check failed for sample dataset "{name}": '
+            f"expected SHA-256 {entry.sha256}, got {digest}."
+        )
+
+    raw = json.loads(data.decode("utf-8"))
 
     # Best-effort local cache of the raw payload; a failed write must not break
     # the load. items/sample_queries are rebuilt by _hydrate() on read.
     try:
         cache_root.mkdir(parents=True, exist_ok=True)
-        cache_file.write_text(text, "utf-8")
+        cache_file.write_bytes(data)
     except OSError:
         pass
 

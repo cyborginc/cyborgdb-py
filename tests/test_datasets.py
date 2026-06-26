@@ -1,12 +1,16 @@
 import gzip
+import hashlib
 import json
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import requests
 
+import cyborgdb.datasets as datasets_mod
 from cyborgdb import DEFAULT_SAMPLE_DATASET, load_sample_dataset
+from cyborgdb.datasets import _DatasetEntry
 
 # The mocked payload is the *raw* hosted shape (no items/sample_queries);
 # those convenience fields are rebuilt by the loader's hydrate step.
@@ -39,12 +43,21 @@ FAKE_RAW = {
 }
 
 
+def _raw_bytes(raw):
+    """The decompressed JSON bytes the loader hashes."""
+    return json.dumps(raw).encode("utf-8")
+
+
 def _gzip_response(raw):
     """A MagicMock standing in for a requests.Response with gzipped content."""
     resp = MagicMock()
-    resp.content = gzip.compress(json.dumps(raw).encode("utf-8"))
+    resp.content = gzip.compress(_raw_bytes(raw))
     resp.raise_for_status.return_value = None
     return resp
+
+
+# SHA-256 of the decompressed fixture, matching what the loader verifies.
+_FAKE_SHA256 = hashlib.sha256(_raw_bytes(FAKE_RAW)).hexdigest()
 
 
 class TestLoadSampleDataset(unittest.TestCase):
@@ -53,8 +66,14 @@ class TestLoadSampleDataset(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.cache_dir = self._tmp.name
+        # Pin the catalog digest to the fixture so integrity verification passes.
+        self._orig_entry = datasets_mod._DATASETS["quickstart-75k"]
+        datasets_mod._DATASETS["quickstart-75k"] = _DatasetEntry(
+            object_path=self._orig_entry.object_path, sha256=_FAKE_SHA256
+        )
 
     def tearDown(self):
+        datasets_mod._DATASETS["quickstart-75k"] = self._orig_entry
         self._tmp.cleanup()
 
     @patch("cyborgdb.datasets.requests.get")
@@ -107,6 +126,27 @@ class TestLoadSampleDataset(unittest.TestCase):
         mock_get.return_value = resp
         with self.assertRaises(RuntimeError):
             load_sample_dataset(DEFAULT_SAMPLE_DATASET, cache_dir=self.cache_dir)
+
+    @patch("cyborgdb.datasets.requests.get")
+    def test_integrity_mismatch_raises(self, mock_get):
+        mock_get.return_value = _gzip_response(FAKE_RAW)
+        datasets_mod._DATASETS["quickstart-75k"] = _DatasetEntry(
+            object_path=self._orig_entry.object_path, sha256="0" * 64
+        )
+        with self.assertRaisesRegex(RuntimeError, "Integrity check failed"):
+            load_sample_dataset(DEFAULT_SAMPLE_DATASET, cache_dir=self.cache_dir)
+
+    @patch("cyborgdb.datasets.requests.get")
+    def test_tampered_cache_refetches(self, mock_get):
+        mock_get.return_value = _gzip_response(FAKE_RAW)
+        load_sample_dataset(DEFAULT_SAMPLE_DATASET, cache_dir=self.cache_dir)
+        self.assertEqual(mock_get.call_count, 1)
+
+        # Tamper with the cached file; the pinned digest no longer matches.
+        cache_file = Path(self.cache_dir) / "quickstart-75k_v1_dataset.json"
+        cache_file.write_text("tampered", "utf-8")
+        load_sample_dataset(DEFAULT_SAMPLE_DATASET, cache_dir=self.cache_dir)
+        self.assertEqual(mock_get.call_count, 2)
 
 
 if __name__ == "__main__":
