@@ -56,7 +56,7 @@ class Client:
 
     - **Single service key** — the default; the one ``CYBORGDB_API_KEY`` the
       service was started with. Full access, no RBAC.
-    - **Root key** — when the service runs with ``CYBORGDB_ROOT_API_KEY`` set,
+    - **Root key** — when the service runs with ``CYBORGDB_SERVICE_ROOT_KEY`` set,
       RBAC is on. A client using the root key has admin access and can mint
       per-user keys via :meth:`EncryptedIndex.create_user`.
     - **User key** (``cdbk_...``) — minted by ``create_user`` and scoped to one
@@ -68,7 +68,7 @@ class Client:
       have no server-side key to resolve for a user.
     """
 
-    def __init__(self, base_url, api_key, verify_ssl=None):
+    def __init__(self, base_url, api_key: Optional[str] = None, verify_ssl=None):
         # If base_url is http, disable SSL verification
         if base_url.startswith("http://"):
             verify_ssl = False
@@ -118,6 +118,21 @@ class Client:
             error_msg = f"Failed to initialize client: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
+
+    def _request_headers(self) -> Dict[str, str]:
+        """Build the request headers for data-path calls. Only includes
+        ``X-API-Key`` when one is configured; when the service has auth
+        disabled (no ``CYBORGDB_SERVICE_ROOT_KEY`` set) the SDK can be
+        constructed with no api_key and we must not send an empty
+        header (and must not crash indexing into an empty config dict)."""
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        api_key = self.config.api_key.get("X-API-Key")
+        if api_key:
+            headers["X-API-Key"] = api_key
+        return headers
 
     @staticmethod
     def generate_key(save: bool = False) -> bytes:
@@ -225,11 +240,7 @@ class Client:
 
             self.api.create_index_v1_indexes_create_post(
                 create_index_request=request,
-                _headers={
-                    "X-API-Key": self.config.api_key["X-API-Key"],
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                },
+                _headers=self._request_headers(),
             )
 
             return index
