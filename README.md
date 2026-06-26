@@ -1,46 +1,36 @@
-<p align="center">
-  <a href="https://www.cyborg.co">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/cyborginc/cyborgdb-py/main/assets/cyborgdb-logo-dark.svg">
-      <img src="https://raw.githubusercontent.com/cyborginc/cyborgdb-py/main/assets/cyborgdb-logo-light.svg" alt="CyborgDB" width="320">
-    </picture>
-  </a>
-</p>
-
 # CyborgDB Python SDK
 
 ![PyPI - Version](https://img.shields.io/pypi/v/cyborgdb)
 ![PyPI - License](https://img.shields.io/pypi/l/cyborgdb)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/cyborgdb)
 
-The **CyborgDB Python SDK** is the Python client for [CyborgDB](https://www.cyborg.co) — the vector database that stays encrypted even while it's searching. Run similarity search directly on encrypted data with client-side keys; only the result of a query is ever decrypted, never the index. Built for Python, it fits into existing AI and data workflows.
+The **CyborgDB Python SDK** provides a comprehensive client library for interacting with [CyborgDB](https://docs.cyborg.co), the first Confidential Vector Database. This SDK enables you to perform encrypted vector operations including ingestion, search, and retrieval while maintaining end-to-end encryption of your vector embeddings. Built for Python applications, it offers seamless integration into modern Python applications and services.
 
-This SDK talks to [`cyborgdb-service`](https://hub.docker.com/r/cyborginc/cyborgdb-service), which you self-host in your own VPC or on-prem and run alongside your app. Install and start it separately. See our [docs](https://docs.cyborg.co) for more info.
+This SDK provides an interface to [`cyborgdb-service`](https://pypi.org/project/cyborgdb-service/) which you will need to separately install and run in order to use the SDK. For more info, please see our [docs](https://docs.cyborg.co).
 
 ## Key Features
 
-- **Encryption-in-use**: Search runs directly on ciphertext; only the query result is decrypted, never the index or stored vectors
-- **Encrypted ANN**: Disk-backed encrypted DiskIVF index with recall within 2% of a plaintext baseline ([read the benchmarks](https://www.cyborg.co/performance))
-- **Filters on encrypted metadata**: Combine vector similarity with equality and range predicates in a single request
-- **BYOK / HYOK**: Wrap per-index keys with AWS KMS or AWS Secrets Manager, or hold the key client-side — you control the key material
-- **Per-tenant key isolation**: Per-index, per-user keys with cryptographic RBAC; revoke a user and their keys are erased
-- **Pythonic API**: Familiar client/index interface that integrates with existing Python AI workflows
+- **End-to-End Encryption**: All vector operations maintain encryption with client-side keys
+- **Zero-Trust Design**: Novel architecture keeps confidential inference data secure
+- **High Performance**: GPU-accelerated indexing and retrieval with CUDA support
+- **Familiar API**: Easy integration with existing AI workflows
+- **Encrypted DiskIVF Indexing**: Disk-backed inverted-file index with customizable training parameters
 
 ## Getting Started
 
 To get started in minutes, check out our [Quickstart Guide](https://docs.cyborg.co/quickstart).
 
 
-### Install the SDK
+### Installation
 
 1. Install `cyborgdb-service`
 
 ```bash
-# Pull the CyborgDB Service image
-docker pull cyborginc/cyborgdb-service
-
-# Or install via pip
+# Install the CyborgDB Service
 pip install cyborgdb-service
+
+# Or via Docker
+docker pull cyborginc/cyborgdb-service
 ```
 
 2. Install `cyborgdb` SDK:
@@ -50,13 +40,13 @@ pip install cyborgdb-service
 pip install cyborgdb
 ```
 
-### Index and query vectors
+### Usage
 
 ```python
-from cyborgdb import Client, load_sample_dataset
+from cyborgdb import Client
 
 # Initialize the client
-client = Client('https://localhost:8000', 'your-service-root-key')
+client = Client('https://localhost:8000', 'your-api-key')
 
 # Generate a 32-byte encryption key
 index_key = client.generate_key()
@@ -67,36 +57,36 @@ index = client.create_index(
     index_key=index_key
 )
 
-# Load the hosted sample dataset (fetched from S3 on first use, cached locally)
-dataset = load_sample_dataset()  # 75k 128-dim vectors with metadata
+# Add encrypted vector items
+items = [
+    {
+        'id': 'doc1',
+        'vector': [0.1] * 128,  # Replace with real embeddings
+        'contents': 'Hello world!',
+        'metadata': {'category': 'greeting', 'language': 'en'}
+    },
+    {
+        'id': 'doc2',
+        'vector': [0.1] * 128,  # Replace with real embeddings
+        'contents': 'Bonjour le monde!',
+        'metadata': {'category': 'greeting', 'language': 'fr'}
+    }
+]
 
-# Add the encrypted vector items
-index.upsert(dataset.items)
+index.upsert(items)
 
-# Query the encrypted index with a sample query vector
-results = index.query(query_vectors=dataset.sample_queries[0], top_k=5)
+# Query the encrypted index
+query_vector = [0.2] * 128  # 128 dimensions
+results = index.query(query_vectors=query_vector,top_k=5)
 
-# Print the results (guaranteed non-empty against the sample dataset)
+# Print the results
 for result in results:
     print(f"ID: {result['id']}, Distance: {result['distance']}")
 ```
 
-> **Sample dataset:** `load_sample_dataset()` pulls a small reference dataset
-> from S3 on demand and caches it locally — it is not bundled into the SDK.
-> Each item has an explicit `id`, a 128-dim `vector`, and `metadata` with both
-> string (`string`) and numeric (`number`) fields, so the same dataset drives
-> ANN similarity search, metadata filter queries, and numeric range queries. It
-> also ships `sample_queries` (query vectors) and `example_filters` (curated,
-> guaranteed-to-match filters).
+### Advanced Usage
 
-> **Encryption model:** the index is encrypted at rest, but an encrypted DB
-> does **not** mean vectors are auto-hidden from you. You must pass your index
-> key on `load_index` / `get` / `query` to retrieve **decrypted** vectors and
-> metadata — without the key, only encrypted ciphertext is ever readable.
-> HYOK-level security is not implied unless you manage the key material
-> yourself (see BYOK below).
-
-### Run batch queries
+#### Batch Queries
 ```python
 # Search with multiple query vectors simultaneously
 query_vectors = [
@@ -111,45 +101,27 @@ for i, query_results in enumerate(batch_results):
     print(f"\nResults for query {i}:")
     for result in query_results:
         print(f"  ID: {result['id']}, Distance: {result['distance']}")
-# Results for query 0:
-#   ID: doc1, Distance: 0.0000
-#   ID: doc2, Distance: 0.0000
-#
-# Results for query 1:
-#   ID: doc1, Distance: 1.1314
-#   ID: doc2, Distance: 1.1314
 ```
 
-### Filter results by metadata and range
+#### Metadata Filtering
 ```python
-dataset = load_sample_dataset()
-query_vector = dataset.sample_queries[0]
-
-# Equality filter on a string field
-filtered = index.query(
+# Search with metadata filters
+query_vector = [0.1] * 128
+results = index.query(
     query_vectors=query_vector,
     top_k=10,
-    filters={'string': 'string_0'},
-    include=['distance', 'metadata'],
+    n_probes=1,
+    greedy=False,
+    filters={'category': 'greeting', 'language': 'en'},
+    include=['distance', 'metadata', 'contents']
 )
 
-# Numeric range query (bounded) — combine similarity with a range predicate
-ranged = index.query(
-    query_vectors=query_vector,
-    top_k=10,
-    filters={'number': {'$gte': 1250, '$lte': 2500}},
-    include=['distance', 'metadata'],
-)
-
-# The dataset also ships curated, guaranteed-to-match filters:
-for example in dataset.example_filters:
-    res = index.query(
-        query_vectors=query_vector, top_k=5, filters=example['filter']
-    )
-    print(f"{example['name']}: {len(res)} results")
+# Print the results
+for result in results:
+    print(f"ID: {result['id']}, Distance: {result['distance']}, Metadata: {result['metadata']}")
 ```
 
-### Bring Your Own Key (BYOK) via KMS
+#### Bring Your Own Key (BYOK) via KMS
 
 When the service is configured with a `kms.registry` entry, the SDK can
 delegate key management entirely to the server-side KMS. The service
@@ -188,18 +160,30 @@ Supply **exactly one** of `index_key` / `kms_name` — passing both is rejected
 by the service with a 400, since the named slot already determines the key
 source.
 
-### Control access with per-user keys
+> **How slots are configured.** A `kms.registry` slot is added to the
+> service's `cyborgdb.yaml` by your **cyborgdb-service operator** — not
+> from the SDK. Each slot declares one real provider (`aws-kms` or `aws`)
+> plus the AWS identifiers needed to wrap/unwrap data keys. (`none` is not a
+> configurable slot type; it is the label the service records for the no-KMS,
+> SDK-supplied-key path above.)
+> For real-KMS slots (`aws-kms` / `aws`), set-up also requires IAM
+> work on the customer's AWS account; see `BYOK.md` in the
+> cyborgdb-service repo for the full operator + customer walkthrough.
+> From the SDK side, you only need the slot name your operator
+> provisioned.
 
-When the service runs with a root admin key (`CYBORGDB_SERVICE_ROOT_KEY`) set, RBAC
+#### Role-Based Access Control (RBAC)
+
+When the service runs with a root admin key (`CYBORGDB_ROOT_API_KEY`) set, RBAC
 is enabled. The root can mint **per-user API keys** scoped to a single index,
 each with a `read` / `write` permission set. Permissions are enforced
-*cryptographically*: a user's wrapped data-encryption keys **are** their
-permission set. A read-only user cannot decrypt for a write operation;
-revoking a user erases their keys.
+*cryptographically* by the service: the wrapped data-encryption keys that exist
+for a user **are** their permission set, so a read-only user simply cannot
+decrypt for a write operation, and revoking a user erases their keys.
 
 ```python
 # Admin (root) client: mint users on an existing index.
-admin = Client(base_url, api_key=SERVICE_ROOT_KEY)
+admin = cyborgdb.Client(base_url, api_key=ROOT_API_KEY)
 index = admin.load_index(index_name='kms-backed-index')   # KMS-backed (see BYOK)
 
 reader = index.create_user(permissions=['read'])
@@ -215,10 +199,10 @@ A user authenticates with their `cdbk_` key and needs no index key of their own
 — they load the index by name and the service resolves its key:
 
 ```python
-user = Client(base_url, api_key=reader['api_key'])
+user = cyborgdb.Client(base_url, api_key=reader['api_key'])
 idx = user.load_index(index_name='kms-backed-index')   # no index_key
 idx.query(query_vectors=[...], top_k=5)                # allowed for 'read'
-idx.upsert(items)                                      # raises ValueError for read-only users
+idx.upsert(items)                                      # raises for read-only users
 ```
 
 > User keys resolve the index key server-side, so they work against
