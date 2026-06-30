@@ -422,5 +422,166 @@ class TestBackendCompatibility(unittest.TestCase):
         return {"nested": self._create_deep_nested_metadata(depth - 1), "level": depth}
 
 
+class TestDataIntegrity(unittest.TestCase):
+    """Data survives round-trips correctly. Mirrors the Data Integrity and
+    boundary round-trip tests in go comprehensive_test.go and the JS suite."""
+
+    def setUp(self):
+        self.client = create_client()
+        self.index_name = generate_unique_name("comp_")
+        self.index_key = self.client.generate_key()
+        self.index = self.client.create_index(
+            self.index_name, self.index_key, dimension=128, metric="euclidean"
+        )
+
+    def tearDown(self):
+        try:
+            if self.index:
+                self.index.delete_index()
+        except Exception:
+            pass
+
+    def test_upsert_overwrite_preserves_latest_data(self):
+        """Overwriting an ID returns the latest vector and metadata — no stale
+        cache, and version-1 metadata must not leak into version 2."""
+        vec_v1 = np.random.rand(128).astype(np.float32)
+        self.index.upsert(
+            [
+                {
+                    "id": "overwrite_test",
+                    "vector": vec_v1,
+                    "metadata": {"version": 1, "old_field": "should_disappear"},
+                }
+            ]
+        )
+        time.sleep(2)
+
+        vec_v2 = (np.random.rand(128) + 10.0).astype(np.float32)
+        self.index.upsert(
+            [
+                {
+                    "id": "overwrite_test",
+                    "vector": vec_v2,
+                    "metadata": {"version": 2, "new_field": "present"},
+                }
+            ]
+        )
+        time.sleep(2)
+
+        results = self.index.get(["overwrite_test"], include=["vector", "metadata"])
+        self.assertEqual(len(results), 1)
+        retrieved = results[0]
+        np.testing.assert_allclose(
+            np.array(retrieved["vector"], dtype=np.float32),
+            vec_v2,
+            rtol=1e-5,
+            atol=1e-5,
+            err_msg="retrieved vector matches v1 instead of v2 — stale data",
+        )
+        self.assertEqual(retrieved["metadata"]["version"], 2)
+        self.assertEqual(retrieved["metadata"]["new_field"], "present")
+
+    def test_delete_actually_removes_data(self):
+        """After delete, vectors are gone from get(), list_ids(), and query()."""
+        vectors = [np.random.rand(128).astype(np.float32) for _ in range(10)]
+        self.index.upsert(
+            [{"id": f"del_test_{i}", "vector": vectors[i]} for i in range(10)]
+        )
+        time.sleep(2)
+
+        delete_ids = [f"del_test_{i}" for i in range(5)]
+        self.index.delete(delete_ids)
+        time.sleep(2)
+
+        # get() returns nothing for deleted IDs
+        got = self.index.get(delete_ids, include=["vector"])
+        self.assertEqual(len(got), 0, f"deleted vectors still returned by get: {got}")
+
+        # list_ids() shows only the surviving 5
+        stored = set(self.index.list_ids())
+        for d in delete_ids:
+            self.assertNotIn(d, stored, f"deleted ID '{d}' still in list_ids")
+        self.assertEqual(len(stored), 5)
+
+        # query() must not surface a deleted vector
+        results = self.index.query(query_vectors=vectors[0], top_k=10)
+        returned = {r["id"] for r in results}
+        for d in delete_ids:
+            self.assertNotIn(d, returned, f"deleted ID '{d}' still in query results")
+
+    def test_get_non_existent_ids(self):
+        """get() on a mix of real and missing IDs returns only the real ones,
+        without erroring."""
+        self.index.upsert(
+            [{"id": "exists", "vector": np.random.rand(128).astype(np.float32)}]
+        )
+        time.sleep(2)
+
+        results = self.index.get(["exists", "ghost_1", "ghost_2"], include=["vector"])
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["id"], "exists")
+
+    def test_boundary_vector_values_round_trip(self):
+        """Extreme float values survive the upsert→get round-trip element-wise."""
+        mixed = np.array(
+            [(i / 100.0 if i % 2 == 0 else -i / 100.0) for i in range(128)],
+            dtype=np.float32,
+        )
+        cases = [
+            ("very small (1e-10)", np.full(128, 1e-10, dtype=np.float32)),
+            ("very large (1e10)", np.full(128, 1e10, dtype=np.float32)),
+            ("mixed signs", mixed),
+        ]
+        for i, (_, vec) in enumerate(cases):
+            self.index.upsert([{"id": f"boundary_{i}", "vector": vec}])
+        time.sleep(2)
+
+        for i, (name, vec) in enumerate(cases):
+            with self.subTest(name):
+                results = self.index.get([f"boundary_{i}"], include=["vector"])
+                self.assertEqual(len(results), 1)
+                retrieved = np.array(results[0]["vector"], dtype=np.float32)
+                np.testing.assert_allclose(retrieved, vec, rtol=1e-4, atol=1e-4)
+
+    def test_duplicate_index_name_rejected(self):
+        """Creating a second index with an existing name fails — no silent
+        overwrite of live data."""
+        name = generate_unique_name("dup_test_")
+        idx = self.client.create_index(
+            name, self.client.generate_key(), dimension=128, metric="euclidean"
+        )
+        try:
+            with self.assertRaises(Exception):
+                self.client.create_index(
+                    name,
+                    self.client.generate_key(),
+                    dimension=128,
+                    metric="euclidean",
+                )
+        finally:
+            idx.delete_index()
+
+    def test_wrong_key_cannot_access_data(self):
+        """Loading an index with the wrong encryption key is rejected."""
+        name = generate_unique_name("wrongkey_")
+        idx = self.client.create_index(
+            name, self.client.generate_key(), dimension=128, metric="euclidean"
+        )
+        try:
+            idx.upsert(
+                [
+                    {
+                        "id": "secret_data",
+                        "vector": np.random.rand(128).astype(np.float32),
+                    }
+                ]
+            )
+            time.sleep(2)
+            with self.assertRaises(Exception):
+                self.client.load_index(name, self.client.generate_key())
+        finally:
+            idx.delete_index()
+
+
 if __name__ == "__main__":
     unittest.main()
