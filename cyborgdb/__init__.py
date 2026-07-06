@@ -11,6 +11,14 @@ from .client.encrypted_index import EncryptedIndex
 # Re-export demo functionality
 from .demo import get_demo_api_key
 
+# Re-export sample dataset loader
+from .datasets import (
+    DEFAULT_SAMPLE_DATASET,
+    SAMPLE_DATASETS_BASE_URL,
+    SampleDataset,
+    load_sample_dataset,
+)
+
 from importlib.metadata import PackageNotFoundError, version
 
 # Try to import LangChain integration (optional dependency)
@@ -42,5 +50,9 @@ __all__ = [
     "EncryptedIndex",
     "CyborgVectorStore",
     "get_demo_api_key",
+    "load_sample_dataset",
+    "SampleDataset",
+    "SAMPLE_DATASETS_BASE_URL",
+    "DEFAULT_SAMPLE_DATASET",
     "__version__",
 ]
