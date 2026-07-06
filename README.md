@@ -1,36 +1,46 @@
+<p align="center">
+  <a href="https://www.cyborg.co">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/cyborginc/cyborgdb-py/main/assets/cyborgdb-logo-dark.svg">
+      <img src="https://raw.githubusercontent.com/cyborginc/cyborgdb-py/main/assets/cyborgdb-logo-light.svg" alt="CyborgDB" width="320">
+    </picture>
+  </a>
+</p>
+
 # CyborgDB Python SDK
 
 ![PyPI - Version](https://img.shields.io/pypi/v/cyborgdb)
 ![PyPI - License](https://img.shields.io/pypi/l/cyborgdb)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/cyborgdb)
 
-The **CyborgDB Python SDK** provides a comprehensive client library for interacting with [CyborgDB](https://docs.cyborg.co), the first Confidential Vector Database. This SDK enables you to perform encrypted vector operations including ingestion, search, and retrieval while maintaining end-to-end encryption of your vector embeddings. Built for Python applications, it offers seamless integration into modern Python applications and services.
+The **CyborgDB Python SDK** is the Python client for [CyborgDB](https://www.cyborg.co) — the vector database that stays encrypted even while it's searching. Run similarity search directly on encrypted data with client-side keys; only the result of a query is ever decrypted, never the index. Built for Python, it fits into existing AI and data workflows.
 
-This SDK provides an interface to [`cyborgdb-service`](https://pypi.org/project/cyborgdb-service/) which you will need to separately install and run in order to use the SDK. For more info, please see our [docs](https://docs.cyborg.co).
+This SDK talks to [`cyborgdb-service`](https://hub.docker.com/r/cyborginc/cyborgdb-service), which you self-host in your own VPC or on-prem and run alongside your app. Install and start it separately. See our [docs](https://docs.cyborg.co) for more info.
 
 ## Key Features
 
-- **End-to-End Encryption**: All vector operations maintain encryption with client-side keys
-- **Zero-Trust Design**: Novel architecture keeps confidential inference data secure
-- **High Performance**: GPU-accelerated indexing and retrieval with CUDA support
-- **Familiar API**: Easy integration with existing AI workflows
-- **Encrypted DiskIVF Indexing**: Disk-backed inverted-file index with customizable training parameters
+- **Encryption-in-use**: Search runs directly on ciphertext; only the query result is decrypted, never the index or stored vectors
+- **Encrypted ANN**: Disk-backed encrypted DiskIVF index with recall within 2% of a plaintext baseline ([read the benchmarks](https://www.cyborg.co/performance))
+- **Filters on encrypted metadata**: Combine vector similarity with equality and range predicates in a single request
+- **BYOK / HYOK**: Wrap per-index keys with AWS KMS or AWS Secrets Manager, or hold the key client-side — you control the key material
+- **Per-tenant key isolation**: Per-index, per-user keys with cryptographic RBAC; revoke a user and their keys are erased
+- **Pythonic API**: Familiar client/index interface that integrates with existing Python AI workflows
 
 ## Getting Started
 
 To get started in minutes, check out our [Quickstart Guide](https://docs.cyborg.co/quickstart).
 
 
-### Installation
+### Install the SDK
 
 1. Install `cyborgdb-service`
 
 ```bash
-# Install the CyborgDB Service
-pip install cyborgdb-service
-
-# Or via Docker
+# Pull the CyborgDB Service image
 docker pull cyborginc/cyborgdb-service
+
+# Or install via pip
+pip install cyborgdb-service
 ```
 
 2. Install `cyborgdb` SDK:
@@ -40,13 +50,12 @@ docker pull cyborginc/cyborgdb-service
 pip install cyborgdb
 ```
 
-### Usage
+### Index and query vectors
 
 ```python
 from cyborgdb import Client
 
-# Initialize the client
-client = Client('https://localhost:8000', 'your-api-key')
+client = Client('https://localhost:8000', 'your-service-root-key')  # api_key optional; only if the service was started with one
 
 # Generate a 32-byte encryption key
 index_key = client.generate_key()
@@ -77,16 +86,16 @@ index.upsert(items)
 
 # Query the encrypted index
 query_vector = [0.2] * 128  # 128 dimensions
-results = index.query(query_vectors=query_vector,top_k=5)
+results = index.query(query_vectors=query_vector, top_k=5)
 
 # Print the results
 for result in results:
     print(f"ID: {result['id']}, Distance: {result['distance']}")
+# ID: doc1, Distance: 1.1314
+# ID: doc2, Distance: 1.1314
 ```
 
-### Advanced Usage
-
-#### Batch Queries
+### Run batch queries
 ```python
 # Search with multiple query vectors simultaneously
 query_vectors = [
@@ -101,9 +110,16 @@ for i, query_results in enumerate(batch_results):
     print(f"\nResults for query {i}:")
     for result in query_results:
         print(f"  ID: {result['id']}, Distance: {result['distance']}")
+# Results for query 0:
+#   ID: doc1, Distance: 0.0000
+#   ID: doc2, Distance: 0.0000
+#
+# Results for query 1:
+#   ID: doc1, Distance: 1.1314
+#   ID: doc2, Distance: 1.1314
 ```
 
-#### Metadata Filtering
+### Filter results by metadata
 ```python
 # Search with metadata filters
 query_vector = [0.1] * 128
@@ -113,15 +129,16 @@ results = index.query(
     n_probes=1,
     greedy=False,
     filters={'category': 'greeting', 'language': 'en'},
-    include=['distance', 'metadata', 'contents']
+    include=['distance', 'metadata']
 )
 
 # Print the results
 for result in results:
     print(f"ID: {result['id']}, Distance: {result['distance']}, Metadata: {result['metadata']}")
+# ID: doc1, Distance: 0.0000, Metadata: {'category': 'greeting', 'language': 'en'}
 ```
 
-#### Bring Your Own Key (BYOK) via KMS
+### Bring Your Own Key (BYOK) via KMS
 
 When the service is configured with a `kms.registry` entry, the SDK can
 delegate key management entirely to the server-side KMS. The service
@@ -160,30 +177,18 @@ Supply **exactly one** of `index_key` / `kms_name` — passing both is rejected
 by the service with a 400, since the named slot already determines the key
 source.
 
-> **How slots are configured.** A `kms.registry` slot is added to the
-> service's `cyborgdb.yaml` by your **cyborgdb-service operator** — not
-> from the SDK. Each slot declares one real provider (`aws-kms` or `aws`)
-> plus the AWS identifiers needed to wrap/unwrap data keys. (`none` is not a
-> configurable slot type; it is the label the service records for the no-KMS,
-> SDK-supplied-key path above.)
-> For real-KMS slots (`aws-kms` / `aws`), set-up also requires IAM
-> work on the customer's AWS account; see `BYOK.md` in the
-> cyborgdb-service repo for the full operator + customer walkthrough.
-> From the SDK side, you only need the slot name your operator
-> provisioned.
+### Control access with per-user keys
 
-#### Role-Based Access Control (RBAC)
-
-When the service runs with a root admin key (`CYBORGDB_ROOT_API_KEY`) set, RBAC
+When the service runs with a root admin key (`CYBORGDB_SERVICE_ROOT_KEY`) set, RBAC
 is enabled. The root can mint **per-user API keys** scoped to a single index,
 each with a `read` / `write` permission set. Permissions are enforced
-*cryptographically* by the service: the wrapped data-encryption keys that exist
-for a user **are** their permission set, so a read-only user simply cannot
-decrypt for a write operation, and revoking a user erases their keys.
+*cryptographically*: a user's wrapped data-encryption keys **are** their
+permission set. A read-only user cannot decrypt for a write operation;
+revoking a user erases their keys.
 
 ```python
 # Admin (root) client: mint users on an existing index.
-admin = cyborgdb.Client(base_url, api_key=ROOT_API_KEY)
+admin = Client(base_url, api_key=SERVICE_ROOT_KEY)
 index = admin.load_index(index_name='kms-backed-index')   # KMS-backed (see BYOK)
 
 reader = index.create_user(permissions=['read'])
@@ -199,10 +204,10 @@ A user authenticates with their `cdbk_` key and needs no index key of their own
 — they load the index by name and the service resolves its key:
 
 ```python
-user = cyborgdb.Client(base_url, api_key=reader['api_key'])
+user = Client(base_url, api_key=reader['api_key'])
 idx = user.load_index(index_name='kms-backed-index')   # no index_key
 idx.query(query_vectors=[...], top_k=5)                # allowed for 'read'
-idx.upsert(items)                                      # raises for read-only users
+idx.upsert(items)                                      # raises ValueError for read-only users
 ```
 
 > User keys resolve the index key server-side, so they work against
