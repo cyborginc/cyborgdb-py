@@ -192,6 +192,7 @@ class Client:
         embedding_model: Optional[str] = None,
         metric: Optional[str] = None,
         storage_precision: Optional[str] = None,
+        metadata_schema: Optional[Dict[str, Dict[str, bool]]] = None,
     ) -> EncryptedIndex:
         """
         Create and return a new encrypted DiskIVF index.
@@ -211,6 +212,20 @@ class Client:
         source, so an SDK-supplied key is contradictory. Note that ``none`` is
         not a registry slot type — the no-KMS path is reached by omitting
         ``kms_name``, not by naming a ``provider: none`` slot.
+
+        ``metadata_schema`` is the per-field metadata indexing policy, fixed at
+        create time and immutable::
+
+            {"title": {"filterable": True, "pattern": True},
+             "blob":  {"filterable": False}}
+
+        Fields left out are filterable (opt-out posture). ``filterable`` builds
+        inverted-index postings; ``pattern`` additionally builds a regex
+        dictionary and requires ``filterable=True``. On :meth:`EncryptedIndex.query`
+        this only decides how a filter is resolved — index vs. post-filter, same
+        rows either way. On :meth:`EncryptedIndex.query_metadata` it is enforced:
+        only ``pattern`` fields accept ``$regex``/``$contains``, and
+        non-filterable fields cannot be filtered on at all.
         """
         if index_key is None and kms_name is None:
             raise ValueError("create_index requires index_key, kms_name, or both")
@@ -236,6 +251,7 @@ class Client:
                 embedding_model=embedding_model,
                 metric=metric,
                 storage_precision=storage_precision,
+                metadata_schema=metadata_schema,
             )
 
             self.api.create_index_v1_indexes_create_post(
