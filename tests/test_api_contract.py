@@ -280,6 +280,7 @@ class TestAPIContract(unittest.TestCase):
                 "embedding_model": {"position": 4, "default": None},
                 "metric": {"position": 5, "default": None},
                 "storage_precision": {"position": 6, "default": None},
+                "metadata_schema": {"position": 7, "default": None},
             },
             "Client.create_index",
         )
@@ -409,6 +410,17 @@ class TestAPIContract(unittest.TestCase):
             self.index.list_ids,
             {},  # No parameters
             "EncryptedIndex.list_ids",
+        )
+
+        validate_function_signature(
+            self.index.query_metadata,
+            {
+                "filters": {"position": 0, "default": None},
+                "top_k": {"position": 1, "default": None},
+                "order_by": {"position": 2, "default": None},
+                "ascending": {"position": 3, "default": True},
+            },
+            "EncryptedIndex.query_metadata",
         )
 
         # Check upsert signature - it has 2 parameters with second optional

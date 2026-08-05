@@ -90,6 +90,7 @@ Class | Method | HTTP request | Description
 *DefaultApi* | [**list_ids_v1_vectors_list_ids_post**](cyborgdb/openapi_client/docs/DefaultApi.md#list_ids_v1_vectors_list_ids_post) | **POST** /v1/vectors/list_ids | List all IDs in an index
 *DefaultApi* | [**list_indexes_v1_indexes_list_get**](cyborgdb/openapi_client/docs/DefaultApi.md#list_indexes_v1_indexes_list_get) | **GET** /v1/indexes/list | List Encrypted Indexes
 *DefaultApi* | [**list_users_v1_indexes_index_name_users_get**](cyborgdb/openapi_client/docs/DefaultApi.md#list_users_v1_indexes_index_name_users_get) | **GET** /v1/indexes/{index_name}/users | List an index&#39;s users
+*DefaultApi* | [**query_metadata_v1_vectors_query_metadata_post**](cyborgdb/openapi_client/docs/DefaultApi.md#query_metadata_v1_vectors_query_metadata_post) | **POST** /v1/vectors/query_metadata | Query an Encrypted Index by Metadata Only
 *DefaultApi* | [**query_vectors_binary_v1_vectors_query_binary_post**](cyborgdb/openapi_client/docs/DefaultApi.md#query_vectors_binary_v1_vectors_query_binary_post) | **POST** /v1/vectors/query_binary | Query Encrypted Index (Binary Format)
 *DefaultApi* | [**query_vectors_v1_vectors_query_post**](cyborgdb/openapi_client/docs/DefaultApi.md#query_vectors_v1_vectors_query_post) | **POST** /v1/vectors/query | Query Encrypted Index
 *DefaultApi* | [**train_index_v1_indexes_train_post**](cyborgdb/openapi_client/docs/DefaultApi.md#train_index_v1_indexes_train_post) | **POST** /v1/indexes/train | Train Encrypted index
@@ -126,6 +127,8 @@ Class | Method | HTTP request | Description
  - [ListUsersResponse](cyborgdb/openapi_client/docs/ListUsersResponse.md)
  - [LocationInner](cyborgdb/openapi_client/docs/LocationInner.md)
  - [MetadataFieldPolicy](cyborgdb/openapi_client/docs/MetadataFieldPolicy.md)
+ - [QueryMetadataRequest](cyborgdb/openapi_client/docs/QueryMetadataRequest.md)
+ - [QueryMetadataResponse](cyborgdb/openapi_client/docs/QueryMetadataResponse.md)
  - [QueryRequest](cyborgdb/openapi_client/docs/QueryRequest.md)
  - [QueryResponse](cyborgdb/openapi_client/docs/QueryResponse.md)
  - [QueryResultItem](cyborgdb/openapi_client/docs/QueryResultItem.md)

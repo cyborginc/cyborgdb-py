@@ -40,6 +40,8 @@ from cyborgdb.openapi_client.models.list_ids_response import ListIDsResponse
 from cyborgdb.openapi_client.models.list_users_response import ListUsersResponse
 from cyborgdb.openapi_client.models.location_inner import LocationInner
 from cyborgdb.openapi_client.models.metadata_field_policy import MetadataFieldPolicy
+from cyborgdb.openapi_client.models.query_metadata_request import QueryMetadataRequest
+from cyborgdb.openapi_client.models.query_metadata_response import QueryMetadataResponse
 from cyborgdb.openapi_client.models.query_request import QueryRequest
 from cyborgdb.openapi_client.models.query_response import QueryResponse
 from cyborgdb.openapi_client.models.query_result_item import QueryResultItem
