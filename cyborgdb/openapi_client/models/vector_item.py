@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from cyborgdb.openapi_client.models.contents import Contents
 from typing import Optional, Set
@@ -31,7 +31,7 @@ class VectorItem(BaseModel):
     id: StrictStr
     vector: Optional[List[Union[StrictFloat, StrictInt]]] = None
     contents: Optional[Contents] = None
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Arbitrary JSON object stored alongside the vector. Schemaless — the index's `metadata_schema` governs how fields are indexed, not what may be stored. Nested objects are addressable by dot-path in filters (`loc.city`); dates have no native type, store them as epoch millis.")
     __properties: ClassVar[List[str]] = ["id", "vector", "contents", "metadata"]
 
     model_config = ConfigDict(

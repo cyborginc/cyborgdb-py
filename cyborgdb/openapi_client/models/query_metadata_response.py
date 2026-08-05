@@ -17,21 +17,19 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional, Union
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
-class GetResultItemModel(BaseModel):
+class QueryMetadataResponse(BaseModel):
     """
-    Represents an individual item retrieved from the encrypted index.  Attributes:     id (str): The unique identifier of the item.     metadata (Optional[Dict[str, Any]]): Additional metadata associated with the item.     contents (Optional[bytes]): The raw byte contents of the item.     vector (Optional[List[float]]): The vector representation of the item.
+    Response model for a metadata-only query.  Attributes:     ids (List[str]): Matching item IDs — ordered by `order_by` when it was         set, otherwise an unordered subset.     count (int): Number of IDs returned.
     """ # noqa: E501
-    id: StrictStr
-    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Arbitrary JSON object stored alongside the vector. Schemaless — the index's `metadata_schema` governs how fields are indexed, not what may be stored. Nested objects are addressable by dot-path in filters (`loc.city`); dates have no native type, store them as epoch millis.")
-    contents: Optional[StrictStr] = None
-    vector: Optional[List[Union[StrictFloat, StrictInt]]] = None
-    __properties: ClassVar[List[str]] = ["id", "metadata", "contents", "vector"]
+    ids: List[StrictStr]
+    count: StrictInt
+    __properties: ClassVar[List[str]] = ["ids", "count"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -51,7 +49,7 @@ class GetResultItemModel(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of GetResultItemModel from a JSON string"""
+        """Create an instance of QueryMetadataResponse from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -72,26 +70,11 @@ class GetResultItemModel(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if metadata (nullable) is None
-        # and model_fields_set contains the field
-        if self.metadata is None and "metadata" in self.model_fields_set:
-            _dict['metadata'] = None
-
-        # set to None if contents (nullable) is None
-        # and model_fields_set contains the field
-        if self.contents is None and "contents" in self.model_fields_set:
-            _dict['contents'] = None
-
-        # set to None if vector (nullable) is None
-        # and model_fields_set contains the field
-        if self.vector is None and "vector" in self.model_fields_set:
-            _dict['vector'] = None
-
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of GetResultItemModel from a dict"""
+        """Create an instance of QueryMetadataResponse from a dict"""
         if obj is None:
             return None
 
@@ -99,10 +82,8 @@ class GetResultItemModel(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "id": obj.get("id"),
-            "metadata": obj.get("metadata"),
-            "contents": obj.get("contents"),
-            "vector": obj.get("vector")
+            "ids": obj.get("ids"),
+            "count": obj.get("count")
         })
         return _obj
 
