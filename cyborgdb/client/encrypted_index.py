@@ -25,6 +25,9 @@ try:
     from cyborgdb.openapi_client.exceptions import ApiException
     from cyborgdb.openapi_client.models.query_request import QueryRequest
     from cyborgdb.openapi_client.models.list_ids_request import ListIDsRequest
+    from cyborgdb.openapi_client.models.query_metadata_request import (
+        QueryMetadataRequest,
+    )
     from cyborgdb.openapi_client.models.request import Request
     from cyborgdb.openapi_client.models import Contents
     from cyborgdb.openapi_client.models.binary_upsert_request import BinaryUpsertRequest
@@ -139,6 +142,21 @@ class EncryptedIndex:
         the trained cluster count after `train()`. Fetched fresh on
         every read so post-training callers see the new value."""
         return self._describe().n_lists
+
+    @property
+    def metadata_schema(self) -> Dict[str, Dict[str, bool]]:
+        """Per-field metadata indexing policy recorded at create time, as
+        `{field: {"filterable": bool, "pattern": bool}}`. Empty dict when the
+        index uses the default index-everything posture. Immutable, but not
+        cached: an older service omits the field entirely, and normalizing
+        that `None` to `{}` here keeps callers from having to.
+
+        Returned as plain dicts — the same shape `create_index` accepts — so
+        generated openapi_client models never leak out of the wrapper."""
+        return {
+            field: {"filterable": policy.filterable, "pattern": policy.pattern}
+            for field, policy in (self._describe().metadata_schema or {}).items()
+        }
 
     def is_trained(self) -> bool:
         """
@@ -821,6 +839,69 @@ class EncryptedIndex:
 
         except ApiException as e:
             error_msg = f"Failed to query (binary): {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+    def query_metadata(
+        self,
+        filters: Optional[Dict[str, Any]] = None,
+        top_k: Optional[int] = None,
+        order_by: Optional[Union[str, Dict[str, int]]] = None,
+        ascending: bool = True,
+    ) -> List[str]:
+        """
+        Find items by metadata alone — no query vector, no distances.
+
+        Resolves ``filters`` entirely against the encrypted metadata index and
+        returns the matching item IDs. Works on untrained indexes.
+
+        Unlike :meth:`query`, there is no post-filter stage to fall back on, so
+        the index's ``metadata_schema`` is enforced rather than advisory:
+        ``$regex``/``$contains`` require a ``pattern`` field, and a field
+        declared ``filterable=False`` cannot be filtered on at all. Both raise
+        ``ValueError``. Use :meth:`query` with a vector for those.
+
+        Args:
+            filters: Metadata filters; ``None``/empty matches everything.
+            top_k: Cap on IDs returned, applied AFTER ``order_by``. ``None``
+                returns every match.
+            order_by: Field to sort matches by, either a name or a MongoDB-style
+                single-field dict (``{"views": -1}``, which also sets the
+                direction). Unordered when omitted.
+            ascending: Sort direction, when ``order_by`` is a plain field name.
+
+        Returns:
+            Matching item IDs — ordered when ``order_by`` was given.
+
+        Raises:
+            ValueError: If the filter cannot be resolved from the metadata
+                index, or ``order_by`` is malformed.
+        """
+        # Accept core's {field: 1|-1} form and normalize; the service takes a
+        # field name plus a direction flag.
+        if isinstance(order_by, dict):
+            if len(order_by) != 1:
+                raise ValueError(
+                    f"order_by dict must specify exactly one field, got {len(order_by)}"
+                )
+            ((order_by, direction),) = order_by.items()
+            ascending = int(direction) >= 0
+
+        try:
+            request = QueryMetadataRequest(
+                index_key=self._key_to_hex(),
+                index_name=self._index_name,
+                filters=filters or {},
+                top_k=top_k,
+                order_by=order_by,
+                ascending=ascending,
+            )
+            response = self._api.query_metadata_v1_vectors_query_metadata_post(
+                query_metadata_request=request
+            )
+            return response.ids
+        except ApiException as e:
+            error_msg = f"Failed to query metadata: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
 

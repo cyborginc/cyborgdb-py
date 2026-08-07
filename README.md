@@ -55,31 +55,30 @@ pip install cyborgdb
 ```python
 from cyborgdb import Client
 
-client = Client('https://localhost:8000', 'your-service-root-key')  # api_key optional; only if the service was started with one
+client = Client(
+    "https://localhost:8000", "your-service-root-key"
+)  # api_key optional; only if the service was started with one
 
 # Generate a 32-byte encryption key
 index_key = client.generate_key()
 
 # Create an encrypted index
-index = client.create_index(
-    index_name='my-index', 
-    index_key=index_key
-)
+index = client.create_index(index_name="my-index", index_key=index_key)
 
 # Add encrypted vector items
 items = [
     {
-        'id': 'doc1',
-        'vector': [0.1] * 128,  # Replace with real embeddings
-        'contents': 'Hello world!',
-        'metadata': {'category': 'greeting', 'language': 'en'}
+        "id": "doc1",
+        "vector": [0.1] * 128,  # Replace with real embeddings
+        "contents": "Hello world!",
+        "metadata": {"category": "greeting", "language": "en"},
     },
     {
-        'id': 'doc2',
-        'vector': [0.1] * 128,  # Replace with real embeddings
-        'contents': 'Bonjour le monde!',
-        'metadata': {'category': 'greeting', 'language': 'fr'}
-    }
+        "id": "doc2",
+        "vector": [0.1] * 128,  # Replace with real embeddings
+        "contents": "Bonjour le monde!",
+        "metadata": {"category": "greeting", "language": "fr"},
+    },
 ]
 
 index.upsert(items)
@@ -98,10 +97,7 @@ for result in results:
 ### Run batch queries
 ```python
 # Search with multiple query vectors simultaneously
-query_vectors = [
-    [0.1] * 128,
-    [0.2] * 128
-]
+query_vectors = [[0.1] * 128, [0.2] * 128]
 
 batch_results = index.query(query_vectors=query_vectors, top_k=5)
 
@@ -128,13 +124,15 @@ results = index.query(
     top_k=10,
     n_probes=1,
     greedy=False,
-    filters={'category': 'greeting', 'language': 'en'},
-    include=['distance', 'metadata']
+    filters={"category": "greeting", "language": "en"},
+    include=["distance", "metadata"],
 )
 
 # Print the results
 for result in results:
-    print(f"ID: {result['id']}, Distance: {result['distance']}, Metadata: {result['metadata']}")
+    print(
+        f"ID: {result['id']}, Distance: {result['distance']}, Metadata: {result['metadata']}"
+    )
 # ID: doc1, Distance: 0.0000, Metadata: {'category': 'greeting', 'language': 'en'}
 ```
 
@@ -149,15 +147,15 @@ persists the envelope — the SDK never sees or holds the key.
 # Create a KMS-backed index — no index_key from the SDK side.
 # 'vendor-kms-slot' must match an entry in the service's cyborgdb.yaml.
 index = client.create_index(
-    index_name='kms-backed-index',
-    kms_name='vendor-kms-slot',
+    index_name="kms-backed-index",
+    kms_name="vendor-kms-slot",
     dimension=128,
-    metric='euclidean',
+    metric="euclidean",
 )
 
 # Reopening the index later doesn't require a key either; the service
 # resolves the data key from the index's stored KMS envelope.
-loaded = client.load_index(index_name='kms-backed-index')
+loaded = client.load_index(index_name="kms-backed-index")
 loaded.upsert(items)
 ```
 
@@ -167,7 +165,7 @@ Alternatively, the SDK can supply the key itself — pass `index_key` and omit
 
 ```python
 index = client.create_index(
-    index_name='sdk-keyed-index',
+    index_name="sdk-keyed-index",
     index_key=index_key,
     dimension=128,
 )
@@ -189,25 +187,25 @@ revoking a user erases their keys.
 ```python
 # Admin (root) client: mint users on an existing index.
 admin = Client(base_url, api_key=SERVICE_ROOT_KEY)
-index = admin.load_index(index_name='kms-backed-index')   # KMS-backed (see BYOK)
+index = admin.load_index(index_name="kms-backed-index")  # KMS-backed (see BYOK)
 
-reader = index.create_user(permissions=['read'])
-writer = index.create_user(permissions=['read', 'write'])
+reader = index.create_user(permissions=["read"])
+writer = index.create_user(permissions=["read", "write"])
 # Each returns {'user_id': '<hex>', 'api_key': 'cdbk_...'} — the api_key is
 # shown ONCE and never stored by the service. Hand it to the user securely.
 
-index.list_users()                 # [{'user_id': ..., 'permissions': [...]}, ...]
-index.delete_user(reader['user_id'])   # revoke; the key stops working immediately
+index.list_users()  # [{'user_id': ..., 'permissions': [...]}, ...]
+index.delete_user(reader["user_id"])  # revoke; the key stops working immediately
 ```
 
 A user authenticates with their `cdbk_` key and needs no index key of their own
 — they load the index by name and the service resolves its key:
 
 ```python
-user = Client(base_url, api_key=reader['api_key'])
-idx = user.load_index(index_name='kms-backed-index')   # no index_key
-idx.query(query_vectors=[...], top_k=5)                # allowed for 'read'
-idx.upsert(items)                                      # raises ValueError for read-only users
+user = Client(base_url, api_key=reader["api_key"])
+idx = user.load_index(index_name="kms-backed-index")  # no index_key
+idx.query(query_vectors=[...], top_k=5)  # allowed for 'read'
+idx.upsert(items)  # raises ValueError for read-only users
 ```
 
 > User keys resolve the index key server-side, so they work against

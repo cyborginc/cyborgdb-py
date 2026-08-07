@@ -17,19 +17,19 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
-class CyborgdbServiceApiSchemasVectorsSuccessResponseModel(BaseModel):
+class QueryMetadataResponse(BaseModel):
     """
-    Standard success response model for operations like upsert and delete.  Attributes:     status (str): Operation status. Defaults to `\"success\"`.     message (str): Descriptive success message.
+    Response model for a metadata-only query.  Attributes:     ids (List[str]): Matching item IDs — ordered by `order_by` when it was         set, otherwise an unordered subset.     count (int): Number of IDs returned.
     """ # noqa: E501
-    status: Optional[StrictStr] = 'success'
-    message: StrictStr
-    __properties: ClassVar[List[str]] = ["status", "message"]
+    ids: List[StrictStr]
+    count: StrictInt
+    __properties: ClassVar[List[str]] = ["ids", "count"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -49,7 +49,7 @@ class CyborgdbServiceApiSchemasVectorsSuccessResponseModel(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of CyborgdbServiceApiSchemasVectorsSuccessResponseModel from a JSON string"""
+        """Create an instance of QueryMetadataResponse from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -74,7 +74,7 @@ class CyborgdbServiceApiSchemasVectorsSuccessResponseModel(BaseModel):
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of CyborgdbServiceApiSchemasVectorsSuccessResponseModel from a dict"""
+        """Create an instance of QueryMetadataResponse from a dict"""
         if obj is None:
             return None
 
@@ -82,8 +82,8 @@ class CyborgdbServiceApiSchemasVectorsSuccessResponseModel(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "status": obj.get("status") if obj.get("status") is not None else 'success',
-            "message": obj.get("message")
+            "ids": obj.get("ids"),
+            "count": obj.get("count")
         })
         return _obj
 

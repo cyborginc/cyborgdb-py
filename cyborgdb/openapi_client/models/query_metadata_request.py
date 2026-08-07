@@ -17,24 +17,23 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional, Union
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
-class TrainRequest(BaseModel):
+class QueryMetadataRequest(BaseModel):
     """
-    Request model for training an index.  Attributes:     n_lists (Optional[int]): Number of lists/clusters for the index. Default is auto.     batch_size (Optional[int]): Size of each batch for training. Default is 2048.     max_iters (Optional[int]): Maximum iterations for training. Default is 100.     tolerance (Optional[float]): Convergence tolerance for training. Default is 1e-6.     max_memory (Optional[int]): Maximum memory (MB) usage during training. Default is 0 (no limit).
+    Request model for a metadata-only query (no query vector).  Inherits:     IndexOperationRequest: Includes `index_name` and `index_key`.  Attributes:     filters (Optional[Dict[str, Any]]): Metadata filters as a JSON-like         dictionary. Unlike `/query`, every leaf must be resolvable from         the metadata index — see the field description.     top_k (Optional[int]): Cap on the number of ids returned. `None`         returns every match. Applied AFTER `order_by`.     order_by (Optional[str]): Metadata field to sort the matches by         (post-filter). Unordered when omitted.     ascending (bool): Sort direction when `order_by` is set.
     """ # noqa: E501
     index_name: StrictStr = Field(description="ID name")
     index_key: Optional[StrictStr] = Field(default=None, description="32-byte encryption key as hex string.  Required for SDK-supplied indexes; must be omitted for KMS-backed indexes (the service resolves the KEK via the index's KMSBlob).")
-    n_lists: Optional[StrictInt] = None
-    batch_size: Optional[StrictInt] = None
-    max_iters: Optional[StrictInt] = None
-    tolerance: Optional[Union[StrictFloat, StrictInt]] = None
-    max_memory: Optional[StrictInt] = None
-    __properties: ClassVar[List[str]] = ["index_name", "index_key", "n_lists", "batch_size", "max_iters", "tolerance", "max_memory"]
+    filters: Optional[Dict[str, Any]] = Field(default=None, description="Arbitrary JSON object stored alongside the vector. Schemaless — the index's `metadata_schema` governs how fields are indexed, not what may be stored. Nested objects are addressable by dot-path in filters (`loc.city`); dates have no native type, store them as epoch millis.")
+    top_k: Optional[StrictInt] = Field(default=None, description="Cap on the number of ids returned; omit for all matches. Applied after `order_by`, so it yields the first N of the sorted result.")
+    order_by: Optional[StrictStr] = Field(default=None, description="Metadata field to sort matches by, applied after filtering. Unordered when omitted. Items missing the field, or holding a non-scalar, sort last.")
+    ascending: Optional[StrictBool] = Field(default=True, description="Sort direction when `order_by` is set.")
+    __properties: ClassVar[List[str]] = ["index_name", "index_key", "filters", "top_k", "order_by", "ascending"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -54,7 +53,7 @@ class TrainRequest(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of TrainRequest from a JSON string"""
+        """Create an instance of QueryMetadataRequest from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -80,36 +79,26 @@ class TrainRequest(BaseModel):
         if self.index_key is None and "index_key" in self.model_fields_set:
             _dict['index_key'] = None
 
-        # set to None if n_lists (nullable) is None
+        # set to None if filters (nullable) is None
         # and model_fields_set contains the field
-        if self.n_lists is None and "n_lists" in self.model_fields_set:
-            _dict['n_lists'] = None
+        if self.filters is None and "filters" in self.model_fields_set:
+            _dict['filters'] = None
 
-        # set to None if batch_size (nullable) is None
+        # set to None if top_k (nullable) is None
         # and model_fields_set contains the field
-        if self.batch_size is None and "batch_size" in self.model_fields_set:
-            _dict['batch_size'] = None
+        if self.top_k is None and "top_k" in self.model_fields_set:
+            _dict['top_k'] = None
 
-        # set to None if max_iters (nullable) is None
+        # set to None if order_by (nullable) is None
         # and model_fields_set contains the field
-        if self.max_iters is None and "max_iters" in self.model_fields_set:
-            _dict['max_iters'] = None
-
-        # set to None if tolerance (nullable) is None
-        # and model_fields_set contains the field
-        if self.tolerance is None and "tolerance" in self.model_fields_set:
-            _dict['tolerance'] = None
-
-        # set to None if max_memory (nullable) is None
-        # and model_fields_set contains the field
-        if self.max_memory is None and "max_memory" in self.model_fields_set:
-            _dict['max_memory'] = None
+        if self.order_by is None and "order_by" in self.model_fields_set:
+            _dict['order_by'] = None
 
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of TrainRequest from a dict"""
+        """Create an instance of QueryMetadataRequest from a dict"""
         if obj is None:
             return None
 
@@ -119,11 +108,10 @@ class TrainRequest(BaseModel):
         _obj = cls.model_validate({
             "index_name": obj.get("index_name"),
             "index_key": obj.get("index_key"),
-            "n_lists": obj.get("n_lists"),
-            "batch_size": obj.get("batch_size"),
-            "max_iters": obj.get("max_iters"),
-            "tolerance": obj.get("tolerance"),
-            "max_memory": obj.get("max_memory")
+            "filters": obj.get("filters"),
+            "top_k": obj.get("top_k"),
+            "order_by": obj.get("order_by"),
+            "ascending": obj.get("ascending") if obj.get("ascending") is not None else True
         })
         return _obj
 

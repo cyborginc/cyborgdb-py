@@ -17,19 +17,19 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
-class CyborgdbServiceApiSchemasVectorsSuccessResponseModel(BaseModel):
+class MetadataFieldPolicy(BaseModel):
     """
-    Standard success response model for operations like upsert and delete.  Attributes:     status (str): Operation status. Defaults to `\"success\"`.     message (str): Descriptive success message.
+    Per-field metadata indexing policy (one entry of `metadata_schema`).  Metadata itself stays schemaless — this is indexing policy, not validation.  Fields omitted from `metadata_schema` inherit the index-everything default.  Attributes:     filterable: Build inverted-index postings for the field, so         filters on it resolve from the index (pre-filter).  When         `false`, the field is still stored and still filterable, but         a filter referencing it forces the dense forward-blob         post-filter path — cheaper writes, slower filtered queries.     pattern: Additionally build the field's regex dictionary, which         makes `$regex` / `$contains` resolvable from the index.         Requires `filterable=true`.
     """ # noqa: E501
-    status: Optional[StrictStr] = 'success'
-    message: StrictStr
-    __properties: ClassVar[List[str]] = ["status", "message"]
+    filterable: Optional[StrictBool] = True
+    pattern: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["filterable", "pattern"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -49,7 +49,7 @@ class CyborgdbServiceApiSchemasVectorsSuccessResponseModel(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of CyborgdbServiceApiSchemasVectorsSuccessResponseModel from a JSON string"""
+        """Create an instance of MetadataFieldPolicy from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -74,7 +74,7 @@ class CyborgdbServiceApiSchemasVectorsSuccessResponseModel(BaseModel):
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of CyborgdbServiceApiSchemasVectorsSuccessResponseModel from a dict"""
+        """Create an instance of MetadataFieldPolicy from a dict"""
         if obj is None:
             return None
 
@@ -82,8 +82,8 @@ class CyborgdbServiceApiSchemasVectorsSuccessResponseModel(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "status": obj.get("status") if obj.get("status") is not None else 'success',
-            "message": obj.get("message")
+            "filterable": obj.get("filterable") if obj.get("filterable") is not None else True,
+            "pattern": obj.get("pattern") if obj.get("pattern") is not None else False
         })
         return _obj
 
