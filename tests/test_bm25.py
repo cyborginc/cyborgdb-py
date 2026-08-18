@@ -117,16 +117,12 @@ class TestBM25(unittest.TestCase):
     def test_text_fields_restricts_to_named_field(self):
         # `body` is the only full_text field; naming it explicitly is a no-op
         # but must be accepted.
-        results = self.index.query_metadata(
-            text="quantum", text_fields=["body"]
-        )
+        results = self.index.query_metadata(text="quantum", text_fields=["body"])
         self.assertTrue({r["id"] for r in results} <= ANY_TERM)
 
     def test_filter_prefilters_the_text_leg(self):
         # topic=food excludes every quantum doc, so the text leg scores nothing.
-        results = self.index.query_metadata(
-            text="quantum", filters={"topic": "food"}
-        )
+        results = self.index.query_metadata(text="quantum", filters={"topic": "food"})
         self.assertEqual(results, [])
 
     def test_no_text_still_returns_bare_ids(self):
