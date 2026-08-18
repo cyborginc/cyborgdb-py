@@ -17,21 +17,20 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
-from cyborgdb.openapi_client.models.query_metadata_result_item import QueryMetadataResultItem
+from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
-class QueryMetadataResponse(BaseModel):
+class BM25Config(BaseModel):
     """
-    Response model for a metadata query.  Attributes:     results (List[QueryMetadataResultItem]): Matching items as         `{id, score}`. On a `text=...` query, rows are in descending         score order; otherwise `score` is `None` and rows follow         `order_by` when set, else are an unordered subset.     ids (List[str]): Matching item IDs, parallel to `results`. Retained         for backward compatibility with callers that only read IDs.     count (int): Number of items returned.
+    BM25 scoring config an index reports back via `index_config()`.  Present only for indexes with at least one `full_text` field. `k1` and `b` are the tuning parameters supplied at create time (or their defaults); `analyzer_version` identifies the tokenizer/stemmer pipeline the corpus was indexed with.
     """ # noqa: E501
-    results: Optional[List[QueryMetadataResultItem]] = None
-    ids: List[StrictStr]
-    count: StrictInt
-    __properties: ClassVar[List[str]] = ["results", "ids", "count"]
+    k1: Union[StrictFloat, StrictInt]
+    b: Union[StrictFloat, StrictInt]
+    analyzer_version: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["k1", "b", "analyzer_version"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -51,7 +50,7 @@ class QueryMetadataResponse(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of QueryMetadataResponse from a JSON string"""
+        """Create an instance of BM25Config from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -72,18 +71,16 @@ class QueryMetadataResponse(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of each item in results (list)
-        _items = []
-        if self.results:
-            for _item_results in self.results:
-                if _item_results:
-                    _items.append(_item_results.to_dict())
-            _dict['results'] = _items
+        # set to None if analyzer_version (nullable) is None
+        # and model_fields_set contains the field
+        if self.analyzer_version is None and "analyzer_version" in self.model_fields_set:
+            _dict['analyzer_version'] = None
+
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of QueryMetadataResponse from a dict"""
+        """Create an instance of BM25Config from a dict"""
         if obj is None:
             return None
 
@@ -91,9 +88,9 @@ class QueryMetadataResponse(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "results": [QueryMetadataResultItem.from_dict(_item) for _item in obj["results"]] if obj.get("results") is not None else None,
-            "ids": obj.get("ids"),
-            "count": obj.get("count")
+            "k1": obj.get("k1"),
+            "b": obj.get("b"),
+            "analyzer_version": obj.get("analyzer_version")
         })
         return _obj
 

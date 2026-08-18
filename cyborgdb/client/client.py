@@ -193,6 +193,9 @@ class Client:
         metric: Optional[str] = None,
         storage_precision: Optional[str] = None,
         metadata_schema: Optional[Dict[str, Dict[str, bool]]] = None,
+        text_fields: Optional[List[str]] = None,
+        bm25_k1: Optional[float] = None,
+        bm25_b: Optional[float] = None,
     ) -> EncryptedIndex:
         """
         Create and return a new encrypted DiskIVF index.
@@ -226,6 +229,21 @@ class Client:
         rows either way. On :meth:`EncryptedIndex.query_metadata` it is enforced:
         only ``pattern`` fields accept ``$regex``/``$contains``, and
         non-filterable fields cannot be filtered on at all.
+
+        A third policy, ``full_text``, routes the field's string value through
+        the BM25 analyzer instead of exact-match indexing, making it searchable
+        by :meth:`EncryptedIndex.query_metadata` (``text=...``) and hybrid
+        :meth:`EncryptedIndex.query` (``text=...``). ``full_text=True`` implies
+        ``filterable=False`` and is incompatible with ``pattern=True``::
+
+            {"body": {"full_text": True}}
+
+        ``text_fields`` is shorthand for marking fields ``full_text=True`` in
+        ``metadata_schema``. ``bm25_k1`` (term-frequency saturation, default
+        1.2) and ``bm25_b`` (length-normalization strength, default 0.75) tune
+        the scorer; both require at least one full-text field. BM25 search is
+        opt-in and derived — an index with no full-text field writes no BM25
+        config at all.
         """
         if index_key is None and kms_name is None:
             raise ValueError("create_index requires index_key, kms_name, or both")
@@ -252,6 +270,9 @@ class Client:
                 metric=metric,
                 storage_precision=storage_precision,
                 metadata_schema=metadata_schema,
+                text_fields=text_fields,
+                bm25_k1=bm25_k1,
+                bm25_b=bm25_b,
             )
 
             self.api.create_index_v1_indexes_create_post(

@@ -25,11 +25,12 @@ from pydantic_core import to_jsonable_python
 
 class MetadataFieldPolicy(BaseModel):
     """
-    Per-field metadata indexing policy (one entry of `metadata_schema`).  Metadata itself stays schemaless — this is indexing policy, not validation.  Fields omitted from `metadata_schema` inherit the index-everything default.  Attributes:     filterable: Build inverted-index postings for the field, so         filters on it resolve from the index (pre-filter).  When         `false`, the field is still stored and still filterable, but         a filter referencing it forces the dense forward-blob         post-filter path — cheaper writes, slower filtered queries.     pattern: Additionally build the field's regex dictionary, which         makes `$regex` / `$contains` resolvable from the index.         Requires `filterable=true`.
+    Per-field metadata indexing policy (one entry of `metadata_schema`).  Metadata itself stays schemaless — this is indexing policy, not validation.  Fields omitted from `metadata_schema` inherit the index-everything default.  Attributes:     filterable: Build inverted-index postings for the field, so         filters on it resolve from the index (pre-filter).  When         `false`, the field is still stored and still filterable, but         a filter referencing it forces the dense forward-blob         post-filter path — cheaper writes, slower filtered queries.     pattern: Additionally build the field's regex dictionary, which         makes `$regex` / `$contains` resolvable from the index.         Requires `filterable=true`.     full_text: Route the field's string value through the BM25         analyzer instead of exact-match indexing.  This is what makes         the field searchable by `query_metadata(text=...)` and hybrid         `query(text=...)`.  A field is either analyzed or exact-match         indexed, so `full_text=true` is incompatible with both         `pattern=true` and an explicit `filterable=true`, and implies         `filterable=false`.
     """ # noqa: E501
     filterable: Optional[StrictBool] = True
     pattern: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["filterable", "pattern"]
+    full_text: Optional[StrictBool] = False
+    __properties: ClassVar[List[str]] = ["filterable", "pattern", "full_text"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -83,7 +84,8 @@ class MetadataFieldPolicy(BaseModel):
 
         _obj = cls.model_validate({
             "filterable": obj.get("filterable") if obj.get("filterable") is not None else True,
-            "pattern": obj.get("pattern") if obj.get("pattern") is not None else False
+            "pattern": obj.get("pattern") if obj.get("pattern") is not None else False,
+            "full_text": obj.get("full_text") if obj.get("full_text") is not None else False
         })
         return _obj
 

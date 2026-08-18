@@ -89,9 +89,9 @@ class TestQueryMetadata(unittest.TestCase):
         self.assertEqual(
             self.index.metadata_schema,
             {
-                "color": {"filterable": True, "pattern": True},
-                "shape": {"filterable": True, "pattern": False},
-                "hidden": {"filterable": False, "pattern": False},
+                "color": {"filterable": True, "pattern": True, "full_text": False},
+                "shape": {"filterable": True, "pattern": False, "full_text": False},
+                "hidden": {"filterable": False, "pattern": False, "full_text": False},
             },
         )
 

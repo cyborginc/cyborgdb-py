@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from cyborgdb.openapi_client.models.bm25_config import BM25Config
 from cyborgdb.openapi_client.models.metadata_field_policy import MetadataFieldPolicy
 from typing import Optional, Set
 from typing_extensions import Self
@@ -26,7 +27,7 @@ from pydantic_core import to_jsonable_python
 
 class IndexInfoResponseModel(BaseModel):
     """
-    Response model for retrieving information about an index.  Attributes:     index_name (str): The name of the index.     is_trained (bool): Indicates whether the index has been trained.     dimension (int): Dimensionality of the vectors. `0` before the         first upsert when create_index was called without an explicit         dimension (auto-detect).     metric (str): Distance metric (`euclidean`, `cosine`, or         `squared_euclidean`).     n_lists (int): Number of inverted lists in the IVF index. `1`         for untrained indexes.     metadata_schema (Dict[str, MetadataFieldPolicy]): Per-field metadata         indexing overrides recorded at create time. Empty when the         index uses the default index-everything posture.
+    Response model for retrieving information about an index.  Attributes:     index_name (str): The name of the index.     is_trained (bool): Indicates whether the index has been trained.     dimension (int): Dimensionality of the vectors. `0` before the         first upsert when create_index was called without an explicit         dimension (auto-detect).     metric (str): Distance metric (`euclidean`, `cosine`, or         `squared_euclidean`).     n_lists (int): Number of inverted lists in the IVF index. `1`         for untrained indexes.     metadata_schema (Dict[str, MetadataFieldPolicy]): Per-field metadata         indexing overrides recorded at create time. Empty when the         index uses the default index-everything posture.     bm25 (Optional[BM25Config]): BM25 scoring config when the index has         at least one full_text field; `None` otherwise.
     """ # noqa: E501
     index_name: StrictStr
     is_trained: StrictBool
@@ -34,7 +35,8 @@ class IndexInfoResponseModel(BaseModel):
     metric: StrictStr
     n_lists: StrictInt
     metadata_schema: Optional[Dict[str, MetadataFieldPolicy]] = None
-    __properties: ClassVar[List[str]] = ["index_name", "is_trained", "dimension", "metric", "n_lists", "metadata_schema"]
+    bm25: Optional[BM25Config] = None
+    __properties: ClassVar[List[str]] = ["index_name", "is_trained", "dimension", "metric", "n_lists", "metadata_schema", "bm25"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -82,6 +84,14 @@ class IndexInfoResponseModel(BaseModel):
                 if self.metadata_schema[_key_metadata_schema]:
                     _field_dict[_key_metadata_schema] = self.metadata_schema[_key_metadata_schema].to_dict()
             _dict['metadata_schema'] = _field_dict
+        # override the default output from pydantic by calling `to_dict()` of bm25
+        if self.bm25:
+            _dict['bm25'] = self.bm25.to_dict()
+        # set to None if bm25 (nullable) is None
+        # and model_fields_set contains the field
+        if self.bm25 is None and "bm25" in self.model_fields_set:
+            _dict['bm25'] = None
+
         return _dict
 
     @classmethod
@@ -104,7 +114,8 @@ class IndexInfoResponseModel(BaseModel):
                 for _k, _v in obj["metadata_schema"].items()
             )
             if obj.get("metadata_schema") is not None
-            else None
+            else None,
+            "bm25": BM25Config.from_dict(obj["bm25"]) if obj.get("bm25") is not None else None
         })
         return _obj
 

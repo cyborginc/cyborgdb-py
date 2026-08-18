@@ -13,6 +13,7 @@
 """  # noqa: E501
 
 # import models into model package
+from cyborgdb.openapi_client.models.bm25_config import BM25Config
 from cyborgdb.openapi_client.models.batch_query_request import BatchQueryRequest
 from cyborgdb.openapi_client.models.binary_query_batch import BinaryQueryBatch
 from cyborgdb.openapi_client.models.binary_query_request import BinaryQueryRequest
@@ -42,6 +43,7 @@ from cyborgdb.openapi_client.models.location_inner import LocationInner
 from cyborgdb.openapi_client.models.metadata_field_policy import MetadataFieldPolicy
 from cyborgdb.openapi_client.models.query_metadata_request import QueryMetadataRequest
 from cyborgdb.openapi_client.models.query_metadata_response import QueryMetadataResponse
+from cyborgdb.openapi_client.models.query_metadata_result_item import QueryMetadataResultItem
 from cyborgdb.openapi_client.models.query_request import QueryRequest
 from cyborgdb.openapi_client.models.query_response import QueryResponse
 from cyborgdb.openapi_client.models.query_result_item import QueryResultItem
