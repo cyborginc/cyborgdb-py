@@ -6,7 +6,9 @@
 from .client.client import Client
 
 # Re-export from encrypted_index.py
-from .client.encrypted_index import EncryptedIndex
+# MetadataResult is re-exported so callers can annotate query_metadata rows,
+# mirroring cyborgdb_core's public surface.
+from .client.encrypted_index import EncryptedIndex, MetadataResult
 
 # Re-export demo functionality
 from .demo import get_demo_api_key
@@ -48,6 +50,7 @@ except PackageNotFoundError:
 __all__ = [
     "Client",
     "EncryptedIndex",
+    "MetadataResult",
     "CyborgVectorStore",
     "get_demo_api_key",
     "load_sample_dataset",

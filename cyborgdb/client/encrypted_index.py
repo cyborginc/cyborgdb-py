@@ -8,7 +8,7 @@ import base64
 import binascii
 import json
 import logging
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Optional, TypedDict, Union, Any
 
 import numpy as np
 
@@ -42,6 +42,28 @@ except ImportError:
     )
 
 logger = logging.getLogger(__name__)
+
+
+# Split into two TypedDicts so `id` stays required while `score` is optional
+# per-key: `typing.NotRequired` is 3.11+ and the package supports 3.10, so a
+# `total=False` subclass expresses the optional key with no union and no
+# `typing_extensions` dependency. This is an implementation detail — kept as a
+# comment, not a docstring, so it stays out of the public shape callers read.
+class _MetadataResultBase(TypedDict):
+    id: str
+
+
+class MetadataResult(_MetadataResultBase, total=False):
+    """One row of a ``query_metadata`` result: the item ``id``, plus a BM25
+    ``score`` when the query ranked by relevance.
+
+    A plain ``dict`` mirroring ``cyborgdb_core``'s ``MetadataResult``. ``score``
+    is present only on the text path (``query_metadata(text=...)``); a
+    filter-only query has nothing to score, so the key is absent rather than
+    ``None`` — the same convention ``query()`` uses for ``distance`` / ``score``.
+    """
+
+    score: float
 
 
 class EncryptedIndex:
@@ -964,13 +986,13 @@ class EncryptedIndex:
         text_fields: Optional[List[str]] = None,
         text_field_weights: Optional[List[float]] = None,
         require_all_terms: Optional[bool] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[MetadataResult]:
         """
         Find items by metadata alone — no query vector, no distances.
 
         Resolves ``filters`` entirely against the encrypted metadata index and
-        returns the matching items as ``{"id"}`` dicts, matching core's
-        ``list[MetadataResult]``. Works on untrained indexes.
+        returns the matching items as :class:`MetadataResult` rows (``{"id"}``,
+        matching core's ``list[MetadataResult]``). Works on untrained indexes.
 
         Unlike :meth:`query`, there is no post-filter stage to fall back on, so
         the index's ``metadata_schema`` is enforced rather than advisory:

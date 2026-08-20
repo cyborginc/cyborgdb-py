@@ -23,9 +23,9 @@ from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
-class QueryMetadataResultItem(BaseModel):
+class MetadataResult(BaseModel):
     """
-    One row of a metadata query result.  Matches core's row shape: `score` carries the BM25 relevance (larger = more relevant) on a `text=...` query and is omitted entirely on a filter-only query, which has nothing to score. The route serializes with `exclude_none`, so a `None` `score` never reaches the wire.
+    One row of a ``query_metadata`` result: the item id, plus a BM25 ``score`` when there is one.  ``score`` is present only on the text path. A filter-only query has nothing to score, so the key is absent rather than ``None`` — the same rule ``query()`` follows for ``distance`` and ``score``.  This is the wire model used to deserialize the service response; the SDK reprojects it into the plain-dict ``MetadataResult`` rows that ``EncryptedIndex.query_metadata`` returns, matching ``cyborgdb_core``.
     """ # noqa: E501
     id: StrictStr
     score: Optional[Union[StrictFloat, StrictInt]] = None
@@ -49,7 +49,7 @@ class QueryMetadataResultItem(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of QueryMetadataResultItem from a JSON string"""
+        """Create an instance of MetadataResult from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -70,16 +70,11 @@ class QueryMetadataResultItem(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if score (nullable) is None
-        # and model_fields_set contains the field
-        if self.score is None and "score" in self.model_fields_set:
-            _dict['score'] = None
-
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of QueryMetadataResultItem from a dict"""
+        """Create an instance of MetadataResult from a dict"""
         if obj is None:
             return None
 

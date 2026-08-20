@@ -56,10 +56,10 @@ __all__ = [
     "ListUsersResponse",
     "LocationInner",
     "MetadataFieldPolicy",
+    "MetadataResult",
     "OrderBy",
     "QueryMetadataRequest",
     "QueryMetadataResponse",
-    "QueryMetadataResultItem",
     "QueryRequest",
     "QueryResponse",
     "QueryResultItem",
@@ -115,10 +115,10 @@ from cyborgdb.openapi_client.models.list_ids_response import ListIDsResponse as 
 from cyborgdb.openapi_client.models.list_users_response import ListUsersResponse as ListUsersResponse
 from cyborgdb.openapi_client.models.location_inner import LocationInner as LocationInner
 from cyborgdb.openapi_client.models.metadata_field_policy import MetadataFieldPolicy as MetadataFieldPolicy
+from cyborgdb.openapi_client.models.metadata_result import MetadataResult as MetadataResult
 from cyborgdb.openapi_client.models.order_by import OrderBy as OrderBy
 from cyborgdb.openapi_client.models.query_metadata_request import QueryMetadataRequest as QueryMetadataRequest
 from cyborgdb.openapi_client.models.query_metadata_response import QueryMetadataResponse as QueryMetadataResponse
-from cyborgdb.openapi_client.models.query_metadata_result_item import QueryMetadataResultItem as QueryMetadataResultItem
 from cyborgdb.openapi_client.models.query_request import QueryRequest as QueryRequest
 from cyborgdb.openapi_client.models.query_response import QueryResponse as QueryResponse
 from cyborgdb.openapi_client.models.query_result_item import QueryResultItem as QueryResultItem

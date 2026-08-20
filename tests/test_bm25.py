@@ -239,5 +239,40 @@ class TestBM25NotConfigured(unittest.TestCase):
             self.index.query_metadata(text="quantum")
 
 
+class TestMetadataResultContract(unittest.TestCase):
+    """`query_metadata` returns plain-dict `MetadataResult` rows (matching core),
+    so the public row type is a hand-written TypedDict rather than the generated
+    wire model. These pin the TypedDict to the OpenAPI contract without importing
+    core/service, so drift in core's shape (re-generated into the wire model)
+    fails here instead of silently diverging. No service needed."""
+
+    def test_metadata_result_is_public(self):
+        # Exported at the top level so callers can annotate query_metadata rows.
+        from cyborgdb import MetadataResult
+
+        self.assertIs(MetadataResult, cyborgdb.MetadataResult)
+        self.assertIn("MetadataResult", cyborgdb.__all__)
+
+    def test_typed_dict_shape_is_id_required_score_optional(self):
+        from cyborgdb import MetadataResult
+
+        self.assertEqual(set(MetadataResult.__required_keys__), {"id"})
+        self.assertEqual(set(MetadataResult.__optional_keys__), {"score"})
+        self.assertEqual(MetadataResult.__annotations__["id"], str)
+        self.assertEqual(MetadataResult.__annotations__["score"], float)
+
+    def test_typed_dict_matches_wire_contract(self):
+        # The wire model is generated from openapi.json (sourced from core), so
+        # if core adds/renames a field the regenerated model changes and this
+        # fails — flagging that the hand-written TypedDict needs the same update.
+        from cyborgdb import MetadataResult
+        from cyborgdb.openapi_client.models import MetadataResult as WireMetadataResult
+
+        typed_keys = set(MetadataResult.__required_keys__) | set(
+            MetadataResult.__optional_keys__
+        )
+        self.assertEqual(typed_keys, set(WireMetadataResult.model_fields))
+
+
 if __name__ == "__main__":
     unittest.main()
