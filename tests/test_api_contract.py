@@ -281,6 +281,9 @@ class TestAPIContract(unittest.TestCase):
                 "metric": {"position": 5, "default": None},
                 "storage_precision": {"position": 6, "default": None},
                 "metadata_schema": {"position": 7, "default": None},
+                "text_fields": {"position": 8, "default": None},
+                "bm25_k1": {"position": 9, "default": None},
+                "bm25_b": {"position": 10, "default": None},
             },
             "Client.create_index",
         )
@@ -419,6 +422,10 @@ class TestAPIContract(unittest.TestCase):
                 "top_k": {"position": 1, "default": None},
                 "order_by": {"position": 2, "default": None},
                 "ascending": {"position": 3, "default": True},
+                "text": {"position": 4, "default": None},
+                "text_fields": {"position": 5, "default": None},
+                "text_field_weights": {"position": 6, "default": None},
+                "require_all_terms": {"position": 7, "default": None},
             },
             "EncryptedIndex.query_metadata",
         )

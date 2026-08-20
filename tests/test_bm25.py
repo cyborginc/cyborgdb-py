@@ -157,9 +157,11 @@ class TestBM25(unittest.TestCase):
         self.assertTrue(all("score" in r for r in results))
 
     def test_pure_vector_query_still_uses_distance(self):
+        # `include` defaults to [] (IDs only); distance must be requested.
         results = self.index.query(
             query_vectors=np.random.rand(DIM).astype(np.float32).tolist(),
             top_k=6,
+            include=["distance"],
         )
         self.assertTrue(results)
         self.assertTrue(all("distance" in r for r in results))
