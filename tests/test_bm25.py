@@ -125,11 +125,12 @@ class TestBM25(unittest.TestCase):
         results = self.index.query_metadata(text="quantum", filters={"topic": "food"})
         self.assertEqual(results, [])
 
-    def test_no_text_still_returns_bare_ids(self):
-        # Without text this stays a filter-only query: bare ID strings.
-        ids = self.index.query_metadata(filters={"topic": "physics"})
-        self.assertEqual(set(ids), {"d0", "d2", "d4"})
-        self.assertTrue(all(isinstance(i, str) for i in ids))
+    def test_no_text_returns_unscored_id_rows(self):
+        # Without text this stays a filter-only query: {"id"} rows (no score),
+        # matching core's list[MetadataResult].
+        rows = self.index.query_metadata(filters={"topic": "physics"})
+        self.assertEqual({r["id"] for r in rows}, {"d0", "d2", "d4"})
+        self.assertTrue(all(r == {"id": r["id"]} for r in rows))
 
     # -- query(text=...) : hybrid BM25 + vector -------------------------- #
 

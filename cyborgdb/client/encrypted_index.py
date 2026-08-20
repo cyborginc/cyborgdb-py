@@ -964,12 +964,13 @@ class EncryptedIndex:
         text_fields: Optional[List[str]] = None,
         text_field_weights: Optional[List[float]] = None,
         require_all_terms: Optional[bool] = None,
-    ) -> Union[List[str], List[Dict[str, Any]]]:
+    ) -> List[Dict[str, Any]]:
         """
         Find items by metadata alone — no query vector, no distances.
 
         Resolves ``filters`` entirely against the encrypted metadata index and
-        returns the matching item IDs. Works on untrained indexes.
+        returns the matching items as ``{"id"}`` dicts, matching core's
+        ``list[MetadataResult]``. Works on untrained indexes.
 
         Unlike :meth:`query`, there is no post-filter stage to fall back on, so
         the index's ``metadata_schema`` is enforced rather than advisory:
@@ -979,8 +980,8 @@ class EncryptedIndex:
 
         Passing ``text`` adds a BM25 full-text leg (requires an index with at
         least one ``full_text`` field). Results are then ranked by relevance
-        and returned as ``{"id", "score"}`` dicts (descending score) rather
-        than bare IDs; ``filters`` given alongside acts as a pre-filter and
+        and each row also carries a ``score`` (``{"id", "score"}``, descending
+        score); ``filters`` given alongside acts as a pre-filter and
         ``order_by`` is not supported with ``text``.
 
         Args:
@@ -992,7 +993,7 @@ class EncryptedIndex:
                 direction). Unordered when omitted. Not supported with ``text``.
             ascending: Sort direction, when ``order_by`` is a plain field name.
             text: Query text for the BM25 leg. Omitted/empty keeps this a
-                filter-only query returning bare IDs.
+                filter-only query returning ``{"id"}`` rows (no score).
             text_fields: ``full_text`` fields the text leg searches; omitted
                 means all of them. Naming a non-full-text field raises.
             text_field_weights: Per-field weights on the summed per-field BM25
@@ -1001,8 +1002,9 @@ class EncryptedIndex:
                 of any (OR, the default).
 
         Returns:
-            Without ``text``: matching item IDs (``List[str]``) — ordered when
-            ``order_by`` was given. With ``text``: ``{"id", "score"}`` dicts
+            A list of ``{"id"}`` dicts (``list[MetadataResult]``, matching
+            core). Without ``text``: ordered when ``order_by`` was given, no
+            ``score`` key. With ``text``: each row also carries ``score``,
             ranked by descending BM25 score.
 
         Raises:
@@ -1043,14 +1045,14 @@ class EncryptedIndex:
             response = self._api.query_metadata_v1_vectors_query_metadata_post(
                 query_metadata_request=request
             )
-            # A text query is ranked by relevance; hand back the scores rather
-            # than dropping them to bare IDs.
+            # Match core's list[MetadataResult]: always {"id", ...} rows.
+            # A text query is ranked by relevance and each row carries a BM25
+            # `score`; a filter-only query has nothing to score, so the row is
+            # just {"id"} (no `score` key), mirroring core exactly.
+            rows = response.results or []
             if text:
-                return [
-                    {"id": item.id, "score": item.score}
-                    for item in (response.results or [])
-                ]
-            return response.ids
+                return [{"id": item.id, "score": item.score} for item in rows]
+            return [{"id": item.id} for item in rows]
         except ApiException as e:
             error_msg = f"Failed to query metadata: {e}"
             logger.error(error_msg)
