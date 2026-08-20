@@ -141,14 +141,18 @@ class TestQueryMetadata(unittest.TestCase):
             [f"i{i}" for i in range(N)],
         )
         self.assertEqual(
-            _ids(self.index.query_metadata(all_ranks, order_by="rank", ascending=False)),
+            _ids(
+                self.index.query_metadata(all_ranks, order_by="rank", ascending=False)
+            ),
             [f"i{i}" for i in reversed(range(N))],
         )
 
     def test_order_by_mongo_style_dict(self):
         # {field: -1} is core's form; the wrapper normalizes it for the service.
         self.assertEqual(
-            _ids(self.index.query_metadata({"rank": {"$gte": 0}}, order_by={"rank": -1})),
+            _ids(
+                self.index.query_metadata({"rank": {"$gte": 0}}, order_by={"rank": -1})
+            ),
             [f"i{i}" for i in reversed(range(N))],
         )
 
