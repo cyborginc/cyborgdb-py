@@ -156,6 +156,39 @@ class TestBM25(unittest.TestCase):
         self.assertTrue(results)
         self.assertTrue(all("score" in r for r in results))
 
+    def test_hybrid_scores_descending(self):
+        # Fused (BM25 + vector) rows are ranked: scores come back
+        # non-increasing. Vector inputs are random so the *ordering of ids*
+        # isn't deterministic, but the score column must still be sorted.
+        results = self.index.query(
+            query_vectors=np.random.rand(DIM).astype(np.float32).tolist(),
+            text="quantum computing",
+            top_k=6,
+        )
+        self.assertTrue(results)
+        scores = [r["score"] for r in results]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+
+    def test_hybrid_alpha_forwarded_to_service(self):
+        # `alpha` must reach the service: an out-of-[0, 1] value is rejected
+        # there, proving the SDK forwards it rather than dropping it.
+        with self.assertRaises(ValueError):
+            self.index.query(
+                query_vectors=np.random.rand(DIM).astype(np.float32).tolist(),
+                text="quantum computing",
+                alpha=5.0,
+            )
+
+    def test_hybrid_text_fields_forwarded_to_service(self):
+        # `text_fields` must reach the service: naming a non-full-text field
+        # (`topic`) is rejected there, proving forwarding on the hybrid path.
+        with self.assertRaises(ValueError):
+            self.index.query(
+                query_vectors=np.random.rand(DIM).astype(np.float32).tolist(),
+                text="quantum",
+                text_fields=["topic"],
+            )
+
     def test_pure_vector_query_still_uses_distance(self):
         # `include` defaults to [] (IDs only); distance must be requested.
         results = self.index.query(
