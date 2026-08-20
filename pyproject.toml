@@ -84,6 +84,7 @@ local_scheme = "no-local-version"
 # Exclude auto-generated OpenAPI client code
 extend-exclude = [
     "cyborgdb/openapi_client",
+    "cyborgdb/openapi_client_README.md",
 ]
 
 # Same as Black

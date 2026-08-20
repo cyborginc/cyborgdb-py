@@ -28,6 +28,7 @@ try:
     from cyborgdb.openapi_client.models.query_metadata_request import (
         QueryMetadataRequest,
     )
+    from cyborgdb.openapi_client.models.order_by import OrderBy
     from cyborgdb.openapi_client.models.request import Request
     from cyborgdb.openapi_client.models import Contents
     from cyborgdb.openapi_client.models.binary_upsert_request import BinaryUpsertRequest
@@ -1023,7 +1024,9 @@ class EncryptedIndex:
             "index_name": self._index_name,
             "filters": filters or {},
             "top_k": top_k,
-            "order_by": order_by,
+            # order_by is now an anyOf(str, {field: 1|-1}); after the
+            # normalization above it is always a field name, so wrap the string.
+            "order_by": OrderBy(order_by) if order_by is not None else None,
             "ascending": ascending,
         }
         for key, value in {

@@ -26,7 +26,7 @@ from pydantic_core import to_jsonable_python
 
 class QueryMetadataResponse(BaseModel):
     """
-    Response model for a metadata query.  Attributes:     results (List[QueryMetadataResultItem]): Matching items as         `{id, score}`. On a `text=...` query, rows are in descending         score order; otherwise `score` is `None` and rows follow         `order_by` when set, else are an unordered subset.     ids (List[str]): Matching item IDs, parallel to `results`. Retained         for backward compatibility with callers that only read IDs.     count (int): Number of items returned.
+    Response model for a metadata query.  Attributes:     results (List[QueryMetadataResultItem]): Matching items. On a         `text=...` query each row is `{id, score}` in descending score         order; on a filter-only query each row is `{id}` (no `score` key,         matching core) following `order_by` when set, else an unordered         subset.     ids (List[str]): Matching item IDs, parallel to `results`. Retained         for backward compatibility with callers that only read IDs.     count (int): Number of items returned.
     """ # noqa: E501
     results: Optional[List[QueryMetadataResultItem]] = None
     ids: List[StrictStr]

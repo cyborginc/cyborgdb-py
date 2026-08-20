@@ -25,7 +25,7 @@ from pydantic_core import to_jsonable_python
 
 class QueryMetadataResultItem(BaseModel):
     """
-    One row of a metadata query result.  `score` is the BM25 relevance on a `text=...` query (larger = more relevant) and `None` on a filter-only query, which has nothing to score.
+    One row of a metadata query result.  Matches core's row shape: `score` carries the BM25 relevance (larger = more relevant) on a `text=...` query and is omitted entirely on a filter-only query, which has nothing to score. The route serializes with `exclude_none`, so a `None` `score` never reaches the wire.
     """ # noqa: E501
     id: StrictStr
     score: Optional[Union[StrictFloat, StrictInt]] = None
