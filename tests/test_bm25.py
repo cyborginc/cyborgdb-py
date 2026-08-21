@@ -125,6 +125,83 @@ class TestBM25(unittest.TestCase):
         results = self.index.query_metadata(text="quantum", filters={"topic": "food"})
         self.assertEqual(results, [])
 
+    def test_filter_operator_prefilters_the_text_leg(self):
+        # An operator filter ($in) must pre-filter the text leg the same way an
+        # equality filter does: only physics docs survive, so only quantum docs
+        # can score — the food/ml/finance rows never reach the BM25 leg.
+        results = self.index.query_metadata(
+            text="quantum", filters={"topic": {"$in": ["physics"]}}
+        )
+        self.assertEqual({r["id"] for r in results}, ANY_TERM)
+        self.assertTrue(all(set(r) == {"id", "score"} for r in results))
+
+    def test_require_all_terms_with_filter_composes(self):
+        # AND-matching and the pre-filter apply together: require_all_terms
+        # narrows to {d0, d4}, and topic=physics keeps both (they are physics).
+        got = {
+            r["id"]
+            for r in self.index.query_metadata(
+                text="quantum computing",
+                require_all_terms=True,
+                filters={"topic": "physics"},
+            )
+        }
+        self.assertEqual(got, BOTH_TERMS)
+
+    def test_empty_text_is_filter_only(self):
+        # Documented contract: an empty `text` keeps this a filter-only query —
+        # {"id"} rows with no `score` — even though the SDK still forwards the
+        # empty string to the service. Pins that "" is treated as "no text leg".
+        rows = self.index.query_metadata(text="", filters={"topic": "physics"})
+        self.assertEqual({r["id"] for r in rows}, {"d0", "d2", "d4"})
+        self.assertTrue(all(r == {"id": r["id"]} for r in rows))
+
+    def test_text_matching_no_document_returns_empty(self):
+        # A term that appears in no `body` scores nothing: empty result, no error.
+        self.assertEqual(self.index.query_metadata(text="zzzznonexistent"), [])
+
+    def test_top_k_larger_than_matches_returns_all(self):
+        # top_k above the match count is a cap, not a floor: all 3 quantum docs
+        # come back, not padded to top_k.
+        results = self.index.query_metadata(text="quantum", top_k=100)
+        self.assertEqual({r["id"] for r in results}, ANY_TERM)
+
+    def test_text_search_is_case_insensitive(self):
+        # The BM25 analyzer lower-cases terms, so an upper-case query matches the
+        # same docs as its lower-case form.
+        upper = {r["id"] for r in self.index.query_metadata(text="QUANTUM COMPUTING")}
+        lower = {r["id"] for r in self.index.query_metadata(text="quantum computing")}
+        self.assertEqual(upper, lower)
+        self.assertEqual(lower, ANY_TERM)
+
+    def test_order_by_with_text_is_rejected(self):
+        # Text results are relevance-ranked, so `order_by` alongside `text` is
+        # unsupported and must raise rather than silently ignore one of them.
+        with self.assertRaises(ValueError):
+            self.index.query_metadata(text="quantum", order_by="topic")
+
+    def test_non_filterable_field_rejected_even_with_text(self):
+        # The metadata schema is enforced on the text path too: a pre-filter on
+        # a non-filterable field raises, exactly as it does without `text`
+        # (there is no post-filter fallback in query_metadata).
+        with self.assertRaises(ValueError):
+            self.index.query_metadata(text="quantum", filters={"body": "quantum"})
+
+    # -- query(text=..., filters=...) : hybrid + pre-filter --------------- #
+
+    def test_hybrid_query_applies_metadata_filter(self):
+        # The metadata filter must pre-filter the hybrid candidate set: with
+        # topic=food, no quantum doc survives and the text leg contributes
+        # nothing, so only food docs (if any) can appear — never a quantum doc.
+        results = self.index.query(
+            query_vectors=np.random.rand(DIM).astype(np.float32).tolist(),
+            text="quantum computing",
+            filters={"topic": "food"},
+            top_k=6,
+        )
+        self.assertTrue({r["id"] for r in results} <= {"d3"})
+        self.assertTrue(all("distance" not in r for r in results))
+
     def test_no_text_returns_unscored_id_rows(self):
         # Without text this stays a filter-only query: {"id"} rows (no score),
         # matching core's list[MetadataResult].
@@ -200,6 +277,99 @@ class TestBM25(unittest.TestCase):
         self.assertTrue(results)
         self.assertTrue(all("distance" in r for r in results))
         self.assertFalse(any("score" in r for r in results))
+
+
+class TestBM25MetadataFilterNarrowing(unittest.TestCase):
+    """Two full_text fields (`title`, `body`) plus a discriminating filterable
+    field (`lang`), so a single text term matches several docs and a metadata
+    filter can narrow the hits to a *proper subset* — the case the single-topic
+    fixture above can't express. Also lets `text_fields` genuinely exclude a hit
+    (a term present only in the un-searched field)."""
+
+    # "quantum" appears in different fields per doc; `lang` splits the matches.
+    ROWS = [
+        ("a", "quantum theory", "notes on physics", "en"),  # title
+        ("b", "kitchen recipes", "a quantum leap forward", "en"),  # body only
+        ("c", "quantum hardware", "qubit fabrication", "fr"),  # title
+        ("d", "sourdough bread", "baking at home", "en"),  # no match
+    ]
+    QUANTUM_ANY_FIELD = {"a", "b", "c"}
+    QUANTUM_IN_TITLE = {"a", "c"}
+
+    def setUp(self):
+        self.client = cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
+        self.index = self.client.create_index(
+            f"bm25_filter_{uuid.uuid4().hex[:8]}",
+            cyborgdb.Client.generate_key(),
+            dimension=DIM,
+            metric="euclidean",
+            metadata_schema={"lang": {"filterable": True}},
+            text_fields=["title", "body"],
+        )
+        self.index.upsert(
+            [
+                {
+                    "id": doc_id,
+                    "vector": np.random.rand(DIM).astype(np.float32).tolist(),
+                    "metadata": {"title": title, "body": body, "lang": lang},
+                }
+                for doc_id, title, body, lang in self.ROWS
+            ]
+        )
+        time.sleep(2)
+
+    def tearDown(self):
+        try:
+            self.index.delete_index()
+        except Exception:
+            pass
+
+    def test_text_matches_across_both_fields(self):
+        # With no field restriction the term is found in either full_text field.
+        got = {r["id"] for r in self.index.query_metadata(text="quantum")}
+        self.assertEqual(got, self.QUANTUM_ANY_FIELD)
+
+    def test_filter_narrows_text_matches_to_proper_subset(self):
+        # text matches {a, b, c}; lang=en drops the French doc `c`, leaving a
+        # strict subset — proving the pre-filter intersects rather than replaces.
+        got = {
+            r["id"]
+            for r in self.index.query_metadata(text="quantum", filters={"lang": "en"})
+        }
+        self.assertEqual(got, {"a", "b"})
+        self.assertTrue(got < self.QUANTUM_ANY_FIELD)
+
+    def test_text_fields_excludes_match_in_unsearched_field(self):
+        # Restricting to `title` drops `b`, whose only "quantum" is in `body`.
+        got = {
+            r["id"]
+            for r in self.index.query_metadata(text="quantum", text_fields=["title"])
+        }
+        self.assertEqual(got, self.QUANTUM_IN_TITLE)
+
+    def test_text_fields_and_filter_compose(self):
+        # Both narrowings apply together: title-only → {a, c}, then lang=en drops
+        # the French `c`, leaving just {a}.
+        got = {
+            r["id"]
+            for r in self.index.query_metadata(
+                text="quantum", text_fields=["title"], filters={"lang": "en"}
+            )
+        }
+        self.assertEqual(got, {"a"})
+
+    def test_field_weights_accepted_and_rank_stable(self):
+        # Per-field weights (parallel to the searched fields) are forwarded and
+        # accepted; the matched set is unchanged by re-weighting.
+        got = {
+            r["id"]
+            for r in self.index.query_metadata(
+                text="quantum",
+                text_fields=["title", "body"],
+                text_field_weights=[2.0, 1.0],
+            )
+        }
+        self.assertEqual(got, self.QUANTUM_ANY_FIELD)
 
 
 class TestBM25NotConfigured(unittest.TestCase):
