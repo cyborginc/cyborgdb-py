@@ -52,7 +52,6 @@ logger = logging.getLogger(__name__)
 class _MetadataResultBase(TypedDict):
     id: str
 
-
 class MetadataResult(_MetadataResultBase, total=False):
     """One row of a ``query_metadata`` result: the item ``id``, plus a BM25
     ``score`` when the query ranked by relevance.
