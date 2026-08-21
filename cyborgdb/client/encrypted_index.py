@@ -8,7 +8,7 @@ import base64
 import binascii
 import json
 import logging
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Optional, TypedDict, Union, Any
 
 import numpy as np
 
@@ -28,6 +28,7 @@ try:
     from cyborgdb.openapi_client.models.query_metadata_request import (
         QueryMetadataRequest,
     )
+    from cyborgdb.openapi_client.models.order_by import OrderBy
     from cyborgdb.openapi_client.models.request import Request
     from cyborgdb.openapi_client.models import Contents
     from cyborgdb.openapi_client.models.binary_upsert_request import BinaryUpsertRequest
@@ -41,6 +42,28 @@ except ImportError:
     )
 
 logger = logging.getLogger(__name__)
+
+
+# Split into two TypedDicts so `id` stays required while `score` is optional
+# per-key: `typing.NotRequired` is 3.11+ and the package supports 3.10, so a
+# `total=False` subclass expresses the optional key with no union and no
+# `typing_extensions` dependency. This is an implementation detail — kept as a
+# comment, not a docstring, so it stays out of the public shape callers read.
+class _MetadataResultBase(TypedDict):
+    id: str
+
+
+class MetadataResult(_MetadataResultBase, total=False):
+    """One row of a ``query_metadata`` result: the item ``id``, plus a BM25
+    ``score`` when the query ranked by relevance.
+
+    A plain ``dict`` mirroring ``cyborgdb_core``'s ``MetadataResult``. ``score``
+    is present only on the text path (``query_metadata(text=...)``); a
+    filter-only query has nothing to score, so the key is absent rather than
+    ``None`` — the same convention ``query()`` uses for ``distance`` / ``score``.
+    """
+
+    score: float
 
 
 class EncryptedIndex:
@@ -146,16 +169,44 @@ class EncryptedIndex:
     @property
     def metadata_schema(self) -> Dict[str, Dict[str, bool]]:
         """Per-field metadata indexing policy recorded at create time, as
-        `{field: {"filterable": bool, "pattern": bool}}`. Empty dict when the
-        index uses the default index-everything posture. Immutable, but not
-        cached: an older service omits the field entirely, and normalizing
-        that `None` to `{}` here keeps callers from having to.
+        `{field: {"filterable": bool, "pattern": bool, "full_text": bool}}`.
+        Empty dict when the index uses the default index-everything posture.
+        Immutable, but not cached: an older service omits the field entirely,
+        and normalizing that `None` to `{}` here keeps callers from having to.
+
+        `full_text` marks a field routed through the BM25 analyzer (searchable
+        by `query`/`query_metadata` with `text=...`); see `bm25` for the
+        scorer config.
 
         Returned as plain dicts — the same shape `create_index` accepts — so
         generated openapi_client models never leak out of the wrapper."""
         return {
-            field: {"filterable": policy.filterable, "pattern": policy.pattern}
+            field: {
+                "filterable": policy.filterable,
+                "pattern": policy.pattern,
+                "full_text": policy.full_text,
+            }
             for field, policy in (self._describe().metadata_schema or {}).items()
+        }
+
+    @property
+    def bm25(self) -> Optional[Dict[str, Any]]:
+        """BM25 scorer config the index reports back, as
+        `{"k1": float, "b": float, "analyzer_version": str | None}`, or `None`
+        when the index has no `full_text` field (BM25 is opt-in and derived,
+        never flagged). `k1`/`b` are the tuning parameters supplied at create
+        time or their defaults; `analyzer_version` identifies the tokenizer /
+        stemmer pipeline the corpus was indexed with.
+
+        Returned as a plain dict so generated openapi_client models never leak
+        out of the wrapper."""
+        config = self._describe().bm25
+        if config is None:
+            return None
+        return {
+            "k1": config.k1,
+            "b": config.b,
+            "analyzer_version": config.analyzer_version,
         }
 
     def is_trained(self) -> bool:
@@ -548,6 +599,13 @@ class EncryptedIndex:
         include: Optional[List[str]] = None,
         greedy: Optional[bool] = None,
         rerank_mult: Optional[int] = None,
+        text: Optional[str] = None,
+        text_fields: Optional[List[str]] = None,
+        text_field_weights: Optional[List[float]] = None,
+        require_all_terms: Optional[bool] = None,
+        alpha: Optional[float] = None,
+        rrf_k: Optional[float] = None,
+        window_mult: Optional[int] = None,
     ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
         """
         Retrieve the nearest neighbors for given query vectors.
@@ -555,7 +613,44 @@ class EncryptedIndex:
 
         For batch queries with 2D numpy arrays, automatically uses efficient
         binary format for faster transfer.
+
+        Passing ``text`` turns this into a hybrid (BM25 + vector) query against
+        an index with at least one ``full_text`` field; a query vector is still
+        required. Hybrid results carry a fused ``score`` (larger = more
+        relevant) instead of ``distance``. The remaining knobs tune the text
+        leg and its fusion with the vector leg:
+
+        Args:
+            text: Query text for the BM25 leg. Omitted/empty leaves the query
+                text-free (pure vector search).
+            text_fields: ``full_text`` fields the text leg searches; omitted
+                means all of them. Naming a non-full-text field raises.
+            text_field_weights: Per-field weights on the summed per-field BM25
+                scores, parallel to the searched fields. Omitted means 1.0 each.
+            require_all_terms: Require every query term to match (AND) instead
+                of any (OR, the default).
+            alpha: Leg blend in ``[0, 1]``: 0 = pure BM25, 1 = pure vector;
+                omitted means 0.5.
+            rrf_k: RRF rank-smoothing constant (> 0; omitted means 60).
+            window_mult: Per-leg candidate depth as a multiple of ``top_k``
+                (>= 1; omitted means 3).
         """
+        # Hybrid text-leg knobs, forwarded to every request shape. Only the
+        # non-None ones are sent so an index without full_text fields keeps
+        # seeing text-free requests.
+        hybrid_kwargs = {
+            k: v
+            for k, v in {
+                "text": text,
+                "text_fields": text_fields,
+                "text_field_weights": text_field_weights,
+                "require_all_terms": require_all_terms,
+                "alpha": alpha,
+                "rrf_k": rrf_k,
+                "window_mult": window_mult,
+            }.items()
+            if v is not None
+        }
         try:
             # Determine the correct vector input
             vector_list = None
@@ -573,6 +668,7 @@ class EncryptedIndex:
                             include=include,
                             greedy=greedy,
                             rerank_mult=rerank_mult,
+                            **hybrid_kwargs,
                         )
                     else:
                         raise ValueError(
@@ -618,6 +714,7 @@ class EncryptedIndex:
                     query_kwargs["filters"] = filters
                 if include is not None:
                     query_kwargs["include"] = include
+                query_kwargs.update(hybrid_kwargs)
                 query_request = QueryRequest(**query_kwargs)
             else:
                 # Use BatchQueryRequest for multiple vectors
@@ -639,6 +736,7 @@ class EncryptedIndex:
                     query_kwargs["filters"] = filters
                 if include is not None:
                     query_kwargs["include"] = include
+                query_kwargs.update(hybrid_kwargs)
                 query_request = BatchQueryRequest(**query_kwargs)
 
             request = Request(query_request)
@@ -684,8 +782,13 @@ class EncryptedIndex:
                                 result_item = {"id": item["id"]}
 
                                 # Always include distance if present (core part of query results)
-                                if "distance" in item:
+                                if item.get("distance") is not None:
                                     result_item["distance"] = item["distance"]
+
+                                # Hybrid (text=...) results carry a fused score
+                                # instead of a distance.
+                                if item.get("score") is not None:
+                                    result_item["score"] = item["score"]
 
                                 # Check metadata against include list
                                 if "metadata" in item and (
@@ -702,8 +805,13 @@ class EncryptedIndex:
                             result_item = {"id": item["id"]}
 
                             # Always include distance if present (core part of query results)
-                            if "distance" in item:
+                            if item.get("distance") is not None:
                                 result_item["distance"] = item["distance"]
+
+                            # Hybrid (text=...) results carry a fused score
+                            # instead of a distance.
+                            if item.get("score") is not None:
+                                result_item["score"] = item["score"]
 
                             # Check metadata against include list
                             if "metadata" in item and (
@@ -744,6 +852,13 @@ class EncryptedIndex:
         include: Optional[List[str]] = None,
         greedy: Optional[bool] = None,
         rerank_mult: Optional[int] = None,
+        text: Optional[str] = None,
+        text_fields: Optional[List[str]] = None,
+        text_field_weights: Optional[List[float]] = None,
+        require_all_terms: Optional[bool] = None,
+        alpha: Optional[float] = None,
+        rrf_k: Optional[float] = None,
+        window_mult: Optional[int] = None,
     ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
         """
         Retrieve the nearest neighbors for given query vectors using binary format.
@@ -760,6 +875,14 @@ class EncryptedIndex:
             include: List of fields to include in the response.
             greedy: Whether to use greedy search.
             rerank_mult: Multiplier for stage 1 retrieval in reranking indexes.
+            text: Query text for a BM25 leg (hybrid search). See
+                :meth:`query` for the text-leg / fusion knobs below.
+            text_fields: ``full_text`` fields the text leg searches.
+            text_field_weights: Per-field weights, parallel to the searched fields.
+            require_all_terms: Require every query term to match (AND vs OR).
+            alpha: Leg blend in ``[0, 1]`` (0 = BM25, 1 = vector; default 0.5).
+            rrf_k: RRF rank-smoothing constant (> 0; default 60).
+            window_mult: Per-leg candidate depth as a multiple of ``top_k``.
 
         Returns:
             For single query (1D input): List of result dictionaries.
@@ -813,6 +936,17 @@ class EncryptedIndex:
             request_kwargs["greedy"] = greedy
         if rerank_mult is not None:
             request_kwargs["rerank_mult"] = rerank_mult
+        for key, value in {
+            "text": text,
+            "text_fields": text_fields,
+            "text_field_weights": text_field_weights,
+            "require_all_terms": require_all_terms,
+            "alpha": alpha,
+            "rrf_k": rrf_k,
+            "window_mult": window_mult,
+        }.items():
+            if value is not None:
+                request_kwargs[key] = value
         request = BinaryQueryRequest(**request_kwargs)
 
         try:
@@ -848,12 +982,17 @@ class EncryptedIndex:
         top_k: Optional[int] = None,
         order_by: Optional[Union[str, Dict[str, int]]] = None,
         ascending: bool = True,
-    ) -> List[str]:
+        text: Optional[str] = None,
+        text_fields: Optional[List[str]] = None,
+        text_field_weights: Optional[List[float]] = None,
+        require_all_terms: Optional[bool] = None,
+    ) -> List[MetadataResult]:
         """
         Find items by metadata alone — no query vector, no distances.
 
         Resolves ``filters`` entirely against the encrypted metadata index and
-        returns the matching item IDs. Works on untrained indexes.
+        returns the matching items as :class:`MetadataResult` rows (``{"id"}``,
+        matching core's ``list[MetadataResult]``). Works on untrained indexes.
 
         Unlike :meth:`query`, there is no post-filter stage to fall back on, so
         the index's ``metadata_schema`` is enforced rather than advisory:
@@ -861,17 +1000,34 @@ class EncryptedIndex:
         declared ``filterable=False`` cannot be filtered on at all. Both raise
         ``ValueError``. Use :meth:`query` with a vector for those.
 
+        Passing ``text`` adds a BM25 full-text leg (requires an index with at
+        least one ``full_text`` field). Results are then ranked by relevance
+        and each row also carries a ``score`` (``{"id", "score"}``, descending
+        score); ``filters`` given alongside acts as a pre-filter and
+        ``order_by`` is not supported with ``text``.
+
         Args:
             filters: Metadata filters; ``None``/empty matches everything.
-            top_k: Cap on IDs returned, applied AFTER ``order_by``. ``None``
-                returns every match.
+            top_k: Cap on results returned, applied AFTER ``order_by``.
+                ``None`` returns every match.
             order_by: Field to sort matches by, either a name or a MongoDB-style
                 single-field dict (``{"views": -1}``, which also sets the
-                direction). Unordered when omitted.
+                direction). Unordered when omitted. Not supported with ``text``.
             ascending: Sort direction, when ``order_by`` is a plain field name.
+            text: Query text for the BM25 leg. Omitted/empty keeps this a
+                filter-only query returning ``{"id"}`` rows (no score).
+            text_fields: ``full_text`` fields the text leg searches; omitted
+                means all of them. Naming a non-full-text field raises.
+            text_field_weights: Per-field weights on the summed per-field BM25
+                scores, parallel to the searched fields. Omitted means 1.0 each.
+            require_all_terms: Require every query term to match (AND) instead
+                of any (OR, the default).
 
         Returns:
-            Matching item IDs — ordered when ``order_by`` was given.
+            A list of ``{"id"}`` dicts (``list[MetadataResult]``, matching
+            core). Without ``text``: ordered when ``order_by`` was given, no
+            ``score`` key. With ``text``: each row also carries ``score``,
+            ranked by descending BM25 score.
 
         Raises:
             ValueError: If the filter cannot be resolved from the metadata
@@ -887,19 +1043,38 @@ class EncryptedIndex:
             ((order_by, direction),) = order_by.items()
             ascending = int(direction) >= 0
 
+        request_kwargs = {
+            "index_key": self._key_to_hex(),
+            "index_name": self._index_name,
+            "filters": filters or {},
+            "top_k": top_k,
+            # order_by is now an anyOf(str, {field: 1|-1}); after the
+            # normalization above it is always a field name, so wrap the string.
+            "order_by": OrderBy(order_by) if order_by is not None else None,
+            "ascending": ascending,
+        }
+        for key, value in {
+            "text": text,
+            "text_fields": text_fields,
+            "text_field_weights": text_field_weights,
+            "require_all_terms": require_all_terms,
+        }.items():
+            if value is not None:
+                request_kwargs[key] = value
+
         try:
-            request = QueryMetadataRequest(
-                index_key=self._key_to_hex(),
-                index_name=self._index_name,
-                filters=filters or {},
-                top_k=top_k,
-                order_by=order_by,
-                ascending=ascending,
-            )
+            request = QueryMetadataRequest(**request_kwargs)
             response = self._api.query_metadata_v1_vectors_query_metadata_post(
                 query_metadata_request=request
             )
-            return response.ids
+            # Match core's list[MetadataResult]: always {"id", ...} rows.
+            # A text query is ranked by relevance and each row carries a BM25
+            # `score`; a filter-only query has nothing to score, so the row is
+            # just {"id"} (no `score` key), mirroring core exactly.
+            rows = response.results or []
+            if text:
+                return [{"id": item.id, "score": item.score} for item in rows]
+            return [{"id": item.id} for item in rows]
         except ApiException as e:
             error_msg = f"Failed to query metadata: {e}"
             logger.error(error_msg)

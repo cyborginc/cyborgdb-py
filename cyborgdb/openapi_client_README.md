@@ -29,13 +29,16 @@ In your own code, to use this library to connect and interact with cyborgdb.open
 you can run the following:
 
 ```python
+
 import cyborgdb.openapi_client
 from cyborgdb.openapi_client.rest import ApiException
 from pprint import pprint
 
 # Defining the host is optional and defaults to http://localhost
 # See configuration.py for a list of all supported configuration parameters.
-configuration = cyborgdb.openapi_client.Configuration(host="http://localhost")
+configuration = cyborgdb.openapi_client.Configuration(
+    host = "http://localhost"
+)
 
 # The client must configure the authentication and authorization parameters
 # in accordance with the API server security policy.
@@ -43,7 +46,7 @@ configuration = cyborgdb.openapi_client.Configuration(host="http://localhost")
 # satisfies your auth use case.
 
 # Configure API key authorization: APIKeyHeader
-configuration.api_key["APIKeyHeader"] = os.environ["API_KEY"]
+configuration.api_key['APIKeyHeader'] = os.environ["API_KEY"]
 
 # Uncomment below to setup prefix (e.g. Bearer) for API key, if needed
 # configuration.api_key_prefix['APIKeyHeader'] = 'Bearer'
@@ -53,22 +56,16 @@ configuration.api_key["APIKeyHeader"] = os.environ["API_KEY"]
 with cyborgdb.openapi_client.ApiClient(configuration) as api_client:
     # Create an instance of the API class
     api_instance = cyborgdb.openapi_client.DefaultApi(api_client)
-    create_index_request = (
-        cyborgdb.openapi_client.CreateIndexRequest()
-    )  # CreateIndexRequest |
+    create_index_request = cyborgdb.openapi_client.CreateIndexRequest() # CreateIndexRequest | 
 
     try:
         # Create Encrypted Index
-        api_response = api_instance.create_index_v1_indexes_create_post(
-            create_index_request
-        )
+        api_response = api_instance.create_index_v1_indexes_create_post(create_index_request)
         print("The response of DefaultApi->create_index_v1_indexes_create_post:\n")
         pprint(api_response)
     except ApiException as e:
-        print(
-            "Exception when calling DefaultApi->create_index_v1_indexes_create_post: %s\n"
-            % e
-        )
+        print("Exception when calling DefaultApi->create_index_v1_indexes_create_post: %s\n" % e)
+
 ```
 
 ## Documentation for API Endpoints
@@ -100,6 +97,7 @@ Class | Method | HTTP request | Description
 
 ## Documentation For Models
 
+ - [BM25Config](cyborgdb/openapi_client/docs/BM25Config.md)
  - [BatchQueryRequest](cyborgdb/openapi_client/docs/BatchQueryRequest.md)
  - [BinaryQueryBatch](cyborgdb/openapi_client/docs/BinaryQueryBatch.md)
  - [BinaryQueryRequest](cyborgdb/openapi_client/docs/BinaryQueryRequest.md)
@@ -127,6 +125,8 @@ Class | Method | HTTP request | Description
  - [ListUsersResponse](cyborgdb/openapi_client/docs/ListUsersResponse.md)
  - [LocationInner](cyborgdb/openapi_client/docs/LocationInner.md)
  - [MetadataFieldPolicy](cyborgdb/openapi_client/docs/MetadataFieldPolicy.md)
+ - [MetadataResult](cyborgdb/openapi_client/docs/MetadataResult.md)
+ - [OrderBy](cyborgdb/openapi_client/docs/OrderBy.md)
  - [QueryMetadataRequest](cyborgdb/openapi_client/docs/QueryMetadataRequest.md)
  - [QueryMetadataResponse](cyborgdb/openapi_client/docs/QueryMetadataResponse.md)
  - [QueryRequest](cyborgdb/openapi_client/docs/QueryRequest.md)

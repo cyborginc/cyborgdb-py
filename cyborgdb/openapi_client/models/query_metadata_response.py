@@ -18,18 +18,20 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
+from cyborgdb.openapi_client.models.metadata_result import MetadataResult
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
 class QueryMetadataResponse(BaseModel):
     """
-    Response model for a metadata-only query.  Attributes:     ids (List[str]): Matching item IDs — ordered by `order_by` when it was         set, otherwise an unordered subset.     count (int): Number of IDs returned.
+    Response model for a metadata query.  Attributes:     results (List[MetadataResult]): Matching items, using core's row shape         directly. On a `text=...` query each row is `{id, score}` in         descending score order; on a filter-only query each row is `{id}`         (no `score` key — there is nothing to score) following `order_by`         when set, else an unordered subset.     ids (List[str]): Matching item IDs, parallel to `results`. Retained         for backward compatibility with callers that only read IDs.     count (int): Number of items returned.
     """ # noqa: E501
+    results: Optional[List[MetadataResult]] = None
     ids: List[StrictStr]
     count: StrictInt
-    __properties: ClassVar[List[str]] = ["ids", "count"]
+    __properties: ClassVar[List[str]] = ["results", "ids", "count"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -70,6 +72,13 @@ class QueryMetadataResponse(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each item in results (list)
+        _items = []
+        if self.results:
+            for _item_results in self.results:
+                if _item_results:
+                    _items.append(_item_results.to_dict())
+            _dict['results'] = _items
         return _dict
 
     @classmethod
@@ -82,6 +91,7 @@ class QueryMetadataResponse(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "results": [MetadataResult.from_dict(_item) for _item in obj["results"]] if obj.get("results") is not None else None,
             "ids": obj.get("ids"),
             "count": obj.get("count")
         })

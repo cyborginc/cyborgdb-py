@@ -25,8 +25,15 @@ from pydantic_core import to_jsonable_python
 
 class BatchQueryRequest(BaseModel):
     """
-    Request model for batch similarity search.  Inherits:     IndexOperationRequest: Includes `index_name` and `index_key`.  Attributes:     query_vectors (List[List[float]]): List of vectors to search for in batch mode.     top_k (Optional[int]): Number of nearest neighbors to return for each query. Defaults to 100.     n_probes (Optional[int]): Number of lists to probe during the query. Defaults to auto.     greedy (Optional[bool]): Whether to use greedy search. Defaults to False.     rerank_mult (Optional[int]): Multiplier for stage 1 retrieval in reranking indexes. Defaults to 10.     filters (Optional[Dict[str, Any]]): Metadata filters as a JSON-like         dictionary (see `FILTERS_DESCRIPTION` for the operator set).         Defaults to {}.     include (List[str]): List of additional fields to include in the response. Defaults to `[]` (only IDs are returned).
+    Request model for batch similarity search.  Inherits:     IndexOperationRequest: Includes `index_name` and `index_key`.     HybridQueryParams: `text` and the fusion knobs for hybrid search.  Attributes:     query_vectors (List[List[float]]): List of vectors to search for in batch mode.     top_k (Optional[int]): Number of nearest neighbors to return for each query. Defaults to 100.     n_probes (Optional[int]): Number of lists to probe during the query. Defaults to auto.     greedy (Optional[bool]): Whether to use greedy search. Defaults to False.     rerank_mult (Optional[int]): Multiplier for stage 1 retrieval in reranking indexes. Defaults to 10.     filters (Optional[Dict[str, Any]]): Metadata filters as a JSON-like         dictionary (see `FILTERS_DESCRIPTION` for the operator set).         Defaults to {}.     include (List[str]): List of additional fields to include in the response. Defaults to `[]` (only IDs are returned).
     """ # noqa: E501
+    text: Optional[StrictStr] = Field(default=None, description="Query text for a BM25 full-text leg. Requires an index with at least one full_text field. Omitted/empty leaves the query text-free.")
+    text_fields: Optional[List[StrictStr]] = Field(default=None, description="full_text fields the text leg searches; omitted means all of them. Naming a non-full_text field raises.")
+    text_field_weights: Optional[List[Union[StrictFloat, StrictInt]]] = Field(default=None, description="Per-field weights on the summed per-field BM25 scores, parallel to the searched fields. Omitted means 1.0 each.")
+    require_all_terms: Optional[StrictBool] = Field(default=None, description="Require every query term to match (AND) instead of any (OR, the default).")
+    alpha: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, description="Leg blend in [0, 1]: 0 = pure BM25, 1 = pure vector; omitted means 0.5. An exact endpoint skips the dead leg's retrieval.")
+    rrf_k: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, description="RRF rank-smoothing constant (> 0; omitted means 60). Higher rewards agreement further down each leg's list.")
+    window_mult: Optional[StrictInt] = Field(default=None, description="Per-leg candidate depth as a multiple of top_k (>= 1; omitted means 3), so each leg looks deeper than the final cut.")
     index_name: StrictStr = Field(description="ID name")
     index_key: Optional[StrictStr] = Field(default=None, description="32-byte encryption key as hex string.  Required for SDK-supplied indexes; must be omitted for KMS-backed indexes (the service resolves the KEK via the index's KMSBlob).")
     query_vectors: List[List[Union[StrictFloat, StrictInt]]]
@@ -36,7 +43,7 @@ class BatchQueryRequest(BaseModel):
     greedy: Optional[StrictBool] = None
     filters: Optional[Dict[str, Any]] = Field(default=None, description="Metadata filters as a JSON object. Operators: `$eq`, `$ne`, `$in`, `$nin`, `$exists`, `$gt`, `$gte`, `$lt`, `$lte`, `$regex`, `$contains`, combined with `$and` / `$or` / `$nor` / `$not`. Filtering works on any metadata field; the index's `metadata_schema` only decides how a filter is resolved — fields marked `filterable` (the default) are answered from the inverted index, and `$regex` / `$contains` are answered from the regex dictionary on `pattern` fields. Anything else falls back to a post-filter over the decrypted metadata, which is correct but slower. Dates have no native type: store and filter them as epoch milliseconds.")
     include: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["index_name", "index_key", "query_vectors", "top_k", "n_probes", "rerank_mult", "greedy", "filters", "include"]
+    __properties: ClassVar[List[str]] = ["text", "text_fields", "text_field_weights", "require_all_terms", "alpha", "rrf_k", "window_mult", "index_name", "index_key", "query_vectors", "top_k", "n_probes", "rerank_mult", "greedy", "filters", "include"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -77,6 +84,41 @@ class BatchQueryRequest(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if text (nullable) is None
+        # and model_fields_set contains the field
+        if self.text is None and "text" in self.model_fields_set:
+            _dict['text'] = None
+
+        # set to None if text_fields (nullable) is None
+        # and model_fields_set contains the field
+        if self.text_fields is None and "text_fields" in self.model_fields_set:
+            _dict['text_fields'] = None
+
+        # set to None if text_field_weights (nullable) is None
+        # and model_fields_set contains the field
+        if self.text_field_weights is None and "text_field_weights" in self.model_fields_set:
+            _dict['text_field_weights'] = None
+
+        # set to None if require_all_terms (nullable) is None
+        # and model_fields_set contains the field
+        if self.require_all_terms is None and "require_all_terms" in self.model_fields_set:
+            _dict['require_all_terms'] = None
+
+        # set to None if alpha (nullable) is None
+        # and model_fields_set contains the field
+        if self.alpha is None and "alpha" in self.model_fields_set:
+            _dict['alpha'] = None
+
+        # set to None if rrf_k (nullable) is None
+        # and model_fields_set contains the field
+        if self.rrf_k is None and "rrf_k" in self.model_fields_set:
+            _dict['rrf_k'] = None
+
+        # set to None if window_mult (nullable) is None
+        # and model_fields_set contains the field
+        if self.window_mult is None and "window_mult" in self.model_fields_set:
+            _dict['window_mult'] = None
+
         # set to None if index_key (nullable) is None
         # and model_fields_set contains the field
         if self.index_key is None and "index_key" in self.model_fields_set:
@@ -119,6 +161,13 @@ class BatchQueryRequest(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "text": obj.get("text"),
+            "text_fields": obj.get("text_fields"),
+            "text_field_weights": obj.get("text_field_weights"),
+            "require_all_terms": obj.get("require_all_terms"),
+            "alpha": obj.get("alpha"),
+            "rrf_k": obj.get("rrf_k"),
+            "window_mult": obj.get("window_mult"),
             "index_name": obj.get("index_name"),
             "index_key": obj.get("index_key"),
             "query_vectors": obj.get("query_vectors"),

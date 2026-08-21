@@ -17,20 +17,19 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
-class MetadataFieldPolicy(BaseModel):
+class MetadataResult(BaseModel):
     """
-    Per-field metadata indexing policy (one entry of `metadata_schema`).  Metadata itself stays schemaless — this is indexing policy, not validation.  Fields omitted from `metadata_schema` inherit the index-everything default.  Attributes:     filterable: Build inverted-index postings for the field, so         filters on it resolve from the index (pre-filter).  When         `false`, the field is still stored and still filterable, but         a filter referencing it forces the dense forward-blob         post-filter path — cheaper writes, slower filtered queries.     pattern: Additionally build the field's regex dictionary, which         makes `$regex` / `$contains` resolvable from the index.         Requires `filterable=true`.     full_text: Route the field's string value through the BM25         analyzer instead of exact-match indexing.  This is what makes         the field searchable by `query_metadata(text=...)` and hybrid         `query(text=...)`.  A field is either analyzed or exact-match         indexed, so `full_text=true` is incompatible with both         `pattern=true` and an explicit `filterable=true`, and implies         `filterable=false`.
+    One row of a ``query_metadata`` result: the item id, plus a BM25 ``score`` when there is one.  ``score`` is present only on the text path. A filter-only query has nothing to score, so the key is absent rather than ``None`` — the same rule ``query()`` follows for ``distance`` and ``score``.  This is the wire model used to deserialize the service response; the SDK reprojects it into the plain-dict ``MetadataResult`` rows that ``EncryptedIndex.query_metadata`` returns, matching ``cyborgdb_core``.
     """ # noqa: E501
-    filterable: Optional[StrictBool] = True
-    pattern: Optional[StrictBool] = False
-    full_text: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["filterable", "pattern", "full_text"]
+    id: StrictStr
+    score: Optional[Union[StrictFloat, StrictInt]] = None
+    __properties: ClassVar[List[str]] = ["id", "score"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -50,7 +49,7 @@ class MetadataFieldPolicy(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of MetadataFieldPolicy from a JSON string"""
+        """Create an instance of MetadataResult from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -75,7 +74,7 @@ class MetadataFieldPolicy(BaseModel):
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of MetadataFieldPolicy from a dict"""
+        """Create an instance of MetadataResult from a dict"""
         if obj is None:
             return None
 
@@ -83,9 +82,8 @@ class MetadataFieldPolicy(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "filterable": obj.get("filterable") if obj.get("filterable") is not None else True,
-            "pattern": obj.get("pattern") if obj.get("pattern") is not None else False,
-            "full_text": obj.get("full_text") if obj.get("full_text") is not None else False
+            "id": obj.get("id"),
+            "score": obj.get("score")
         })
         return _obj
 

@@ -25,13 +25,14 @@ from pydantic_core import to_jsonable_python
 
 class QueryResultItem(BaseModel):
     """
-    Represents a single result from a similarity search.  Attributes:     id (str): The identifier of the retrieved item.     distance (Optional[float]): Distance from the query vector (smaller = more similar).     metadata (Optional[Dict[str, Any]]): Additional metadata for the result.     vector (Optional[List[float]]): The retrieved vector (if included in response).
+    Represents a single result from a similarity search.  A result carries either `distance` (pure vector query; smaller = more similar) or `score` (hybrid query; the fused BM25 + vector relevance, larger = more relevant) — never both, since a text hit has no vector distance.  Attributes:     id (str): The identifier of the retrieved item.     distance (Optional[float]): Distance from the query vector (smaller = more similar).     score (Optional[float]): Fused relevance score on a hybrid (`text=...`) query (larger = more relevant).     metadata (Optional[Dict[str, Any]]): Additional metadata for the result.     vector (Optional[List[float]]): The retrieved vector (if included in response).
     """ # noqa: E501
     id: StrictStr
     distance: Optional[Union[StrictFloat, StrictInt]] = None
+    score: Optional[Union[StrictFloat, StrictInt]] = None
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="Arbitrary JSON object stored alongside the vector. Schemaless — the index's `metadata_schema` governs how fields are indexed, not what may be stored. Nested objects are addressable by dot-path in filters (`loc.city`); dates have no native type, store them as epoch millis.")
     vector: Optional[List[Union[StrictFloat, StrictInt]]] = None
-    __properties: ClassVar[List[str]] = ["id", "distance", "metadata", "vector"]
+    __properties: ClassVar[List[str]] = ["id", "distance", "score", "metadata", "vector"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -77,6 +78,11 @@ class QueryResultItem(BaseModel):
         if self.distance is None and "distance" in self.model_fields_set:
             _dict['distance'] = None
 
+        # set to None if score (nullable) is None
+        # and model_fields_set contains the field
+        if self.score is None and "score" in self.model_fields_set:
+            _dict['score'] = None
+
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
@@ -101,6 +107,7 @@ class QueryResultItem(BaseModel):
         _obj = cls.model_validate({
             "id": obj.get("id"),
             "distance": obj.get("distance"),
+            "score": obj.get("score"),
             "metadata": obj.get("metadata"),
             "vector": obj.get("vector")
         })

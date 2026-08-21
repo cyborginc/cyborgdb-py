@@ -17,23 +17,28 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
+from cyborgdb.openapi_client.models.order_by import OrderBy
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
 class QueryMetadataRequest(BaseModel):
     """
-    Request model for a metadata-only query (no query vector).  Inherits:     IndexOperationRequest: Includes `index_name` and `index_key`.  Attributes:     filters (Optional[Dict[str, Any]]): Metadata filters as a JSON-like         dictionary. Unlike `/query`, every leaf must be resolvable from         the metadata index — see the field description.     top_k (Optional[int]): Cap on the number of ids returned. `None`         returns every match. Applied AFTER `order_by`.     order_by (Optional[str]): Metadata field to sort the matches by         (post-filter). Unordered when omitted.     ascending (bool): Sort direction when `order_by` is set.
+    Request model for a metadata query (no query vector), optionally with a BM25 full-text leg.  Inherits:     IndexOperationRequest: Includes `index_name` and `index_key`.     TextSearchParams: `text` and the BM25 field knobs. When `text` is set         the result is ranked by BM25 score; a `filters` given alongside         acts as a pre-filter (the text leg scores only its survivors).         `order_by` is not supported together with `text`.  Attributes:     filters (Optional[Dict[str, Any]]): Metadata filters as a JSON-like         dictionary. Unlike `/query`, every leaf must be resolvable from         the metadata index — see the field description.     top_k (Optional[int]): Cap on the number of results returned. `None`         returns every match. Applied AFTER `order_by`.     order_by (Optional[str]): Metadata field to sort the matches by         (post-filter). Unordered when omitted. Not supported with `text`.     ascending (bool): Sort direction when `order_by` is set.
     """ # noqa: E501
+    text: Optional[StrictStr] = Field(default=None, description="Query text for a BM25 full-text leg. Requires an index with at least one full_text field. Omitted/empty leaves the query text-free.")
+    text_fields: Optional[List[StrictStr]] = Field(default=None, description="full_text fields the text leg searches; omitted means all of them. Naming a non-full_text field raises.")
+    text_field_weights: Optional[List[Union[StrictFloat, StrictInt]]] = Field(default=None, description="Per-field weights on the summed per-field BM25 scores, parallel to the searched fields. Omitted means 1.0 each.")
+    require_all_terms: Optional[StrictBool] = Field(default=None, description="Require every query term to match (AND) instead of any (OR, the default).")
     index_name: StrictStr = Field(description="ID name")
     index_key: Optional[StrictStr] = Field(default=None, description="32-byte encryption key as hex string.  Required for SDK-supplied indexes; must be omitted for KMS-backed indexes (the service resolves the KEK via the index's KMSBlob).")
     filters: Optional[Dict[str, Any]] = Field(default=None, description="Arbitrary JSON object stored alongside the vector. Schemaless — the index's `metadata_schema` governs how fields are indexed, not what may be stored. Nested objects are addressable by dot-path in filters (`loc.city`); dates have no native type, store them as epoch millis.")
     top_k: Optional[StrictInt] = Field(default=None, description="Cap on the number of ids returned; omit for all matches. Applied after `order_by`, so it yields the first N of the sorted result.")
-    order_by: Optional[StrictStr] = Field(default=None, description="Metadata field to sort matches by, applied after filtering. Unordered when omitted. Items missing the field, or holding a non-scalar, sort last.")
-    ascending: Optional[StrictBool] = Field(default=True, description="Sort direction when `order_by` is set.")
-    __properties: ClassVar[List[str]] = ["index_name", "index_key", "filters", "top_k", "order_by", "ascending"]
+    order_by: Optional[OrderBy] = None
+    ascending: Optional[StrictBool] = Field(default=True, description="Sort direction when `order_by` is a field name. Ignored when `order_by` is a dict (the dict's sign wins).")
+    __properties: ClassVar[List[str]] = ["text", "text_fields", "text_field_weights", "require_all_terms", "index_name", "index_key", "filters", "top_k", "order_by", "ascending"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -74,6 +79,29 @@ class QueryMetadataRequest(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of order_by
+        if self.order_by:
+            _dict['order_by'] = self.order_by.to_dict()
+        # set to None if text (nullable) is None
+        # and model_fields_set contains the field
+        if self.text is None and "text" in self.model_fields_set:
+            _dict['text'] = None
+
+        # set to None if text_fields (nullable) is None
+        # and model_fields_set contains the field
+        if self.text_fields is None and "text_fields" in self.model_fields_set:
+            _dict['text_fields'] = None
+
+        # set to None if text_field_weights (nullable) is None
+        # and model_fields_set contains the field
+        if self.text_field_weights is None and "text_field_weights" in self.model_fields_set:
+            _dict['text_field_weights'] = None
+
+        # set to None if require_all_terms (nullable) is None
+        # and model_fields_set contains the field
+        if self.require_all_terms is None and "require_all_terms" in self.model_fields_set:
+            _dict['require_all_terms'] = None
+
         # set to None if index_key (nullable) is None
         # and model_fields_set contains the field
         if self.index_key is None and "index_key" in self.model_fields_set:
@@ -106,11 +134,15 @@ class QueryMetadataRequest(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "text": obj.get("text"),
+            "text_fields": obj.get("text_fields"),
+            "text_field_weights": obj.get("text_field_weights"),
+            "require_all_terms": obj.get("require_all_terms"),
             "index_name": obj.get("index_name"),
             "index_key": obj.get("index_key"),
             "filters": obj.get("filters"),
             "top_k": obj.get("top_k"),
-            "order_by": obj.get("order_by"),
+            "order_by": OrderBy.from_dict(obj["order_by"]) if obj.get("order_by") is not None else None,
             "ascending": obj.get("ascending") if obj.get("ascending") is not None else True
         })
         return _obj

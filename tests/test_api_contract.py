@@ -281,6 +281,9 @@ class TestAPIContract(unittest.TestCase):
                 "metric": {"position": 5, "default": None},
                 "storage_precision": {"position": 6, "default": None},
                 "metadata_schema": {"position": 7, "default": None},
+                "text_fields": {"position": 8, "default": None},
+                "bm25_k1": {"position": 9, "default": None},
+                "bm25_b": {"position": 10, "default": None},
             },
             "Client.create_index",
         )
@@ -419,6 +422,10 @@ class TestAPIContract(unittest.TestCase):
                 "top_k": {"position": 1, "default": None},
                 "order_by": {"position": 2, "default": None},
                 "ascending": {"position": 3, "default": True},
+                "text": {"position": 4, "default": None},
+                "text_fields": {"position": 5, "default": None},
+                "text_field_weights": {"position": 6, "default": None},
+                "require_all_terms": {"position": 7, "default": None},
             },
             "EncryptedIndex.query_metadata",
         )
@@ -450,32 +457,29 @@ class TestAPIContract(unittest.TestCase):
             "EncryptedIndex.get",
         )
 
-        # Query has many optional parameters
-        sig = inspect.signature(self.index.query)
-        params = dict(sig.parameters)
-        if "self" in params:
-            del params["self"]
-
-        # Check query parameters exist and have defaults
-        expected_query_params = [
-            "query_vectors",
-            "query_contents",
-            "top_k",
-            "n_probes",
-            "filters",
-            "include",
-            "greedy",
-            "rerank_mult",
-        ]
-        for param_name in expected_query_params:
-            if param_name in params:
-                param = params[param_name]
-                # All query parameters should have defaults (be optional)
-                self.assertNotEqual(
-                    param.default,
-                    inspect.Parameter.empty,
-                    f"query.{param_name} should have a default value",
-                )
+        # Query is all-optional: the vector/content params plus the hybrid
+        # (BM25 + vector) knobs that a full_text index unlocks.
+        validate_function_signature(
+            self.index.query,
+            {
+                "query_vectors": {"position": 0, "default": None},
+                "query_contents": {"position": 1, "default": None},
+                "top_k": {"position": 2, "default": None},
+                "n_probes": {"position": 3, "default": None},
+                "filters": {"position": 4, "default": None},
+                "include": {"position": 5, "default": None},
+                "greedy": {"position": 6, "default": None},
+                "rerank_mult": {"position": 7, "default": None},
+                "text": {"position": 8, "default": None},
+                "text_fields": {"position": 9, "default": None},
+                "text_field_weights": {"position": 10, "default": None},
+                "require_all_terms": {"position": 11, "default": None},
+                "alpha": {"position": 12, "default": None},
+                "rrf_k": {"position": 13, "default": None},
+                "window_mult": {"position": 14, "default": None},
+            },
+            "EncryptedIndex.query",
+        )
 
         validate_function_signature(
             self.index.train,

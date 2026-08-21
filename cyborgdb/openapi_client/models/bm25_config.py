@@ -17,20 +17,20 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
-class MetadataFieldPolicy(BaseModel):
+class BM25Config(BaseModel):
     """
-    Per-field metadata indexing policy (one entry of `metadata_schema`).  Metadata itself stays schemaless — this is indexing policy, not validation.  Fields omitted from `metadata_schema` inherit the index-everything default.  Attributes:     filterable: Build inverted-index postings for the field, so         filters on it resolve from the index (pre-filter).  When         `false`, the field is still stored and still filterable, but         a filter referencing it forces the dense forward-blob         post-filter path — cheaper writes, slower filtered queries.     pattern: Additionally build the field's regex dictionary, which         makes `$regex` / `$contains` resolvable from the index.         Requires `filterable=true`.     full_text: Route the field's string value through the BM25         analyzer instead of exact-match indexing.  This is what makes         the field searchable by `query_metadata(text=...)` and hybrid         `query(text=...)`.  A field is either analyzed or exact-match         indexed, so `full_text=true` is incompatible with both         `pattern=true` and an explicit `filterable=true`, and implies         `filterable=false`.
+    BM25 scoring config an index reports back via `index_config()`.  Present only for indexes with at least one `full_text` field. `k1` and `b` are the tuning parameters supplied at create time (or their defaults); `analyzer_version` identifies the tokenizer/stemmer pipeline the corpus was indexed with.
     """ # noqa: E501
-    filterable: Optional[StrictBool] = True
-    pattern: Optional[StrictBool] = False
-    full_text: Optional[StrictBool] = False
-    __properties: ClassVar[List[str]] = ["filterable", "pattern", "full_text"]
+    k1: Union[StrictFloat, StrictInt]
+    b: Union[StrictFloat, StrictInt]
+    analyzer_version: Optional[StrictStr] = None
+    __properties: ClassVar[List[str]] = ["k1", "b", "analyzer_version"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -50,7 +50,7 @@ class MetadataFieldPolicy(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of MetadataFieldPolicy from a JSON string"""
+        """Create an instance of BM25Config from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -71,11 +71,16 @@ class MetadataFieldPolicy(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if analyzer_version (nullable) is None
+        # and model_fields_set contains the field
+        if self.analyzer_version is None and "analyzer_version" in self.model_fields_set:
+            _dict['analyzer_version'] = None
+
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of MetadataFieldPolicy from a dict"""
+        """Create an instance of BM25Config from a dict"""
         if obj is None:
             return None
 
@@ -83,9 +88,9 @@ class MetadataFieldPolicy(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "filterable": obj.get("filterable") if obj.get("filterable") is not None else True,
-            "pattern": obj.get("pattern") if obj.get("pattern") is not None else False,
-            "full_text": obj.get("full_text") if obj.get("full_text") is not None else False
+            "k1": obj.get("k1"),
+            "b": obj.get("b"),
+            "analyzer_version": obj.get("analyzer_version")
         })
         return _obj
 

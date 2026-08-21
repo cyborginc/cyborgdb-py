@@ -28,6 +28,7 @@ __all__ = [
     "ApiKeyError",
     "ApiAttributeError",
     "ApiException",
+    "BM25Config",
     "BatchQueryRequest",
     "BinaryQueryBatch",
     "BinaryQueryRequest",
@@ -55,6 +56,8 @@ __all__ = [
     "ListUsersResponse",
     "LocationInner",
     "MetadataFieldPolicy",
+    "MetadataResult",
+    "OrderBy",
     "QueryMetadataRequest",
     "QueryMetadataResponse",
     "QueryRequest",
@@ -84,6 +87,7 @@ from cyborgdb.openapi_client.exceptions import ApiAttributeError as ApiAttribute
 from cyborgdb.openapi_client.exceptions import ApiException as ApiException
 
 # import models into sdk package
+from cyborgdb.openapi_client.models.bm25_config import BM25Config as BM25Config
 from cyborgdb.openapi_client.models.batch_query_request import BatchQueryRequest as BatchQueryRequest
 from cyborgdb.openapi_client.models.binary_query_batch import BinaryQueryBatch as BinaryQueryBatch
 from cyborgdb.openapi_client.models.binary_query_request import BinaryQueryRequest as BinaryQueryRequest
@@ -111,6 +115,8 @@ from cyborgdb.openapi_client.models.list_ids_response import ListIDsResponse as 
 from cyborgdb.openapi_client.models.list_users_response import ListUsersResponse as ListUsersResponse
 from cyborgdb.openapi_client.models.location_inner import LocationInner as LocationInner
 from cyborgdb.openapi_client.models.metadata_field_policy import MetadataFieldPolicy as MetadataFieldPolicy
+from cyborgdb.openapi_client.models.metadata_result import MetadataResult as MetadataResult
+from cyborgdb.openapi_client.models.order_by import OrderBy as OrderBy
 from cyborgdb.openapi_client.models.query_metadata_request import QueryMetadataRequest as QueryMetadataRequest
 from cyborgdb.openapi_client.models.query_metadata_response import QueryMetadataResponse as QueryMetadataResponse
 from cyborgdb.openapi_client.models.query_request import QueryRequest as QueryRequest

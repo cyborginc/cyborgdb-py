@@ -40,6 +40,11 @@ EVEN = {f"i{i}" for i in range(0, N, 2)}
 ODD = {f"i{i}" for i in range(1, N, 2)}
 
 
+def _ids(rows):
+    """Pull the ids out of query_metadata's `{"id"}` rows (core's shape)."""
+    return [row["id"] for row in rows]
+
+
 class TestQueryMetadata(unittest.TestCase):
     def setUp(self):
         self.client = cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
@@ -89,31 +94,39 @@ class TestQueryMetadata(unittest.TestCase):
         self.assertEqual(
             self.index.metadata_schema,
             {
-                "color": {"filterable": True, "pattern": True},
-                "shape": {"filterable": True, "pattern": False},
-                "hidden": {"filterable": False, "pattern": False},
+                "color": {"filterable": True, "pattern": True, "full_text": False},
+                "shape": {"filterable": True, "pattern": False, "full_text": False},
+                "hidden": {"filterable": False, "pattern": False, "full_text": False},
             },
         )
 
     # -- happy paths ------------------------------------------------------ #
 
     def test_no_filters_matches_all(self):
-        self.assertEqual(set(self.index.query_metadata()), EVEN | ODD)
+        self.assertEqual(set(_ids(self.index.query_metadata())), EVEN | ODD)
+
+    def test_rows_are_id_dicts_without_score(self):
+        # Filter-only rows match core's list[MetadataResult]: {"id"} only,
+        # no `score` key (nothing to score without `text`).
+        rows = self.index.query_metadata({"color": "red"})
+        self.assertTrue(all(row == {"id": row["id"]} for row in rows))
 
     def test_equality(self):
-        self.assertEqual(set(self.index.query_metadata({"color": "red"})), EVEN)
+        self.assertEqual(set(_ids(self.index.query_metadata({"color": "red"}))), EVEN)
 
     def test_nested_dot_path(self):
-        self.assertEqual(set(self.index.query_metadata({"loc.city": "paris"})), EVEN)
+        self.assertEqual(
+            set(_ids(self.index.query_metadata({"loc.city": "paris"}))), EVEN
+        )
 
     def test_regex_on_pattern_field(self):
         self.assertEqual(
-            set(self.index.query_metadata({"color": {"$regex": "^r"}})), EVEN
+            set(_ids(self.index.query_metadata({"color": {"$regex": "^r"}}))), EVEN
         )
 
     def test_contains_on_pattern_field(self):
         self.assertEqual(
-            set(self.index.query_metadata({"color": {"$contains": "ree"}})), ODD
+            set(_ids(self.index.query_metadata({"color": {"$contains": "ree"}}))), ODD
         )
 
     def test_no_match_returns_empty(self):
@@ -124,18 +137,22 @@ class TestQueryMetadata(unittest.TestCase):
     def test_order_by_ascending_and_descending(self):
         all_ranks = {"rank": {"$gte": 0}}
         self.assertEqual(
-            self.index.query_metadata(all_ranks, order_by="rank"),
+            _ids(self.index.query_metadata(all_ranks, order_by="rank")),
             [f"i{i}" for i in range(N)],
         )
         self.assertEqual(
-            self.index.query_metadata(all_ranks, order_by="rank", ascending=False),
+            _ids(
+                self.index.query_metadata(all_ranks, order_by="rank", ascending=False)
+            ),
             [f"i{i}" for i in reversed(range(N))],
         )
 
     def test_order_by_mongo_style_dict(self):
         # {field: -1} is core's form; the wrapper normalizes it for the service.
         self.assertEqual(
-            self.index.query_metadata({"rank": {"$gte": 0}}, order_by={"rank": -1}),
+            _ids(
+                self.index.query_metadata({"rank": {"$gte": 0}}, order_by={"rank": -1})
+            ),
             [f"i{i}" for i in reversed(range(N))],
         )
 
@@ -145,7 +162,11 @@ class TestQueryMetadata(unittest.TestCase):
 
     def test_top_k_applies_after_sort(self):
         self.assertEqual(
-            self.index.query_metadata({"rank": {"$gte": 0}}, order_by="rank", top_k=2),
+            _ids(
+                self.index.query_metadata(
+                    {"rank": {"$gte": 0}}, order_by="rank", top_k=2
+                )
+            ),
             ["i0", "i1"],
         )
 
@@ -200,7 +221,7 @@ class TestQueryMetadataDefaultPosture(unittest.TestCase):
         self.assertEqual(self.index.metadata_schema, {})
 
     def test_equality_works_without_opt_in(self):
-        self.assertEqual(set(self.index.query_metadata({"color": "red"})), EVEN)
+        self.assertEqual(set(_ids(self.index.query_metadata({"color": "red"}))), EVEN)
 
     def test_regex_needs_a_pattern_field(self):
         # Default posture indexes every field but builds no regex dictionary,
