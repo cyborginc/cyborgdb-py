@@ -1,10 +1,10 @@
 """TurboQuant storage precision: the `storage_precision` create-time knob and
-its three new quantized tiers `tq8` / `tq6` / `tq4`.
+its four quantized tiers `tq12` / `tq8` / `tq6` / `tq4`.
 
 `storage_precision` picks the on-disk rerank-vector format, chosen at create
 and immutable. Alongside the existing `float32` / `float16`, the TurboQuant
-tiers pack 8 / 6 / 4 bits per dimension, trading a little recall and latency
-for a large storage saving. `tq4` is only valid with the cosine metric.
+tiers pack 12 / 8 / 6 / 4 bits per dimension, trading a little recall and
+latency for a large storage saving. Every tier works with every metric.
 
 Two layers of coverage:
 
@@ -38,8 +38,8 @@ load_dotenv(".env.local")
 BASE_URL = os.getenv("CYBORGDB_BASE_URL", "http://localhost:8000")
 API_KEY = os.getenv("CYBORGDB_API_KEY", "")
 
-VALID_PRECISIONS = ["float32", "float16", "tq8", "tq6", "tq4"]
-TURBOQUANT_TIERS = ["tq8", "tq6", "tq4"]
+VALID_PRECISIONS = ["float32", "float16", "tq12", "tq8", "tq6", "tq4"]
+TURBOQUANT_TIERS = ["tq12", "tq8", "tq6", "tq4"]
 
 # Enough vectors to clear the core training floor (train() silently no-ops
 # below 10k vectors) while staying quick.
@@ -118,9 +118,8 @@ class TurboQuantModelTest(unittest.TestCase):
 class TurboQuantIntegrationTest(unittest.TestCase):
     """End-to-end: each TurboQuant tier survives the full index lifecycle.
 
-    One shared, cosine-metric corpus is built once (cosine is required by
-    `tq4` and valid for every other tier). Each tier gets its own index so a
-    failure names the tier that broke.
+    One shared, cosine-metric corpus is built once (cosine is valid for every
+    tier). Each tier gets its own index so a failure names the tier that broke.
     """
 
     @classmethod
@@ -188,6 +187,11 @@ class TurboQuantIntegrationTest(unittest.TestCase):
             f"{precision}: self-recall {recall:.2f} below {min_recall}",
         )
 
+    def test_tq12_lifecycle(self):
+        # tq12 is the least aggressive tier, so recall should be highest.
+        index = self._build_trained_index("tq12")
+        self._assert_self_recall(index, "tq12", min_recall=0.9)
+
     def test_tq8_lifecycle(self):
         index = self._build_trained_index("tq8")
         self._assert_self_recall(index, "tq8", min_recall=0.9)
@@ -197,21 +201,21 @@ class TurboQuantIntegrationTest(unittest.TestCase):
         self._assert_self_recall(index, "tq6", min_recall=0.85)
 
     def test_tq4_lifecycle(self):
-        # tq4 is the most aggressive tier and is only valid with cosine.
+        # tq4 is the most aggressive tier; it works with every metric.
         index = self._build_trained_index("tq4")
         self._assert_self_recall(index, "tq4", min_recall=0.7)
 
-    def test_tq4_requires_cosine_metric(self):
-        # tq4 with a non-cosine metric must be rejected by the service.
-        with self.assertRaises(ValueError):
-            index = self.client.create_index(
-                index_name=f"tq4_bad_{uuid.uuid4().hex[:8]}",
-                index_key=cyborgdb.Client.generate_key(),
-                dimension=DIM,
-                metric="euclidean",
-                storage_precision="tq4",
-            )
-            self.addCleanup(self._safe_delete, index)
+    def test_tq4_euclidean_metric(self):
+        # tq4 is valid with a non-cosine metric too.
+        index = self.client.create_index(
+            index_name=f"tq4_euclidean_{uuid.uuid4().hex[:8]}",
+            index_key=cyborgdb.Client.generate_key(),
+            dimension=DIM,
+            metric="euclidean",
+            storage_precision="tq4",
+        )
+        self.addCleanup(self._safe_delete, index)
+        self.assertIsNotNone(index)
 
 
 if __name__ == "__main__":
