@@ -1,22 +1,25 @@
-"""TurboQuant storage precision: the `storage_precision` create-time knob and
-its four quantized tiers `tq12` / `tq8` / `tq6` / `tq4`.
+"""Storage precision: the `storage_precision` create-time knob and its six
+tiers `float32` / `float16` / `tq12` / `tq8` / `tq6` / `tq4`.
 
 `storage_precision` picks the on-disk rerank-vector format, chosen at create
-and immutable. Alongside the existing `float32` / `float16`, the TurboQuant
-tiers pack 12 / 8 / 6 / 4 bits per dimension, trading a little recall and
-latency for a large storage saving. Every tier works with every metric.
+and immutable. `float32` / `float16` keep the vectors in full/half float; the
+four TurboQuant tiers pack 12 / 8 / 6 / 4 bits per dimension, trading a little
+recall and latency for a large storage saving. Every tier works with every
+metric.
 
 Two layers of coverage:
 
 * Model-level (no service) — `CreateIndexRequest` accepts every valid tier,
   rejects anything else, and serializes the value through to the wire dict.
-  These are the direct, deterministic checks that the tiers were wired in.
-* End-to-end (live service on localhost:8000) — each tier survives the full
-  create -> upsert -> train -> query round-trip and returns sane, high
-  self-recall results. Skipped automatically when no service is reachable.
+  These are the direct, deterministic checks that the knob was wired in.
+* End-to-end (live service on localhost:8000) — each precision survives the
+  full create -> upsert -> train -> query round-trip and returns sane, high
+  self-recall results. The recall floor scales with the precision: the float
+  tiers are near-exact, the quantized tiers tolerate progressively more loss.
+  Skipped automatically when no service is reachable.
 
 The index-info response does not echo `storage_precision` back, so the
-end-to-end layer verifies the tiers by behavior, not by reading the value
+end-to-end layer verifies each tier by behavior, not by reading the value
 back off the index.
 """
 
@@ -38,7 +41,18 @@ load_dotenv(".env.local")
 BASE_URL = os.getenv("CYBORGDB_BASE_URL", "http://localhost:8000")
 API_KEY = os.getenv("CYBORGDB_API_KEY", "")
 
-VALID_PRECISIONS = ["float32", "float16", "tq12", "tq8", "tq6", "tq4"]
+# Every valid `storage_precision`, paired with the self-recall floor it should
+# clear end-to-end. The float tiers are effectively exact; the TurboQuant tiers
+# tolerate progressively more quantization loss as the bit budget shrinks.
+PRECISION_RECALL = {
+    "float32": 0.95,
+    "float16": 0.95,
+    "tq12": 0.9,
+    "tq8": 0.9,
+    "tq6": 0.85,
+    "tq4": 0.7,
+}
+VALID_PRECISIONS = list(PRECISION_RECALL)
 TURBOQUANT_TIERS = ["tq12", "tq8", "tq6", "tq4"]
 
 # Enough vectors to clear the core training floor (train() silently no-ops
@@ -62,7 +76,7 @@ def _service_up() -> bool:
 SERVICE_UP = _service_up()
 
 
-class TurboQuantModelTest(unittest.TestCase):
+class StoragePrecisionModelTest(unittest.TestCase):
     """Model-level contract for `storage_precision` — no service required."""
 
     def test_all_valid_precisions_accepted(self):
@@ -72,13 +86,6 @@ class TurboQuantModelTest(unittest.TestCase):
                     index_name="idx", storage_precision=precision
                 )
                 self.assertEqual(request.storage_precision, precision)
-
-    def test_turboquant_tiers_accepted(self):
-        # The three tiers this change adds, called out explicitly.
-        for tier in TURBOQUANT_TIERS:
-            with self.subTest(tier=tier):
-                request = CreateIndexRequest(index_name="idx", storage_precision=tier)
-                self.assertEqual(request.storage_precision, tier)
 
     def test_storage_precision_optional(self):
         request = CreateIndexRequest(index_name="idx")
@@ -98,28 +105,29 @@ class TurboQuantModelTest(unittest.TestCase):
             self.assertIn(tier, message)
 
     def test_precision_serialized_to_wire_dict(self):
-        for tier in TURBOQUANT_TIERS:
-            with self.subTest(tier=tier):
+        for precision in VALID_PRECISIONS:
+            with self.subTest(precision=precision):
                 payload = CreateIndexRequest(
-                    index_name="idx", storage_precision=tier
+                    index_name="idx", storage_precision=precision
                 ).to_dict()
-                self.assertEqual(payload["storage_precision"], tier)
+                self.assertEqual(payload["storage_precision"], precision)
 
     def test_precision_round_trips_through_from_dict(self):
-        for tier in TURBOQUANT_TIERS:
-            with self.subTest(tier=tier):
+        for precision in VALID_PRECISIONS:
+            with self.subTest(precision=precision):
                 restored = CreateIndexRequest.from_dict(
-                    {"index_name": "idx", "storage_precision": tier}
+                    {"index_name": "idx", "storage_precision": precision}
                 )
-                self.assertEqual(restored.storage_precision, tier)
+                self.assertEqual(restored.storage_precision, precision)
 
 
 @unittest.skipUnless(SERVICE_UP, f"no CyborgDB service reachable at {BASE_URL}")
-class TurboQuantIntegrationTest(unittest.TestCase):
-    """End-to-end: each TurboQuant tier survives the full index lifecycle.
+class StoragePrecisionIntegrationTest(unittest.TestCase):
+    """End-to-end: each storage precision survives the full index lifecycle.
 
     One shared, cosine-metric corpus is built once (cosine is valid for every
-    tier). Each tier gets its own index so a failure names the tier that broke.
+    tier). Each precision gets its own index so a failure names the tier that
+    broke.
     """
 
     @classmethod
@@ -135,7 +143,7 @@ class TurboQuantIntegrationTest(unittest.TestCase):
     def _build_trained_index(self, precision):
         """Create a cosine index at `precision`, load it, train it, return it."""
         index = self.client.create_index(
-            index_name=f"tq_{precision}_{uuid.uuid4().hex[:8]}",
+            index_name=f"sp_{precision}_{uuid.uuid4().hex[:8]}",
             index_key=cyborgdb.Client.generate_key(),
             dimension=DIM,
             metric="cosine",
@@ -166,8 +174,8 @@ class TurboQuantIntegrationTest(unittest.TestCase):
         """Query with vectors that are in the index; each should find itself.
 
         Exhaustive search (n_probes == n_lists) removes IVF partitioning as a
-        variable, so the only recall loss left is TurboQuant's quantization —
-        which the threshold tolerates.
+        variable, so the only recall loss left is the storage precision's
+        quantization — which the threshold tolerates.
         """
         probe_ids = list(range(num_probe))
         results = index.query(
@@ -187,28 +195,18 @@ class TurboQuantIntegrationTest(unittest.TestCase):
             f"{precision}: self-recall {recall:.2f} below {min_recall}",
         )
 
-    def test_tq12_lifecycle(self):
-        # tq12 is the least aggressive tier, so recall should be highest.
-        index = self._build_trained_index("tq12")
-        self._assert_self_recall(index, "tq12", min_recall=0.9)
+    def test_lifecycle_all_precisions(self):
+        """Every precision completes the lifecycle and clears its recall floor."""
+        for precision, min_recall in PRECISION_RECALL.items():
+            with self.subTest(precision=precision):
+                index = self._build_trained_index(precision)
+                self._assert_self_recall(index, precision, min_recall=min_recall)
 
-    def test_tq8_lifecycle(self):
-        index = self._build_trained_index("tq8")
-        self._assert_self_recall(index, "tq8", min_recall=0.9)
-
-    def test_tq6_lifecycle(self):
-        index = self._build_trained_index("tq6")
-        self._assert_self_recall(index, "tq6", min_recall=0.85)
-
-    def test_tq4_lifecycle(self):
-        # tq4 is the most aggressive tier; it works with every metric.
-        index = self._build_trained_index("tq4")
-        self._assert_self_recall(index, "tq4", min_recall=0.7)
-
-    def test_tq4_euclidean_metric(self):
-        # tq4 is valid with a non-cosine metric too.
+    def test_non_cosine_metric(self):
+        # storage_precision is orthogonal to the metric; tq4 (the most
+        # aggressive tier) is valid with a non-cosine metric too.
         index = self.client.create_index(
-            index_name=f"tq4_euclidean_{uuid.uuid4().hex[:8]}",
+            index_name=f"sp_tq4_euclidean_{uuid.uuid4().hex[:8]}",
             index_key=cyborgdb.Client.generate_key(),
             dimension=DIM,
             metric="euclidean",
