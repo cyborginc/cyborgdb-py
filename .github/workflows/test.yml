@@ -158,12 +158,10 @@ jobs:
             exit 1
           fi
           
-          # Run all tests
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            pytest tests/quick_flow_test.py tests/test_kms_byok.py -v --cov=cyborgdb --cov-report=term-missing --cov-append
-          else
-            pytest tests/ -v --cov=cyborgdb --cov-report=term-missing --cov-append --ignore=tests/test_api_contract.py
-          fi
+          # Run the full test suite on every trigger (PRs and main).
+          # test_api_contract.py runs separately in the next step so it does not
+          # affect the coverage of the other tests.
+          pytest tests/ -v --cov=cyborgdb --cov-report=term-missing --cov-append --ignore=tests/test_api_contract.py
           
           # Store the server pid for later cleanup
           echo "Standard server PID: $(cat server-standard.pid)"

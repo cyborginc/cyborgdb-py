@@ -5,7 +5,7 @@ This module provides a Python client for interacting with the CyborgDB REST API.
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 import secrets
 import logging
 from pydantic import ValidationError
@@ -191,7 +191,9 @@ class Client:
         dimension: Optional[int] = None,
         embedding_model: Optional[str] = None,
         metric: Optional[str] = None,
-        storage_precision: Optional[str] = None,
+        storage_precision: Optional[
+            Literal["float32", "float16", "tq12", "tq8", "tq6", "tq4"]
+        ] = None,
         metadata_schema: Optional[Dict[str, Dict[str, bool]]] = None,
         text_fields: Optional[List[str]] = None,
         bm25_k1: Optional[float] = None,
@@ -215,6 +217,14 @@ class Client:
         source, so an SDK-supplied key is contradictory. Note that ``none`` is
         not a registry slot type — the no-KMS path is reached by omitting
         ``kms_name``, not by naming a ``provider: none`` slot.
+
+        ``storage_precision`` selects the on-disk rerank-vector format, chosen
+        at create time and immutable. ``float32`` (the default) keeps full
+        precision; ``float16`` halves storage at a small precision cost. The
+        four TurboQuant tiers ``tq12`` / ``tq8`` / ``tq6`` / ``tq4`` pack
+        12 / 8 / 6 / 4 bits per dimension, trading a little recall and latency
+        for a large storage saving — ``tq4`` is the most aggressive (~8x
+        smaller, ~94% recall@100). Every tier works with every metric.
 
         ``metadata_schema`` is the per-field metadata indexing policy, fixed at
         create time and immutable::

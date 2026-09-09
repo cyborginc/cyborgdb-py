@@ -25,7 +25,7 @@ from pydantic_core import to_jsonable_python
 
 class MetadataResult(BaseModel):
     """
-    One row of a ``query_metadata`` result: the item id, plus a BM25 ``score`` when there is one.  ``score`` is present only on the text path. A filter-only query has nothing to score, so the key is absent rather than ``None`` — the same rule ``query()`` follows for ``distance`` and ``score``.  This is the wire model used to deserialize the service response; the SDK reprojects it into the plain-dict ``MetadataResult`` rows that ``EncryptedIndex.query_metadata`` returns, matching ``cyborgdb_core``.
+    One row of a ``query_metadata`` result: the item id, plus a BM25 score when there is one.  ``score`` is present only on the text path. A filter-only query has nothing to score, so the key is absent rather than ``None`` — the same rule ``query()`` follows for ``distance`` and ``score``. Callers do not branch in practice: whoever passed ``text`` knows the key is there.  Split across two TypedDicts because that is how a per-key optional is expressed before ``typing.NotRequired`` (3.11); the package supports 3.10, and inheriting with ``total=False`` keeps ``id`` required while making ``score`` optional — one result type, no union. ``typing_extensions``' TypedDict is preferred when installed (see the import above) so that pydantic consumers can use this type in models on Python < 3.12, but it is not a dependency.  Note the package ships no ``py.typed`` marker, so this reaches editors reading the source but not a consumer's mypy/pyright — see the plan's v2 note.
     """ # noqa: E501
     id: StrictStr
     score: Optional[Union[StrictFloat, StrictInt]] = None
