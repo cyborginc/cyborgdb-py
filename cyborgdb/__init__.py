@@ -5,6 +5,14 @@
 # Re-export classes from client module
 from .client.client import Client
 
+# Re-export public exception hierarchy
+from .exceptions import (
+    CyborgError,
+    AuthenticationError,
+    ServiceUnavailableError,
+    ConnectionTimeoutError,
+)
+
 # Re-export from encrypted_index.py
 # MetadataResult is re-exported so callers can annotate query_metadata rows,
 # mirroring cyborgdb_core's public surface.
@@ -58,4 +66,8 @@ __all__ = [
     "SAMPLE_DATASETS_BASE_URL",
     "DEFAULT_SAMPLE_DATASET",
     "__version__",
+    "CyborgError",
+    "AuthenticationError",
+    "ServiceUnavailableError",
+    "ConnectionTimeoutError",
 ]

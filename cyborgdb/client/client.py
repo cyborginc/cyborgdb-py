@@ -20,13 +20,25 @@ try:
     from cyborgdb.openapi_client.api_client import ApiClient, Configuration
     from cyborgdb.openapi_client.api.default_api import DefaultApi
 
-    from cyborgdb.openapi_client.exceptions import ApiException
+    from cyborgdb.openapi_client.exceptions import (
+        ApiException,
+        UnauthorizedException,
+        ForbiddenException,
+        ServiceException,
+    )
 except ImportError:
     raise ImportError(
         "Failed to import openapi_client. Make sure the OpenAPI client library is properly installed."
     )
 
+import urllib3.exceptions
+
 from cyborgdb.client.encrypted_index import EncryptedIndex
+from cyborgdb.exceptions import (
+    AuthenticationError,
+    ServiceUnavailableError,
+    ConnectionTimeoutError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -178,10 +190,18 @@ class Client:
         try:
             response = self.api.list_indexes_v1_indexes_list_get()
             return response.indexes
+        except (UnauthorizedException, ForbiddenException) as e:
+            raise AuthenticationError(str(e)) from e
+        except ServiceException as e:
+            raise ServiceUnavailableError(str(e)) from e
         except ApiException as e:
             error_msg = f"Failed to list indexes: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
+        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+            raise ServiceUnavailableError(str(e)) from e
+        except urllib3.exceptions.TimeoutError as e:
+            raise ConnectionTimeoutError(str(e)) from e
 
     def create_index(
         self,
@@ -282,10 +302,18 @@ class Client:
 
             return index
 
+        except (UnauthorizedException, ForbiddenException) as e:
+            raise AuthenticationError(str(e)) from e
+        except ServiceException as e:
+            raise ServiceUnavailableError(str(e)) from e
         except ApiException as e:
             error_msg = f"Failed to create index: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
+        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+            raise ServiceUnavailableError(str(e)) from e
+        except urllib3.exceptions.TimeoutError as e:
+            raise ConnectionTimeoutError(str(e)) from e
         except ValidationError as ve:
             error_msg = f"Validation error while creating index: {ve}"
             logger.error(error_msg)
@@ -323,10 +351,18 @@ class Client:
 
             return index
 
+        except (UnauthorizedException, ForbiddenException) as e:
+            raise AuthenticationError(str(e)) from e
+        except ServiceException as e:
+            raise ServiceUnavailableError(str(e)) from e
         except ApiException as e:
             error_msg = f"Failed to load index '{index_name}': {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
+        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+            raise ServiceUnavailableError(str(e)) from e
+        except urllib3.exceptions.TimeoutError as e:
+            raise ConnectionTimeoutError(str(e)) from e
         except ValidationError as ve:
             error_msg = f"Validation error while loading index '{index_name}': {ve}"
             logger.error(error_msg)
@@ -344,7 +380,15 @@ class Client:
         """
         try:
             return self.api.health_check_v1_health_get()
+        except (UnauthorizedException, ForbiddenException) as e:
+            raise AuthenticationError(str(e)) from e
+        except ServiceException as e:
+            raise ServiceUnavailableError(str(e)) from e
         except ApiException as e:
             error_msg = f"Failed to get health status: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
+        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+            raise ServiceUnavailableError(str(e)) from e
+        except urllib3.exceptions.TimeoutError as e:
+            raise ConnectionTimeoutError(str(e)) from e
