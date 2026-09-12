@@ -198,7 +198,10 @@ class Client:
             error_msg = f"Failed to list indexes: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
@@ -310,7 +313,10 @@ class Client:
             error_msg = f"Failed to create index: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
@@ -359,7 +365,10 @@ class Client:
             error_msg = f"Failed to load index '{index_name}': {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
@@ -388,7 +397,10 @@ class Client:
             error_msg = f"Failed to get health status: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
