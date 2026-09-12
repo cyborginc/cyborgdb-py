@@ -259,7 +259,10 @@ class EncryptedIndex:
             error_msg = f"Failed to delete index: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
@@ -330,7 +333,10 @@ class EncryptedIndex:
             error_msg = f"Failed to retrieve items: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
@@ -385,7 +391,10 @@ class EncryptedIndex:
             error_msg = f"Failed to train index: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
@@ -528,7 +537,10 @@ class EncryptedIndex:
             error_msg = f"Failed to upsert items: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
@@ -607,7 +619,10 @@ class EncryptedIndex:
             error_msg = f"Failed to upsert items (binary): {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
@@ -642,7 +657,10 @@ class EncryptedIndex:
             error_msg = f"Failed to delete items: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
@@ -898,7 +916,10 @@ class EncryptedIndex:
             error_msg = f"Query failed: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
@@ -1046,7 +1067,10 @@ class EncryptedIndex:
             error_msg = f"Failed to query (binary): {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
@@ -1158,7 +1182,10 @@ class EncryptedIndex:
             error_msg = f"Failed to query metadata: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
@@ -1187,7 +1214,10 @@ class EncryptedIndex:
             error_msg = f"Failed to list document IDs: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
@@ -1215,7 +1245,10 @@ class EncryptedIndex:
             error_msg = f"Failed to get index training status: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
@@ -1270,7 +1303,10 @@ class EncryptedIndex:
             error_msg = f"Failed to create user: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
@@ -1303,7 +1339,10 @@ class EncryptedIndex:
             error_msg = f"Failed to list users: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
@@ -1335,7 +1374,10 @@ class EncryptedIndex:
             error_msg = f"Failed to delete user: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        except (urllib3.exceptions.MaxRetryError, urllib3.exceptions.NewConnectionError) as e:
+        except (
+            urllib3.exceptions.MaxRetryError,
+            urllib3.exceptions.NewConnectionError,
+        ) as e:
             raise ServiceUnavailableError(str(e)) from e
         except urllib3.exceptions.TimeoutError as e:
             raise ConnectionTimeoutError(str(e)) from e
