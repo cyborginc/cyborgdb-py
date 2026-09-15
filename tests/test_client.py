@@ -4,6 +4,7 @@ import numpy as np
 import time
 from dotenv import load_dotenv
 from cyborgdb import Client, EncryptedIndex
+from cyborgdb.exceptions import AuthenticationError, CyborgError
 
 # Load environment variables from .env.local
 load_dotenv(".env.local")
@@ -174,3 +175,15 @@ class ClientIntegrationTest(unittest.TestCase):
         for i, result_list in enumerate(results):
             self.assertEqual(len(result_list), 5)
             self.assertEqual(result_list[0]["id"], f"qbin_{i}")
+
+
+@unittest.skipUnless(os.getenv("CYBORGDB_SERVICE_URL"), "CYBORGDB_SERVICE_URL not set")
+class AuthenticationErrorIntegrationTest(unittest.TestCase):
+    """Integration test: wrong API key raises AuthenticationError."""
+
+    def test_wrong_api_key_raises_authentication_error(self):
+        service_url = os.getenv("CYBORGDB_SERVICE_URL")
+        client = Client(base_url=service_url, api_key="WRONG_KEY")
+        with self.assertRaises(AuthenticationError) as ctx:
+            client.list_indexes()
+        self.assertIsInstance(ctx.exception, CyborgError)
