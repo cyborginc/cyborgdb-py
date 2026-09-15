@@ -62,8 +62,8 @@ jobs:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_TOKEN }}
           CA_AWS_ACCOUNT_ID: "op://CyborgDB/CyborgDB Dev/CA_AWS_ACCOUNT_ID"
 
-      # BYOK creds for the KMS registry slots committed in cyborgdb-service's
-      # cyborgdb.yaml (aws-kms-self-test / aws-secrets-self-test). export-env is
+      # BYOK creds for the KMS registry slots written by the "Write KMS registry
+      # config" step below (aws-kms-self-test / aws-secrets-self-test). export-env is
       # false so these AWS creds stay out of the job/pytest env and are scoped to
       # the service-start env block below, mirroring cyborgdb-service e2e-test.yml.
       - name: Load BYOK secrets from 1Password
@@ -89,29 +89,56 @@ jobs:
       - name: Export PIP_INDEX_URL
         run: echo "PIP_INDEX_URL=${{ steps.ca-url.outputs.pip-index-url }}" >> $GITHUB_ENV
 
-      - name: Checkout cyborgdb-service repository
-        uses: actions/checkout@v7
-        with:
-          repository: cyborginc/cyborgdb-service
-          ref: main
-          path: cyborgdb-service
-          token: ${{ secrets.CYBORGDB_SERVICE_TOKEN }}
-          
+      # The KMS registry the BYOK tests need. cyborgdb-service keeps an
+      # equivalent file committed at its repo root, but this repo is public, so
+      # it is generated here instead. Contains no secrets: every sensitive value
+      # is a ${VAR} placeholder the service expands from the env at startup, and
+      # those come from 1Password in the byok step above. The quoted heredoc
+      # delimiter keeps bash from expanding the placeholders.
+      - name: Write KMS registry config
+        run: |
+          set -euo pipefail
+          cat > "${{ runner.temp }}/cyborgdb.yaml" <<'YAML'
+          kms:
+            registry:
+              # BYOK via AWS Secrets Manager — the wrap key lives in Secrets
+              # Manager; service AES-GCM-encrypts each per-index KEK under it.
+              aws-secrets-self-test:
+                provider:    aws
+                key_id:      ${CYBORGDB_SECRETS_KEY_ID:-CYBORGDB_SERVICE_KEY1}
+                region:      ${CYBORGDB_AWS_REGION:-us-east-1}
+                role_arn:    ${CYBORGDB_BYOK_ROLE_ARN}
+                external_id: ${CYBORGDB_BYOK_EXTERNAL_ID}
+                role_session_name: cyborgdb-secrets-self-test
+
+              # BYOK via AWS KMS (HSM) — the wrap key never leaves the HSM;
+              # `kms:Encrypt` returns ciphertext directly.
+              aws-kms-self-test:
+                provider:    aws-kms
+                key_id:      ${CYBORGDB_KMS_KEY_ID:-alias/CYBORGDB_SERVICE_KEY}
+                region:      ${CYBORGDB_AWS_REGION:-us-east-1}
+                role_arn:    ${CYBORGDB_BYOK_ROLE_ARN}
+                external_id: ${CYBORGDB_BYOK_EXTERNAL_ID}
+                role_session_name: cyborgdb-kms-self-test
+          YAML
+          echo "--- generated registry (placeholders unexpanded) ---"
+          cat "${{ runner.temp }}/cyborgdb.yaml"
+
       - name: Install service dependencies
         run: |
-          # Install CPU-only torch
+          # Install CPU-only torch so the [embeddings] extra below does not pull
+          # the much larger CUDA build.
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          # Install optional test dependencies
-          pip install sentence-transformers
           
-      - name: Install cyborgdb-service from source
+      - name: Install cyborgdb-service
         run: |
-          # Install the server from the cloned repository.
-          # PIP_INDEX_URL points at CodeArtifact (PyPI upstream), so dependencies
-          # in the private index resolve automatically.
-          pip install './cyborgdb-service[kms-aws]'
+          # PIP_INDEX_URL points at CodeArtifact (PyPI upstream), so the private
+          # pre-release resolves from there. Matches the cyborgdb-js and
+          # cyborgdb-go SDK workflows.
+          pip install "cyborgdb-service[embeddings,kms-aws]" --pre
           
       - name: Install SDK and test dependencies
+        id: install-sdk
         run: |
           pip install '.[langchain]'
           pip install pytest pytest-cov pytest-asyncio
@@ -119,11 +146,11 @@ jobs:
       - name: Test
         env:
           # KMS slot names the SDK's test_kms_byok.py gates on — they name the
-          # registry slots committed in cyborgdb-service/cyborgdb.yaml.
+          # registry slots written by the "Write KMS registry config" step.
           CYBORGDB_KMS_NAME_REAL: aws-kms-self-test
           CYBORGDB_KMS_NAME_SM: aws-secrets-self-test
-          # Point the service at the committed registry config.
-          CYBORGDB_CONFIG_FILE: ${{ github.workspace }}/cyborgdb-service/cyborgdb.yaml
+          # Point the service at that generated registry.
+          CYBORGDB_CONFIG_FILE: ${{ runner.temp }}/cyborgdb.yaml
           # Static BYOK creds the slots' role_arn/external_id are assumed with.
           AWS_ACCESS_KEY_ID: ${{ steps.byok.outputs.BYOK_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ steps.byok.outputs.BYOK_AWS_SECRET_ACCESS_KEY }}
@@ -158,18 +185,16 @@ jobs:
             exit 1
           fi
           
-          # Run all tests
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            pytest tests/quick_flow_test.py tests/test_kms_byok.py -v --cov=cyborgdb --cov-report=term-missing --cov-append
-          else
-            pytest tests/ -v --cov=cyborgdb --cov-report=term-missing --cov-append --ignore=tests/test_api_contract.py
-          fi
+          # Run the full test suite on every trigger (PRs and main).
+          # test_api_contract.py runs separately in the next step so it does not
+          # affect the coverage of the other tests.
+          pytest tests/ -v --cov=cyborgdb --cov-report=term-missing --cov-append --ignore=tests/test_api_contract.py
           
           # Store the server pid for later cleanup
           echo "Standard server PID: $(cat server-standard.pid)"
 
       - name: Check API Contract
-        if: always()
+        if: ${{ !cancelled() && steps.install-sdk.outcome == 'success' }}
         run: |
           echo "=== Checking API Contract ==="
           # Run the API contract test separately to avoid affecting coverage of other tests
