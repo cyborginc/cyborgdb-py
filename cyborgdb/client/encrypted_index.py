@@ -13,11 +13,7 @@ from typing import Dict, List, Optional, TypedDict, Union, Any
 import numpy as np
 import urllib3.exceptions
 
-from cyborgdb.exceptions import (
-    AuthenticationError,
-    ServiceUnavailableError,
-    ConnectionTimeoutError,
-)
+from cyborgdb.exceptions import translate_api_error
 
 # Import the OpenAPI generated client
 try:
@@ -251,21 +247,8 @@ class EncryptedIndex:
             self._api.delete_index_v1_indexes_delete_post(
                 index_operation_request=self._ior()
             )
-        except (UnauthorizedException, ForbiddenException) as e:
-            raise AuthenticationError(str(e)) from e
-        except ServiceException as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except ApiException as e:
-            error_msg = f"Failed to delete index: {e}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-        except (
-            urllib3.exceptions.MaxRetryError,
-            urllib3.exceptions.NewConnectionError,
-        ) as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except urllib3.exceptions.TimeoutError as e:
-            raise ConnectionTimeoutError(str(e)) from e
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Failed to delete index") from e
 
     def get(
         self, ids: List[str], include: List[str] = ["vector", "contents", "metadata"]
@@ -325,21 +308,8 @@ class EncryptedIndex:
                     items.append(item_dict)
 
             return items
-        except (UnauthorizedException, ForbiddenException) as e:
-            raise AuthenticationError(str(e)) from e
-        except ServiceException as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except ApiException as e:
-            error_msg = f"Failed to retrieve items: {e}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-        except (
-            urllib3.exceptions.MaxRetryError,
-            urllib3.exceptions.NewConnectionError,
-        ) as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except urllib3.exceptions.TimeoutError as e:
-            raise ConnectionTimeoutError(str(e)) from e
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Failed to retrieve items") from e
         except Exception as e:
             error_msg = f"Get operation failed: {str(e)}"
             logger.error(error_msg)
@@ -383,21 +353,8 @@ class EncryptedIndex:
             )
 
             self._api.train_index_v1_indexes_train_post(train_request=request)
-        except (UnauthorizedException, ForbiddenException) as e:
-            raise AuthenticationError(str(e)) from e
-        except ServiceException as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except ApiException as e:
-            error_msg = f"Failed to train index: {e}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-        except (
-            urllib3.exceptions.MaxRetryError,
-            urllib3.exceptions.NewConnectionError,
-        ) as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except urllib3.exceptions.TimeoutError as e:
-            raise ConnectionTimeoutError(str(e)) from e
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Failed to train index") from e
 
     def upsert(
         self,
@@ -529,21 +486,8 @@ class EncryptedIndex:
                 _headers=self._request_headers(),
             )
 
-        except (UnauthorizedException, ForbiddenException) as e:
-            raise AuthenticationError(str(e)) from e
-        except ServiceException as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except ApiException as e:
-            error_msg = f"Failed to upsert items: {e}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-        except (
-            urllib3.exceptions.MaxRetryError,
-            urllib3.exceptions.NewConnectionError,
-        ) as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except urllib3.exceptions.TimeoutError as e:
-            raise ConnectionTimeoutError(str(e)) from e
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Failed to upsert items") from e
         except (TypeError, ValueError) as e:
             logger.error(str(e))
             raise
@@ -611,21 +555,8 @@ class EncryptedIndex:
                 binary_upsert_request=request,
                 _headers=self._request_headers(),
             )
-        except (UnauthorizedException, ForbiddenException) as e:
-            raise AuthenticationError(str(e)) from e
-        except ServiceException as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except ApiException as e:
-            error_msg = f"Failed to upsert items (binary): {e}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-        except (
-            urllib3.exceptions.MaxRetryError,
-            urllib3.exceptions.NewConnectionError,
-        ) as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except urllib3.exceptions.TimeoutError as e:
-            raise ConnectionTimeoutError(str(e)) from e
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Failed to upsert items (binary)") from e
 
     def delete(self, ids: List[str]) -> None:
         """
@@ -649,21 +580,8 @@ class EncryptedIndex:
             self._api.delete_vectors_v1_vectors_delete_post(
                 delete_request=delete_request
             )
-        except (UnauthorizedException, ForbiddenException) as e:
-            raise AuthenticationError(str(e)) from e
-        except ServiceException as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except ApiException as e:
-            error_msg = f"Failed to delete items: {e}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-        except (
-            urllib3.exceptions.MaxRetryError,
-            urllib3.exceptions.NewConnectionError,
-        ) as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except urllib3.exceptions.TimeoutError as e:
-            raise ConnectionTimeoutError(str(e)) from e
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Failed to delete items") from e
 
     def query(
         self,
@@ -908,21 +826,8 @@ class EncryptedIndex:
 
                 logger.error(traceback.format_exc())
                 raise
-        except (UnauthorizedException, ForbiddenException) as e:
-            raise AuthenticationError(str(e)) from e
-        except ServiceException as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except ApiException as e:
-            error_msg = f"Query failed: {e}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-        except (
-            urllib3.exceptions.MaxRetryError,
-            urllib3.exceptions.NewConnectionError,
-        ) as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except urllib3.exceptions.TimeoutError as e:
-            raise ConnectionTimeoutError(str(e)) from e
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Query failed") from e
         except Exception as e:
             error_msg = f"Unexpected error in query: {str(e)}"
             logger.error(error_msg)
@@ -1059,21 +964,8 @@ class EncryptedIndex:
                 # Single query: List[QueryResultItem]
                 return [item.to_dict() for item in results]
 
-        except (UnauthorizedException, ForbiddenException) as e:
-            raise AuthenticationError(str(e)) from e
-        except ServiceException as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except ApiException as e:
-            error_msg = f"Failed to query (binary): {e}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-        except (
-            urllib3.exceptions.MaxRetryError,
-            urllib3.exceptions.NewConnectionError,
-        ) as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except urllib3.exceptions.TimeoutError as e:
-            raise ConnectionTimeoutError(str(e)) from e
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Failed to query (binary)") from e
 
     def query_metadata(
         self,
@@ -1174,21 +1066,8 @@ class EncryptedIndex:
             if text:
                 return [{"id": item.id, "score": item.score} for item in rows]
             return [{"id": item.id} for item in rows]
-        except (UnauthorizedException, ForbiddenException) as e:
-            raise AuthenticationError(str(e)) from e
-        except ServiceException as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except ApiException as e:
-            error_msg = f"Failed to query metadata: {e}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-        except (
-            urllib3.exceptions.MaxRetryError,
-            urllib3.exceptions.NewConnectionError,
-        ) as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except urllib3.exceptions.TimeoutError as e:
-            raise ConnectionTimeoutError(str(e)) from e
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Failed to query metadata") from e
 
     def list_ids(self) -> List[str]:
         """
@@ -1206,21 +1085,8 @@ class EncryptedIndex:
             )
 
             return response.ids
-        except (UnauthorizedException, ForbiddenException) as e:
-            raise AuthenticationError(str(e)) from e
-        except ServiceException as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except ApiException as e:
-            error_msg = f"Failed to list document IDs: {e}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-        except (
-            urllib3.exceptions.MaxRetryError,
-            urllib3.exceptions.NewConnectionError,
-        ) as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except urllib3.exceptions.TimeoutError as e:
-            raise ConnectionTimeoutError(str(e)) from e
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Failed to list document IDs") from e
 
     def is_training(self) -> bool:
         """
@@ -1237,21 +1103,8 @@ class EncryptedIndex:
 
             return False
 
-        except (UnauthorizedException, ForbiddenException) as e:
-            raise AuthenticationError(str(e)) from e
-        except ServiceException as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except ApiException as e:
-            error_msg = f"Failed to get index training status: {e}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-        except (
-            urllib3.exceptions.MaxRetryError,
-            urllib3.exceptions.NewConnectionError,
-        ) as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except urllib3.exceptions.TimeoutError as e:
-            raise ConnectionTimeoutError(str(e)) from e
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Failed to get index training status") from e
 
     # ------------------------------------------------------------------
     # RBAC — user management (root API key required)
@@ -1295,21 +1148,8 @@ class EncryptedIndex:
                 index_name=self._index_name, create_user_request=request
             )
             return {"user_id": response.user_id, "api_key": response.api_key}
-        except (UnauthorizedException, ForbiddenException) as e:
-            raise AuthenticationError(str(e)) from e
-        except ServiceException as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except ApiException as e:
-            error_msg = f"Failed to create user: {e}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-        except (
-            urllib3.exceptions.MaxRetryError,
-            urllib3.exceptions.NewConnectionError,
-        ) as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except urllib3.exceptions.TimeoutError as e:
-            raise ConnectionTimeoutError(str(e)) from e
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Failed to create user") from e
 
     def list_users(self) -> List[Dict[str, Any]]:
         """List the users provisioned for this index.
@@ -1331,21 +1171,8 @@ class EncryptedIndex:
                 {"user_id": u.user_id, "permissions": u.permissions}
                 for u in response.users
             ]
-        except (UnauthorizedException, ForbiddenException) as e:
-            raise AuthenticationError(str(e)) from e
-        except ServiceException as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except ApiException as e:
-            error_msg = f"Failed to list users: {e}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-        except (
-            urllib3.exceptions.MaxRetryError,
-            urllib3.exceptions.NewConnectionError,
-        ) as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except urllib3.exceptions.TimeoutError as e:
-            raise ConnectionTimeoutError(str(e)) from e
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Failed to list users") from e
 
     def delete_user(self, user_id: str) -> None:
         """Revoke a user, erasing their wrapped keys for this index.
@@ -1366,21 +1193,8 @@ class EncryptedIndex:
                 user_id=user_id,
                 x_index_key=self._index_key_hex,
             )
-        except (UnauthorizedException, ForbiddenException) as e:
-            raise AuthenticationError(str(e)) from e
-        except ServiceException as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except ApiException as e:
-            error_msg = f"Failed to delete user: {e}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-        except (
-            urllib3.exceptions.MaxRetryError,
-            urllib3.exceptions.NewConnectionError,
-        ) as e:
-            raise ServiceUnavailableError(str(e)) from e
-        except urllib3.exceptions.TimeoutError as e:
-            raise ConnectionTimeoutError(str(e)) from e
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Failed to delete user") from e
 
     def _key_to_hex(self) -> Optional[str]:
         """Hex-encoded key for API calls, or ``None`` for KMS-backed indexes.
