@@ -15,6 +15,7 @@ points at the policy rather than at a broken filter.
 import os
 import unittest
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 from dotenv import load_dotenv
@@ -273,7 +274,8 @@ OPERATOR_CASES = [
     ("$and", {"$and": [{"color": "red"}, {"rank": {"$gte": 30}}]}, {"o3"}),
     ("$or", {"$or": [{"color": "blue"}, {"rank": {"$lt": 10}}]}, {"o0", "o2"}),
     ("$nor", {"$nor": [{"color": "red"}, {"color": "green"}]}, {"o2"}),
-    ("$not", {"color": {"$not": {"$eq": "red"}}}, {"o1", "o2", "o4"}),
+    # `$not` is deliberately absent — openapi.json documents it, but the engine
+    # rejects it on both read paths. See test_not_is_documented_but_unsupported.
     ("$regex", {"color": {"$regex": "^r"}}, {"o0", "o3"}),
     ("$contains", {"color": {"$contains": "ree"}}, {"o1", "o4"}),
 ]
@@ -370,13 +372,29 @@ class TestFilterOperators(unittest.TestCase):
             self._meta_ids({"author": {"$nin": ["ada"]}}), {"o1", "o2", "o4"}
         )
 
-    def test_missing_field_is_included_by_nor_and_not(self):
+    def test_missing_field_is_included_by_nor(self):
         self.assertEqual(
             self._meta_ids({"$nor": [{"author": "ada"}]}), {"o1", "o2", "o4"}
         )
-        self.assertEqual(
-            self._meta_ids({"author": {"$not": {"$eq": "ada"}}}), {"o1", "o2", "o4"}
-        )
+
+    def test_not_is_documented_but_unsupported(self):
+        # openapi.json lists `$not` among the supported operators and the SDK
+        # docstrings repeat it, but the engine rejects it on BOTH read paths:
+        #   "Invalid input: Unsupported metadata operator: $not"
+        #
+        # Pinned as current behaviour so nobody rediscovers it the hard way.
+        # Either the operator gets implemented or it comes out of the documented
+        # set; whichever happens, this test fails and forces the decision to be
+        # made explicitly rather than drifting.
+        filters = {"color": {"$not": {"$eq": "red"}}}
+        with self.assertRaises(ValueError):
+            self.index.query_metadata(filters)
+        with self.assertRaises(ValueError):
+            self.index.query(
+                query_vectors=np.random.rand(DIM).astype(np.float32),
+                top_k=len(ALL_OPS),
+                filters=filters,
+            )
 
     # -- arrays ------------------------------------------------------------- #
 
@@ -441,6 +459,101 @@ class TestFilterOperators(unittest.TestCase):
         except ValueError:
             return  # raising is an acceptable contract
         self.assertEqual(got, set(), "a string filter matched a numeric field")
+
+
+class TestDatetimeHandling(unittest.TestCase):
+    """What actually happens to a native `datetime` passed as metadata.
+
+    This is the boundary the design doc flagged as the one place documentation
+    and code may disagree, and they do. cyborgdb-core converts datetimes to
+    epoch millis (its metadata_datetime_test.py has `test_stored_as_epoch_millis`
+    and `test_query_metadata_datetime_range`), so range filters on a date work
+    there. This SDK serialises to an ISO 8601 string instead, so the value round
+    trips and equality matches, but every range comparison fails.
+
+    These tests pin the SDK's real behaviour rather than the intended contract,
+    so the gap is visible and a fix would surface here as a failure.
+    """
+
+    BASE = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client = cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
+        cls.index = cls.client.create_index(
+            f"datetime_{uuid.uuid4().hex[:8]}",
+            cyborgdb.Client.generate_key(),
+            dimension=DIM,
+            metric="euclidean",
+            metadata_schema={
+                "created": {"filterable": True},
+                "created_ms": {"filterable": True},
+            },
+        )
+        cls.index.upsert(
+            [
+                {
+                    "id": f"t{i}",
+                    "vector": np.random.rand(DIM).astype(np.float32).tolist(),
+                    "metadata": {
+                        "created": cls.BASE + timedelta(days=10 * i),
+                        # The workaround callers currently need for ranges.
+                        "created_ms": int(
+                            (cls.BASE + timedelta(days=10 * i)).timestamp() * 1000
+                        ),
+                    },
+                }
+                for i in range(3)
+            ]
+        )
+        wait_for_ids(cls.index, ["t0", "t1", "t2"])
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.index.delete_index()
+        except Exception:
+            pass
+
+    def test_datetime_is_stored_as_an_iso_string(self):
+        # Not epoch millis, which is what core stores. The SDK hands the
+        # datetime to JSON serialisation and the ISO form is what lands.
+        row = self.index.get(["t0"], include=["metadata"])[0]
+        self.assertEqual(row["metadata"]["created"], "2026-01-01T00:00:00+00:00")
+
+    def test_equality_on_a_datetime_matches(self):
+        # Equality survives because it degenerates to string comparison.
+        got = {r["id"] for r in self.index.query_metadata({"created": self.BASE})}
+        self.assertEqual(got, {"t0"})
+
+    def test_range_on_a_datetime_is_rejected(self):
+        # The consequence of ISO-string storage: a range comparison against a
+        # string is invalid, and the service says so explicitly —
+        #   "$gte requires a numeric value, got: \"2026-01-06T00:00:00+00:00\""
+        #
+        # Core supports this query. Pinned here as the SDK's current behaviour;
+        # if the SDK starts converting to epoch millis this test fails and
+        # should be replaced with the range assertion core already has.
+        with self.assertRaises(ValueError) as caught:
+            self.index.query_metadata(
+                {"created": {"$gte": self.BASE + timedelta(days=5)}}
+            )
+        self.assertIn("numeric", str(caught.exception))
+
+    def test_epoch_millis_supports_ranges(self):
+        # The workaround: convert to epoch millis yourself and ranges work.
+        cutoff = int((self.BASE + timedelta(days=5)).timestamp() * 1000)
+        got = {
+            r["id"] for r in self.index.query_metadata({"created_ms": {"$gte": cutoff}})
+        }
+        self.assertEqual(got, {"t1", "t2"})
+
+    def test_epoch_millis_round_trips_exactly(self):
+        # Millisecond precision must survive the JSON round trip — a float
+        # conversion anywhere would corrupt the low digits.
+        expected = int(self.BASE.timestamp() * 1000)
+        row = self.index.get(["t0"], include=["metadata"])[0]
+        self.assertEqual(row["metadata"]["created_ms"], expected)
 
 
 if __name__ == "__main__":

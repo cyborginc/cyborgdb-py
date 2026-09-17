@@ -197,6 +197,87 @@ class RBACUserTests(unittest.TestCase):
             revoked = self._user_index(out["api_key"])
             revoked.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
 
+    def test_revoke_after_use_denies_a_previously_working_key(self):
+        # Every revocation test above (and in the js/go suites) revokes a key
+        # that was never used — the case that passes trivially, because nothing
+        # was ever cached or established for it. This exercises the real-world
+        # sequence: mint, USE, revoke, use again.
+        out = self.index.create_user(permissions=["read"])
+        user_index = self._user_index(out["api_key"])
+
+        # The key demonstrably works before revocation, so the denial below
+        # cannot be explained by the key having been broken all along.
+        results = user_index.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
+        self.assertTrue(len(results) >= 1)
+
+        self.index.delete_user(out["user_id"])
+
+        # The same client object, already used successfully, must now be denied.
+        # A server-side cache that outlived the revocation would surface here.
+        with self.assertRaises(ValueError):
+            user_index.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
+        # And a freshly loaded client with that key fares no better.
+        with self.assertRaises(ValueError):
+            reloaded = self._user_index(out["api_key"])
+            reloaded.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
+
+    def test_a_user_key_cannot_reach_another_index(self):
+        # Tenant isolation: a key minted against one index must be useless
+        # against a different one. Nothing in any SDK checked this.
+        other_name = f"rbac_other_{uuid.uuid4().hex[:8]}"
+        other = self.root.create_index(
+            index_name=other_name, kms_name=KMS_NAME, dimension=DIMENSION
+        )
+        other.upsert(_seed())
+        out = self.index.create_user(permissions=["read", "write"])
+        try:
+            intruder = cyborgdb.Client(BASE_URL, api_key=out["api_key"])
+            # Loading the other index, or any operation on it, must be denied —
+            # the user's wrapped DEK exists only for the index they belong to.
+            with self.assertRaises(ValueError):
+                foreign = intruder.load_index(other_name)
+                foreign.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
+            with self.assertRaises(ValueError):
+                foreign = intruder.load_index(other_name)
+                foreign.upsert([{"id": "x", "vector": [0.0, 0.0, 0.0, 1.0]}])
+            with self.assertRaises(ValueError):
+                foreign = intruder.load_index(other_name)
+                foreign.get(["a"])
+        finally:
+            self.index.delete_user(out["user_id"])
+            try:
+                other.delete_index()
+            except Exception:
+                pass
+
+    def test_list_indexes_under_a_user_key_is_scoped_or_denied(self):
+        # A tenant-scoped key must not enumerate the whole deployment. Either
+        # listing is refused outright, or it returns only the index the key
+        # belongs to — both are defensible, leaking every index name is not.
+        other_name = f"rbac_hidden_{uuid.uuid4().hex[:8]}"
+        other = self.root.create_index(
+            index_name=other_name, kms_name=KMS_NAME, dimension=DIMENSION
+        )
+        out = self.index.create_user(permissions=["read"])
+        try:
+            user_client = cyborgdb.Client(BASE_URL, api_key=out["api_key"])
+            try:
+                listed = set(user_client.list_indexes())
+            except ValueError:
+                return  # refusing outright is an acceptable contract
+            self.assertNotIn(
+                other_name,
+                listed,
+                "a tenant-scoped key must not see another tenant's index",
+            )
+            self.assertLessEqual(listed, {self.index_name})
+        finally:
+            self.index.delete_user(out["user_id"])
+            try:
+                other.delete_index()
+            except Exception:
+                pass
+
 
 if __name__ == "__main__":
     unittest.main()

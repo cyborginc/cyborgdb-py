@@ -528,9 +528,13 @@ class TestHybridFusionDeterministic(unittest.TestCase):
             metric="euclidean",
             # `full_text` set directly rather than via the `text_fields` sugar,
             # which the shortcut-based fixtures above never exercise.
+            #
+            # `filterable: False` is spelled out only because the SDK cannot
+            # currently send `{"full_text": True}` on its own — see
+            # test_full_text_alone_is_rejected_by_the_sdk below.
             metadata_schema={
-                "title": {"full_text": True},
-                "body": {"full_text": True},
+                "title": {"full_text": True, "filterable": False},
+                "body": {"full_text": True, "filterable": False},
                 "author": {"filterable": True},
             },
         )
@@ -685,6 +689,359 @@ class TestHybridFusionDeterministic(unittest.TestCase):
         second = self._hybrid()
         self.assertEqual([r["id"] for r in first], [r["id"] for r in second])
         self.assertEqual([r["score"] for r in first], [r["score"] for r in second])
+
+
+class TestMetadataFieldPolicyDefaults(unittest.TestCase):
+    """The `full_text` shorthand the SDK documents but cannot currently send."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client = cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
+
+    def _create(self, metadata_schema):
+        index = self.client.create_index(
+            f"policy_{uuid.uuid4().hex[:8]}",
+            cyborgdb.Client.generate_key(),
+            dimension=HYBRID_DIM,
+            metric="euclidean",
+            metadata_schema=metadata_schema,
+        )
+        self.addCleanup(lambda: self._safe_delete(index))
+        return index
+
+    @staticmethod
+    def _safe_delete(index):
+        try:
+            index.delete_index()
+        except Exception:
+            pass
+
+    @unittest.expectedFailure
+    def test_full_text_alone_is_rejected_by_the_sdk(self):
+        # `create_index`'s own docstring states that `full_text=True` "implies
+        # filterable=False", and core accepts `{"full_text": True}` on its own.
+        # Through this SDK it cannot work: the generated MetadataFieldPolicy
+        # model declares `filterable: Optional[StrictBool] = True` and always
+        # serialises it, so the request carries
+        #     {"filterable": true, "pattern": false, "full_text": true}
+        # and the service rejects the combination with a 422.
+        #
+        # Marked expectedFailure rather than deleted so the contract stays
+        # written down: when the default is fixed this test passes, unittest
+        # reports an unexpected success, and the marker gets removed. Fixing it
+        # is out of scope here (the ticket's non-goals put bug fixes in a
+        # separate change).
+        self._create({"title": {"full_text": True}})
+
+    def test_full_text_works_when_filterable_is_spelled_out(self):
+        # The workaround callers currently need.
+        index = self._create({"title": {"full_text": True, "filterable": False}})
+        self.assertEqual(
+            index.metadata_schema["title"],
+            {"filterable": False, "pattern": False, "full_text": True},
+        )
+
+    def test_text_fields_sugar_is_equivalent(self):
+        # The documented shortcut produces the same policy, and does work.
+        index = self.client.create_index(
+            f"policy_sugar_{uuid.uuid4().hex[:8]}",
+            cyborgdb.Client.generate_key(),
+            dimension=HYBRID_DIM,
+            metric="euclidean",
+            text_fields=["title"],
+        )
+        self.addCleanup(lambda: self._safe_delete(index))
+        self.assertEqual(
+            index.metadata_schema["title"],
+            {"filterable": False, "pattern": False, "full_text": True},
+        )
+
+
+class TestBM25Analyzer(unittest.TestCase):
+    """Observable behaviour of the tokenizer/stemmer pipeline.
+
+    The pipeline is not configurable from the SDK — `index.bm25` only reports an
+    `analyzer_version` — which is exactly why its behaviour should be pinned:
+    that version can change underneath us, and nothing else would notice. Every
+    expectation below was measured against the running service rather than
+    assumed, so a failure here means the analyzer changed, not that the test
+    guessed wrong.
+    """
+
+    ROWS = {
+        "stem": "running runner runs",
+        "punct": "mind-killer, fear! (really)",
+        "accent": "café résumé naïve",
+        "stop": "the a an and or but of",
+        "num": "version 42 build 7",
+        "case": "MixedCase WORD",
+        "plural": "boxes churches",
+    }
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client = cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
+        cls.index = cls.client.create_index(
+            f"bm25_analyzer_{uuid.uuid4().hex[:8]}",
+            cyborgdb.Client.generate_key(),
+            dimension=HYBRID_DIM,
+            metric="euclidean",
+            text_fields=["body"],
+        )
+        cls.index.upsert(
+            [
+                {
+                    "id": doc_id,
+                    "vector": [0.1, 0.2, 0.3, 0.4],
+                    "metadata": {"body": body},
+                }
+                for doc_id, body in cls.ROWS.items()
+            ]
+        )
+        _wait_for_ids(cls.index, list(cls.ROWS))
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.index.delete_index()
+        except Exception:
+            pass
+
+    def _ids(self, text):
+        return {r["id"] for r in self.index.query_metadata(text=text)}
+
+    def test_terms_are_stemmed(self):
+        # "running runner runs" is reachable from each of its inflections, so
+        # the analyzer stems rather than matching raw tokens.
+        for term in ("run", "runs", "runner", "running"):
+            with self.subTest(term=term):
+                self.assertIn("stem", self._ids(term))
+
+    def test_plurals_stem_to_their_singular(self):
+        self.assertIn("plural", self._ids("box"))
+        self.assertIn("plural", self._ids("church"))
+
+    def test_punctuation_is_stripped_and_hyphens_split(self):
+        # "mind-killer" indexes as two terms, and trailing punctuation on
+        # "fear!" does not become part of the token.
+        self.assertIn("punct", self._ids("mind"))
+        self.assertIn("punct", self._ids("killer"))
+        self.assertIn("punct", self._ids("fear"))
+
+    def test_case_is_folded_both_ways(self):
+        self.assertIn("case", self._ids("mixedcase"))
+        self.assertIn("case", self._ids("WORD"))
+
+    def test_stop_words_are_dropped(self):
+        # A document made entirely of stop words contributes no searchable
+        # terms, so querying one matches nothing at all.
+        for term in ("the", "and", "of"):
+            with self.subTest(term=term):
+                self.assertEqual(self._ids(term), set())
+
+    def test_numeric_tokens_are_indexed(self):
+        self.assertIn("num", self._ids("42"))
+
+    def test_accents_are_not_folded(self):
+        # Measured behaviour, and the one that most often surprises callers:
+        # "café" matches only its exact accented form. If accent folding is ever
+        # added this test fails, which is the point — it is a user-visible
+        # search behaviour change that should be a deliberate decision.
+        self.assertIn("accent", self._ids("café"))
+        self.assertEqual(self._ids("cafe"), set())
+
+
+# Scoring-property fixtures. Unlike the uniform synthetic rows elsewhere in this
+# file, these corpora are shaped so that one BM25 property at a time is the only
+# thing separating two documents — the approach Qdrant takes by seeding its BM25
+# fixture with stop-word-heavy documents alongside real sentences.
+#
+#   IDF      "zeppelin" occurs in one document, "common" in five. Both candidate
+#            documents are the same length and match exactly one query term, so
+#            only the term's rarity can separate them.
+#   LENGTH   Same term, same term-frequency, very different document lengths.
+#   TF       Same length, different term-frequency.
+SCORING_DOCS = [
+    ("idf_rare", "zeppelin padding padding padding"),
+    ("idf_common", "common padding padding padding"),
+    ("c1", "common padding padding padding"),
+    ("c2", "common padding padding padding"),
+    ("c3", "common padding padding padding"),
+    ("c4", "common padding padding padding"),
+    ("len_short", "target"),
+    ("len_long", "target " + "filler " * 24),
+    ("tf_one", "saturate alpha beta gamma delta"),
+    ("tf_many", "saturate saturate saturate saturate saturate"),
+]
+
+
+def _scoring_items():
+    return [
+        {
+            "id": doc_id,
+            "vector": [0.1, 0.2, 0.3, 0.4],
+            "metadata": {"body": body},
+        }
+        for doc_id, body in SCORING_DOCS
+    ]
+
+
+class TestBM25ScoringProperties(unittest.TestCase):
+    """BM25's three defining behaviours, asserted through the SDK.
+
+    Core proves the arithmetic (bm25_score_test.cpp). These assert the
+    consequences survive the wire: a ranking that depends on IDF, on document
+    length, and on term frequency. Only relative order is asserted — never an
+    absolute score — because scores shift legitimately with `analyzer_version`.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client = cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
+        cls.index = cls.client.create_index(
+            f"bm25_scoring_{uuid.uuid4().hex[:8]}",
+            cyborgdb.Client.generate_key(),
+            dimension=HYBRID_DIM,
+            metric="euclidean",
+            text_fields=["body"],
+        )
+        cls.index.upsert(_scoring_items())
+        _wait_for_ids(cls.index, [doc_id for doc_id, _ in SCORING_DOCS])
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.index.delete_index()
+        except Exception:
+            pass
+
+    def _ranked(self, text):
+        return [r["id"] for r in self.index.query_metadata(text=text)]
+
+    def _scores(self, text):
+        return {r["id"]: r["score"] for r in self.index.query_metadata(text=text)}
+
+    def test_a_rare_term_outranks_a_common_one(self):
+        # Both documents match exactly one query term, with the same term
+        # frequency and the same length. The only difference is that "zeppelin"
+        # appears in one document and "common" in five, so IDF alone decides.
+        ranked = self._ranked("zeppelin common")
+        self.assertIn("idf_rare", ranked)
+        self.assertIn("idf_common", ranked)
+        self.assertLess(
+            ranked.index("idf_rare"),
+            ranked.index("idf_common"),
+            "a term matching 1 of 10 documents must outrank one matching 5",
+        )
+
+    def test_a_shorter_document_outranks_a_longer_one(self):
+        # Same term, same term-frequency; `len_long` simply buries it in 24
+        # filler words. Length normalisation must penalise it.
+        ranked = self._ranked("target")
+        self.assertEqual(ranked[:2], ["len_short", "len_long"])
+
+    def test_higher_term_frequency_scores_higher(self):
+        ranked = self._ranked("saturate")
+        self.assertEqual(ranked[:2], ["tf_many", "tf_one"])
+
+    def test_a_term_in_every_document_still_scores(self):
+        # "common" is in five of ten documents. IDF shrinks but must not go
+        # negative or zero the row out — every matching document still comes
+        # back with a score.
+        scores = self._scores("common")
+        self.assertEqual(set(scores), {"idf_common", "c1", "c2", "c3", "c4"})
+        for doc_id, score in scores.items():
+            self.assertGreater(score, 0.0, f"{doc_id} scored non-positive")
+
+
+class TestBM25TuningParameters(unittest.TestCase):
+    """`bm25_k1` and `bm25_b` change ranking, not just `describe` output.
+
+    Both were previously tier-2: created with non-default values and asserted
+    only via the config round-trip, which would pass if the engine ignored them.
+    Each test here builds a second index differing in exactly one parameter and
+    asserts the ranking difference that parameter is responsible for.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client = cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
+        cls.indexes = []
+
+    @classmethod
+    def tearDownClass(cls):
+        for index in cls.indexes:
+            try:
+                index.delete_index()
+            except Exception:
+                pass
+
+    @classmethod
+    def _seeded(cls, label, **create_kwargs):
+        index = cls.client.create_index(
+            f"bm25_tune_{label}_{uuid.uuid4().hex[:8]}",
+            cyborgdb.Client.generate_key(),
+            dimension=HYBRID_DIM,
+            metric="euclidean",
+            text_fields=["body"],
+            **create_kwargs,
+        )
+        cls.indexes.append(index)
+        index.upsert(_scoring_items())
+        _wait_for_ids(index, [doc_id for doc_id, _ in SCORING_DOCS])
+        return index
+
+    @staticmethod
+    def _ranked(index, text):
+        return [r["id"] for r in index.query_metadata(text=text)]
+
+    def test_b_zero_removes_the_length_penalty(self):
+        # `b` controls how much document length matters. At the default (0.75)
+        # the short document wins; at b=0 length is ignored entirely, so two
+        # documents with the same term-frequency must score equally and the
+        # ordering between them stops being decided by length.
+        default_b = self._seeded("bdefault")
+        no_length = self._seeded("bzero", bm25_b=0.0)
+
+        self.assertEqual(
+            self._ranked(default_b, "target")[:2], ["len_short", "len_long"]
+        )
+
+        scores = {r["id"]: r["score"] for r in no_length.query_metadata(text="target")}
+        self.assertEqual(set(scores), {"len_short", "len_long"})
+        self.assertAlmostEqual(
+            scores["len_short"],
+            scores["len_long"],
+            places=5,
+            msg="with b=0 document length must not affect the score",
+        )
+
+    def test_k1_zero_makes_scoring_binary(self):
+        # `k1` controls term-frequency saturation. At k1=0 the tf component
+        # collapses to presence/absence, so a document containing the term five
+        # times scores the same as one containing it once. At the default they
+        # differ — asserted alongside so the comparison is meaningful.
+        default_k1 = self._seeded("kdefault")
+        binary = self._seeded("kzero", bm25_k1=0.0)
+
+        default_scores = {
+            r["id"]: r["score"] for r in default_k1.query_metadata(text="saturate")
+        }
+        self.assertGreater(
+            default_scores["tf_many"],
+            default_scores["tf_one"],
+            "at the default k1, repeating a term must raise the score",
+        )
+
+        binary_scores = {
+            r["id"]: r["score"] for r in binary.query_metadata(text="saturate")
+        }
+        self.assertAlmostEqual(
+            binary_scores["tf_many"],
+            binary_scores["tf_one"],
+            places=5,
+            msg="with k1=0 term frequency must stop mattering",
+        )
 
 
 class TestBM25Lifecycle(unittest.TestCase):
