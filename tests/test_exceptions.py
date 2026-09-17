@@ -1,5 +1,4 @@
-"""Conformance tests for the typed exception taxonomy
-"""
+"""Conformance tests for the typed exception taxonomy"""
 
 import json
 import unittest

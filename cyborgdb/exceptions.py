@@ -1,5 +1,4 @@
-"""Public exception hierarchy for the CyborgDB Python SDK.
-"""
+"""Public exception hierarchy for the CyborgDB Python SDK."""
 
 from __future__ import annotations
 
@@ -21,7 +20,7 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-class CyborgDBError(Exception):
+class CyborgDBError(ValueError):
     """Base class for every error this SDK raises.
 
     Catch this to handle any CyborgDB failure; catch a subclass to handle one

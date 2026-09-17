@@ -25,12 +25,7 @@ try:
     from cyborgdb.openapi_client.models.index_operation_request import (
         IndexOperationRequest,
     )
-    from cyborgdb.openapi_client.exceptions import (
-        ApiException,
-        UnauthorizedException,
-        ForbiddenException,
-        ServiceException,
-    )
+    from cyborgdb.openapi_client.exceptions import ApiException
     from cyborgdb.openapi_client.models.query_request import QueryRequest
     from cyborgdb.openapi_client.models.list_ids_request import ListIDsRequest
     from cyborgdb.openapi_client.models.query_metadata_request import (

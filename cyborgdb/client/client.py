@@ -20,12 +20,7 @@ try:
     from cyborgdb.openapi_client.api_client import ApiClient, Configuration
     from cyborgdb.openapi_client.api.default_api import DefaultApi
 
-    from cyborgdb.openapi_client.exceptions import (
-        ApiException,
-        UnauthorizedException,
-        ForbiddenException,
-        ServiceException,
-    )
+    from cyborgdb.openapi_client.exceptions import ApiException
 except ImportError:
     raise ImportError(
         "Failed to import openapi_client. Make sure the OpenAPI client library is properly installed."
