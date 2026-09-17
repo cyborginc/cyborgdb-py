@@ -1,247 +1,138 @@
-"""Unit tests for the cyborgdb exception translation layer."""
+"""Conformance tests for the typed exception taxonomy"""
 
+import json
 import unittest
-from unittest.mock import MagicMock
+
 import urllib3.exceptions
 
 import cyborgdb
 from cyborgdb.exceptions import (
     AuthenticationError,
-    ConnectionTimeoutError,
-    CyborgError,
-    ServiceUnavailableError,
+    ConflictError,
+    CyborgDBError,
+    NotFoundError,
+    RateLimitError,
+    ServiceError,
+    TransportError,
+    ValidationError,
+    translate_api_error,
 )
-from cyborgdb.openapi_client.exceptions import (
-    BadRequestException,
-    ForbiddenException,
-    NotFoundException,
-    ServiceException,
-    UnauthorizedException,
-)
+from cyborgdb.openapi_client.exceptions import ApiException
+
+# status -> (class, retryable).
+TAXONOMY = [
+    (400, ValidationError, False),
+    (422, ValidationError, False),
+    (401, AuthenticationError, False),
+    (403, AuthenticationError, False),
+    (404, NotFoundError, False),
+    (409, ConflictError, False),
+    (429, RateLimitError, True),
+    (500, ServiceError, True),
+    (502, ServiceError, True),
+    (503, ServiceError, True),
+    (504, ServiceError, True),
+]
+
+# Concept name -> class, for the public-surface checks.
+CONCEPTS = {
+    "ValidationError": ValidationError,
+    "AuthenticationError": AuthenticationError,
+    "NotFoundError": NotFoundError,
+    "ConflictError": ConflictError,
+    "RateLimitError": RateLimitError,
+    "ServiceError": ServiceError,
+    "TransportError": TransportError,
+}
 
 
-def _make_client():
-    from cyborgdb import Client
-
-    client = Client.__new__(Client)
-    client.api = MagicMock()
-    client.api_client = MagicMock()
-    client.config = MagicMock()
-    client.config.api_key = {}
-    return client
+def _api_exception(status, detail="synthetic failure", headers=None):
+    """Build an ApiException the way the generated client would."""
+    exc = ApiException(status=status, reason="synthetic")
+    exc.body = json.dumps({"detail": detail})
+    exc.headers = headers if headers is not None else {"X-Request-Id": "req-abc123"}
+    return exc
 
 
-def _make_index():
-    from cyborgdb.client.encrypted_index import EncryptedIndex
+class TestStatusMapping(unittest.TestCase):
+    """Every status the taxonomy names produces its type and retryability."""
 
-    idx = EncryptedIndex.__new__(EncryptedIndex)
-    idx._api = MagicMock()
-    idx._api_client = MagicMock()
-    idx._index_name = "test"
-    idx._index_key_hex = None
-    return idx
+    def test_status_mapping(self):
+        for status, expected, retryable in TAXONOMY:
+            with self.subTest(status=status):
+                result = translate_api_error(_api_exception(status), "op failed")
+                self.assertIsInstance(result, expected)
+                self.assertEqual(result.retryable, retryable)
+                self.assertEqual(result.status_code, status)
 
 
-class TestImports(unittest.TestCase):
-    """Case 10: import paths and top-level re-exports."""
+class TestTranslation(unittest.TestCase):
+    def test_populates_context_fields(self):
+        exc = _api_exception(
+            503, headers={"X-Request-Id": "req-abc123", "Retry-After": "2.5"}
+        )
+        result = translate_api_error(exc, "op failed")
+        self.assertIsInstance(result, ServiceError)
+        self.assertEqual(result.status_code, 503)
+        self.assertEqual(result.request_id, "req-abc123")
+        self.assertEqual(result.detail, "synthetic failure")
+        self.assertEqual(result.retry_after, 2.5)
+        self.assertTrue(result.retryable)
 
-    def test_import_from_exceptions_module(self):
-        from cyborgdb.exceptions import (
+    def test_every_type_subclasses_the_base(self):
+        for name, cls in CONCEPTS.items():
+            with self.subTest(concept=name):
+                self.assertTrue(issubclass(cls, CyborgDBError))
+
+    def test_network_failures_become_transport_errors(self):
+        for exc in (
+            urllib3.exceptions.TimeoutError("timed out"),
+            urllib3.exceptions.NewConnectionError(None, "connection refused"),
+            urllib3.exceptions.ProtocolError("connection aborted"),
+        ):
+            with self.subTest(exc=type(exc).__name__):
+                result = translate_api_error(exc, "op failed")
+                self.assertIsInstance(result, TransportError)
+                self.assertIsNone(result.status_code)
+                self.assertTrue(result.retryable)
+
+    def test_unnamed_status_stays_a_value_error(self):
+        # 418 is not in the taxonomy: the previous untyped behavior is preserved
+        # rather than inventing a type for it.
+        result = translate_api_error(_api_exception(418), "op failed")
+        self.assertIsInstance(result, ValueError)
+        self.assertNotIsInstance(result, CyborgDBError)
+
+    def test_non_api_exceptions_pass_through(self):
+        original = KeyError("unrelated")
+        self.assertIs(translate_api_error(original, "op failed"), original)
+
+    def test_missing_headers_do_not_raise(self):
+        exc = ApiException(status=500, reason="synthetic")
+        result = translate_api_error(exc, "op failed")
+        self.assertIsInstance(result, ServiceError)
+        self.assertIsNone(result.request_id)
+        self.assertIsNone(result.retry_after)
+
+
+class TestPublicSurface(unittest.TestCase):
+    def test_importable_from_the_exceptions_module(self):
+        from cyborgdb.exceptions import (  # noqa: F401
             AuthenticationError,
-            ConnectionTimeoutError,
-            CyborgError,
-            ServiceUnavailableError,
+            ConflictError,
+            CyborgDBError,
+            NotFoundError,
+            RateLimitError,
+            ServiceError,
+            TransportError,
+            ValidationError,
         )
 
-        self.assertTrue(issubclass(AuthenticationError, CyborgError))
-        self.assertTrue(issubclass(ServiceUnavailableError, CyborgError))
-        self.assertTrue(issubclass(ConnectionTimeoutError, CyborgError))
-
-    def test_top_level_re_exports(self):
-        self.assertIs(cyborgdb.AuthenticationError, AuthenticationError)
-        self.assertIs(cyborgdb.ServiceUnavailableError, ServiceUnavailableError)
-        self.assertIs(cyborgdb.ConnectionTimeoutError, ConnectionTimeoutError)
-        self.assertIs(cyborgdb.CyborgError, CyborgError)
-
-
-class TestClientListIndexes(unittest.TestCase):
-    """Exception translation for Client.list_indexes."""
-
-    def setUp(self):
-        self.client = _make_client()
-
-    def test_unauthorized_raises_authentication_error(self):
-        """Case 1: UnauthorizedException(401) -> AuthenticationError."""
-        self.client.api.list_indexes_v1_indexes_list_get.side_effect = (
-            UnauthorizedException(status=401)
-        )
-        with self.assertRaises(AuthenticationError) as ctx:
-            self.client.list_indexes()
-        self.client.api.list_indexes_v1_indexes_list_get.assert_called_once()
-        self.assertIsInstance(ctx.exception, CyborgError)
-        self.assertIsInstance(ctx.exception.__cause__, UnauthorizedException)
-
-    def test_forbidden_raises_authentication_error(self):
-        """Case 2: ForbiddenException(403) -> AuthenticationError."""
-        self.client.api.list_indexes_v1_indexes_list_get.side_effect = (
-            ForbiddenException(status=403)
-        )
-        with self.assertRaises(AuthenticationError) as ctx:
-            self.client.list_indexes()
-        self.assertIsInstance(ctx.exception.__cause__, ForbiddenException)
-
-    def test_service_exception_503_raises_service_unavailable(self):
-        """Case 3: ServiceException(503) -> ServiceUnavailableError."""
-        self.client.api.list_indexes_v1_indexes_list_get.side_effect = ServiceException(
-            status=503
-        )
-        with self.assertRaises(ServiceUnavailableError) as ctx:
-            self.client.list_indexes()
-        self.assertIsInstance(ctx.exception, CyborgError)
-
-    def test_service_exception_504_raises_service_unavailable(self):
-        """Case 4: ServiceException(504) -> ServiceUnavailableError."""
-        self.client.api.list_indexes_v1_indexes_list_get.side_effect = ServiceException(
-            status=504
-        )
-        with self.assertRaises(ServiceUnavailableError):
-            self.client.list_indexes()
-
-    def test_service_exception_500_raises_service_unavailable(self):
-        """Case 5: ServiceException(500) -> ServiceUnavailableError."""
-        self.client.api.list_indexes_v1_indexes_list_get.side_effect = ServiceException(
-            status=500
-        )
-        with self.assertRaises(ServiceUnavailableError):
-            self.client.list_indexes()
-
-    def test_timeout_raises_connection_timeout_error(self):
-        """Case 6: urllib3 TimeoutError -> ConnectionTimeoutError."""
-        self.client.api.list_indexes_v1_indexes_list_get.side_effect = (
-            urllib3.exceptions.TimeoutError()
-        )
-        with self.assertRaises(ConnectionTimeoutError) as ctx:
-            self.client.list_indexes()
-        self.assertIsInstance(ctx.exception, CyborgError)
-        self.assertIsInstance(ctx.exception.__cause__, urllib3.exceptions.TimeoutError)
-
-    def test_max_retry_raises_service_unavailable(self):
-        """Case 7: urllib3 MaxRetryError -> ServiceUnavailableError."""
-        pool = MagicMock()
-        self.client.api.list_indexes_v1_indexes_list_get.side_effect = (
-            urllib3.exceptions.MaxRetryError(pool, "/")
-        )
-        with self.assertRaises(ServiceUnavailableError):
-            self.client.list_indexes()
-
-    def test_bad_request_raises_value_error(self):
-        """Case 8: BadRequestException(400) -> ValueError (unchanged)."""
-        self.client.api.list_indexes_v1_indexes_list_get.side_effect = (
-            BadRequestException(status=400)
-        )
-        with self.assertRaises(ValueError) as ctx:
-            self.client.list_indexes()
-        self.assertNotIsInstance(ctx.exception, CyborgError)
-
-    def test_not_found_raises_value_error(self):
-        """Case 9: NotFoundException(404) -> ValueError (unchanged)."""
-        self.client.api.list_indexes_v1_indexes_list_get.side_effect = (
-            NotFoundException(status=404)
-        )
-        with self.assertRaises(ValueError):
-            self.client.list_indexes()
-
-
-class TestEncryptedIndexQuery(unittest.TestCase):
-    """Exception translation for EncryptedIndex.query (outer block)."""
-
-    def setUp(self):
-        self.idx = _make_index()
-        self.idx._request_headers = MagicMock(return_value={})
-        self.idx._key_to_hex = MagicMock(return_value=None)
-
-    def _call_query(self):
-        # Use a flat list so query() goes through the REST path
-        # (numpy arrays are routed to query_binary internally)
-        self.idx.query(query_vectors=[1.0, 2.0, 3.0])
-
-    def test_unauthorized_raises_authentication_error(self):
-        self.idx._api.query_vectors_v1_vectors_query_post_without_preload_content.side_effect = UnauthorizedException(
-            status=401
-        )
-        with self.assertRaises(AuthenticationError) as ctx:
-            self._call_query()
-        self.assertIsInstance(ctx.exception.__cause__, UnauthorizedException)
-
-    def test_service_exception_raises_service_unavailable(self):
-        self.idx._api.query_vectors_v1_vectors_query_post_without_preload_content.side_effect = ServiceException(
-            status=503
-        )
-        with self.assertRaises(ServiceUnavailableError):
-            self._call_query()
-
-    def test_timeout_raises_connection_timeout(self):
-        self.idx._api.query_vectors_v1_vectors_query_post_without_preload_content.side_effect = urllib3.exceptions.TimeoutError()
-        with self.assertRaises(ConnectionTimeoutError) as ctx:
-            self._call_query()
-        self.assertIsInstance(ctx.exception.__cause__, urllib3.exceptions.TimeoutError)
-
-    def test_new_connection_error_raises_service_unavailable(self):
-        conn = MagicMock()
-        self.idx._api.query_vectors_v1_vectors_query_post_without_preload_content.side_effect = urllib3.exceptions.NewConnectionError(
-            conn, "refused"
-        )
-        with self.assertRaises(ServiceUnavailableError):
-            self._call_query()
-
-    def test_cause_chain_preserved(self):
-        """Case 11: __cause__ on translated exception is the originating exception."""
-        cause = ServiceException(status=503)
-        self.idx._api.query_vectors_v1_vectors_query_post_without_preload_content.side_effect = cause
-        with self.assertRaises(ServiceUnavailableError) as ctx:
-            self._call_query()
-        self.assertIs(ctx.exception.__cause__, cause)
-
-
-class TestEncryptedIndexUpsert(unittest.TestCase):
-    """Exception translation for EncryptedIndex.upsert (dict path)."""
-
-    def setUp(self):
-        self.idx = _make_index()
-        self.idx._request_headers = MagicMock(return_value={})
-        self.idx._key_to_hex = MagicMock(return_value=None)
-
-    def _call_upsert(self):
-        self.idx.upsert([{"id": "a", "vector": [0.1, 0.2]}])
-
-    def test_unauthorized_raises_authentication_error(self):
-        self.idx._api.upsert_vectors_v1_vectors_upsert_post.side_effect = (
-            UnauthorizedException(status=401)
-        )
-        with self.assertRaises(AuthenticationError):
-            self._call_upsert()
-
-    def test_service_exception_raises_service_unavailable(self):
-        self.idx._api.upsert_vectors_v1_vectors_upsert_post.side_effect = (
-            ServiceException(status=500)
-        )
-        with self.assertRaises(ServiceUnavailableError):
-            self._call_upsert()
-
-    def test_timeout_raises_connection_timeout(self):
-        self.idx._api.upsert_vectors_v1_vectors_upsert_post.side_effect = (
-            urllib3.exceptions.TimeoutError()
-        )
-        with self.assertRaises(ConnectionTimeoutError):
-            self._call_upsert()
-
-    def test_cause_chain_preserved(self):
-        """Case 11: __cause__ on translated exception."""
-        cause = UnauthorizedException(status=401)
-        self.idx._api.upsert_vectors_v1_vectors_upsert_post.side_effect = cause
-        with self.assertRaises(AuthenticationError) as ctx:
-            self._call_upsert()
-        self.assertIs(ctx.exception.__cause__, cause)
+    def test_reexported_at_the_package_top_level(self):
+        for name, cls in CONCEPTS.items():
+            with self.subTest(concept=name):
+                self.assertIs(getattr(cyborgdb, name), cls)
+        self.assertIs(cyborgdb.CyborgDBError, CyborgDBError)
 
 
 if __name__ == "__main__":
