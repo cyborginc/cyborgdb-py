@@ -377,24 +377,19 @@ class TestFilterOperators(unittest.TestCase):
             self._meta_ids({"$nor": [{"author": "ada"}]}), {"o1", "o2", "o4"}
         )
 
-    def test_not_is_documented_but_unsupported(self):
+    def test_not_operator_works_on_both_paths(self):
+        # KNOWN BUG — fails today. cyborgdb-core#2395
+        #
         # openapi.json lists `$not` among the supported operators and the SDK
         # docstrings repeat it, but the engine rejects it on BOTH read paths:
         #   "Invalid input: Unsupported metadata operator: $not"
         #
-        # Pinned as current behaviour so nobody rediscovers it the hard way.
-        # Either the operator gets implemented or it comes out of the documented
-        # set; whichever happens, this test fails and forces the decision to be
-        # made explicitly rather than drifting.
+        # Asserting the documented behaviour rather than the current behaviour,
+        # so the gap shows up as a failure instead of a passing test that reads
+        # like an endorsement.
         filters = {"color": {"$not": {"$eq": "red"}}}
-        with self.assertRaises(ValueError):
-            self.index.query_metadata(filters)
-        with self.assertRaises(ValueError):
-            self.index.query(
-                query_vectors=np.random.rand(DIM).astype(np.float32),
-                top_k=len(ALL_OPS),
-                filters=filters,
-            )
+        self.assertEqual(self._meta_ids(filters), {"o1", "o2", "o4"})
+        self.assertEqual(self._vector_ids(filters), {"o1", "o2", "o4"})
 
     # -- arrays ------------------------------------------------------------- #
 
@@ -515,30 +510,30 @@ class TestDatetimeHandling(unittest.TestCase):
         except Exception:
             pass
 
-    def test_datetime_is_stored_as_an_iso_string(self):
-        # Not epoch millis, which is what core stores. The SDK hands the
-        # datetime to JSON serialisation and the ISO form is what lands.
-        row = self.index.get(["t0"], include=["metadata"])[0]
-        self.assertEqual(row["metadata"]["created"], "2026-01-01T00:00:00+00:00")
-
     def test_equality_on_a_datetime_matches(self):
         # Equality survives because it degenerates to string comparison.
         got = {r["id"] for r in self.index.query_metadata({"created": self.BASE})}
         self.assertEqual(got, {"t0"})
 
-    def test_range_on_a_datetime_is_rejected(self):
-        # The consequence of ISO-string storage: a range comparison against a
-        # string is invalid, and the service says so explicitly —
+    def test_range_on_a_datetime_works(self):
+        # KNOWN BUG — fails today. cyborgdb-core#2396
+        #
+        # This SDK serialises a native datetime to an ISO 8601 string
+        # ("2026-01-01T00:00:00+00:00") rather than the epoch millis core
+        # stores, so a range comparison is made against a string and the
+        # service rejects it:
         #   "$gte requires a numeric value, got: \"2026-01-06T00:00:00+00:00\""
         #
-        # Core supports this query. Pinned here as the SDK's current behaviour;
-        # if the SDK starts converting to epoch millis this test fails and
-        # should be replaced with the range assertion core already has.
-        with self.assertRaises(ValueError) as caught:
-            self.index.query_metadata(
+        # cyborgdb-core supports this query (metadata_datetime_test.py has
+        # test_query_metadata_datetime_range). Asserting the behaviour core
+        # already provides, so the divergence shows up as a failure.
+        got = {
+            r["id"]
+            for r in self.index.query_metadata(
                 {"created": {"$gte": self.BASE + timedelta(days=5)}}
             )
-        self.assertIn("numeric", str(caught.exception))
+        }
+        self.assertEqual(got, {"t1", "t2"})
 
     def test_epoch_millis_supports_ranges(self):
         # The workaround: convert to epoch millis yourself and ranges work.

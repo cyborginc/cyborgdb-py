@@ -716,22 +716,21 @@ class TestMetadataFieldPolicyDefaults(unittest.TestCase):
         except Exception:
             pass
 
-    @unittest.expectedFailure
-    def test_full_text_alone_is_rejected_by_the_sdk(self):
+    def test_full_text_alone_is_accepted(self):
+        # KNOWN BUG — fails today. cyborgdb-core#2393
+        #
         # `create_index`'s own docstring states that `full_text=True` "implies
         # filterable=False", and core accepts `{"full_text": True}` on its own.
-        # Through this SDK it cannot work: the generated MetadataFieldPolicy
-        # model declares `filterable: Optional[StrictBool] = True` and always
-        # serialises it, so the request carries
+        # Through this SDK it cannot: the generated MetadataFieldPolicy model
+        # declares `filterable: Optional[StrictBool] = True` and always
+        # serialises it, so the request goes out as
         #     {"filterable": true, "pattern": false, "full_text": true}
-        # and the service rejects the combination with a 422.
-        #
-        # Marked expectedFailure rather than deleted so the contract stays
-        # written down: when the default is fixed this test passes, unittest
-        # reports an unexpected success, and the marker gets removed. Fixing it
-        # is out of scope here (the ticket's non-goals put bug fixes in a
-        # separate change).
-        self._create({"title": {"full_text": True}})
+        # and the service rejects that combination with a 422.
+        index = self._create({"title": {"full_text": True}})
+        self.assertEqual(
+            index.metadata_schema["title"],
+            {"filterable": False, "pattern": False, "full_text": True},
+        )
 
     def test_full_text_works_when_filterable_is_spelled_out(self):
         # The workaround callers currently need.

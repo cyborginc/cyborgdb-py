@@ -209,6 +209,28 @@ class RBACUserTests(unittest.TestCase):
             revoked = self._user_index(out["api_key"])
             revoked.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
 
+    def test_denials_raise_one_consistent_exception_type(self):
+        # KNOWN BUG — fails today. cyborgdb-core#2398
+        #
+        # PR #126 introduced AuthenticationError and converted some denial paths
+        # to raise it, but not all: query/upsert/create_user raise
+        # AuthenticationError while load_index on a revoked key still raises a
+        # bare ValueError. Callers cannot write one `except` clause for "denied".
+        #
+        # This suite skipped in CI until the RBAC step was added, which is why
+        # the half-finished conversion went unnoticed.
+        out = self.index.create_user(permissions=["read"])
+        user_index = self._user_index(out["api_key"])
+        self.index.delete_user(out["user_id"])
+
+        with self.assertRaises(cyborgdb.AuthenticationError):
+            user_index.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
+        # The same denial, reached through load_index, must raise the same type.
+        with self.assertRaises(cyborgdb.AuthenticationError):
+            self._user_index(out["api_key"]).query(
+                query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1
+            )
+
     def test_revoke_after_use_denies_a_previously_working_key(self):
         # Every revocation test above (and in the js/go suites) revokes a key
         # that was never used — the case that passes trivially, because nothing
@@ -262,10 +284,8 @@ class RBACUserTests(unittest.TestCase):
             except Exception:
                 pass
 
-    @unittest.expectedFailure
     def test_list_indexes_under_a_user_key_is_scoped_or_denied(self):
-        # SECURITY FINDING — currently failing, marked expectedFailure so it is
-        # recorded rather than ignored, and so CI stays usable until it is fixed.
+        # SECURITY BUG — fails today. cyborgdb-core#2397
         #
         # A tenant-scoped user key can enumerate EVERY index in the deployment,
         # including indexes belonging to other tenants that the key cannot
@@ -274,14 +294,9 @@ class RBACUserTests(unittest.TestCase):
         #   'rbac_hidden_...' unexpectedly found in
         #   {'rbac_users_test_...', 'rbac_hidden_...'}
         #
-        # The key is correctly denied read/write on the foreign index (see
+        # The key is correctly denied read and write on the foreign index (see
         # test_a_user_key_cannot_reach_another_index, which passes), so this
-        # leaks index *names* rather than data. Still a cross-tenant disclosure
-        # and worth its own issue.
-        #
-        # The assertion below states the behaviour we want, so when listing is
-        # scoped or refused this test passes, unittest flags the unexpected
-        # success, and the marker comes off.
+        # discloses index *names* rather than data.
         #
         # A tenant-scoped key must not enumerate the whole deployment. Either
         # listing is refused outright, or it returns only the index the key
