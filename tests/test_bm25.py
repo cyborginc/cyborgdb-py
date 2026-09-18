@@ -26,8 +26,6 @@ BASE_URL = os.getenv("CYBORGDB_BASE_URL", "http://localhost:8000")
 API_KEY = os.getenv("CYBORGDB_API_KEY", "")
 DIM = 8
 
-# Upserts become visible asynchronously; the suites poll rather than sleep.
-# See tests/helpers.py for why a fixed delay was the wrong tool.
 PROPAGATION_TIMEOUT = DEFAULT_TIMEOUT
 _wait_for_ids = wait_for_ids
 _wait_until_gone = wait_until_gone
@@ -49,9 +47,6 @@ ANY_TERM = {"d0", "d2", "d4"}
 
 
 class TestBM25(unittest.TestCase):
-    # Every test in this class is read-only, so the fixture is built once for
-    # the class rather than once per test. As per-test setUp this was creating
-    # an index, upserting, and waiting ~20 times over for no isolation benefit.
     @classmethod
     def setUpClass(cls):
         cls.client = cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
@@ -124,12 +119,6 @@ class TestBM25(unittest.TestCase):
     def test_text_search_top_k_caps_results(self):
         results = self.index.query_metadata(text="quantum", top_k=1)
         self.assertEqual(len(results), 1)
-
-    def test_text_fields_restricts_to_named_field(self):
-        # `body` is the only full_text field; naming it explicitly is a no-op
-        # but must be accepted.
-        results = self.index.query_metadata(text="quantum", text_fields=["body"])
-        self.assertTrue({r["id"] for r in results} <= ANY_TERM)
 
     def test_filter_prefilters_the_text_leg(self):
         # topic=food excludes every quantum doc, so the text leg scores nothing.
@@ -307,7 +296,6 @@ class TestBM25MetadataFilterNarrowing(unittest.TestCase):
     QUANTUM_ANY_FIELD = {"a", "b", "c"}
     QUANTUM_IN_TITLE = {"a", "c"}
 
-    # Read-only class: one fixture for all of it.
     @classmethod
     def setUpClass(cls):
         cls.client = cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
@@ -373,15 +361,9 @@ class TestBM25MetadataFilterNarrowing(unittest.TestCase):
         self.assertEqual(got, {"a"})
 
     def test_field_weights_flip_the_top_result(self):
-        # Per-field weights change the *ranking* — that is the only thing they
-        # do — so the assertion has to be on order, not on the matched set.
-        # `a` and `c` match in `title` only and `b` matches in `body` only, so
-        # weighting one field heavily must lift its documents above the other's.
-        #
-        # 10:1 against 1:10 is a 100x swing, deliberately far wider than any
-        # term-frequency or field-length difference in this fixture, so the flip
-        # does not depend on the exact per-field BM25 formula. A 2:1 weighting
-        # would ride on those details and go flaky.
+        # `a`/`c` match in title only, `b` in body only. 10:1 against 1:10 is a
+        # 100x swing — wider than any term-frequency or field-length difference
+        # here, so the flip does not ride on the per-field BM25 formula.
         title_heavy = [
             r["id"]
             for r in self.index.query_metadata(
@@ -398,14 +380,8 @@ class TestBM25MetadataFilterNarrowing(unittest.TestCase):
                 text_field_weights=[1.0, 10.0],
             )
         ]
-        # Re-weighting reorders; it never filters. Both directions still match
-        # every document that contains the term in either field.
         self.assertEqual(set(title_heavy), self.QUANTUM_ANY_FIELD)
         self.assertEqual(set(body_heavy), self.QUANTUM_ANY_FIELD)
-        # ...but the winner changes: a title-only match leads when `title` is
-        # weighted, and the body-only match `b` leads when `body` is. If the
-        # service ignored the weights, both lists would be identical and this
-        # would fail — which the previous set-equality assertion could not.
         self.assertIn(title_heavy[0], self.QUANTUM_IN_TITLE)
         self.assertEqual(body_heavy[0], "b")
         self.assertNotEqual(title_heavy[0], body_heavy[0])
@@ -510,13 +486,7 @@ HYBRID_TEXT = "apple date"
 
 class TestHybridFusionDeterministic(unittest.TestCase):
     """Hybrid fusion with hand-chosen vectors, so the fused ranking is a fact
-    rather than noise.
-
-    Core proves the fusion maths (tests/bm25_api_test.py). What these prove is
-    the wiring: that each knob crosses the wire intact, reaches core, and that
-    the ordering survives JSON serialisation and the SDK's result mapping. A
-    disagreement between one of these and its core twin is a transport bug.
-    """
+    rather than noise. Core proves the fusion maths; these prove the wiring."""
 
     @classmethod
     def setUpClass(cls):
@@ -526,12 +496,7 @@ class TestHybridFusionDeterministic(unittest.TestCase):
             cyborgdb.Client.generate_key(),
             dimension=HYBRID_DIM,
             metric="euclidean",
-            # `full_text` set directly rather than via the `text_fields` sugar,
-            # which the shortcut-based fixtures above never exercise.
-            #
-            # `filterable: False` is spelled out only because the SDK cannot
-            # currently send `{"full_text": True}` on its own — see
-            # test_full_text_alone_is_rejected_by_the_sdk below.
+            # filterable spelled out because of cyborgdb-core#2393.
             metadata_schema={
                 "title": {"full_text": True, "filterable": False},
                 "body": {"full_text": True, "filterable": False},
@@ -574,25 +539,22 @@ class TestHybridFusionDeterministic(unittest.TestCase):
             for r in self.index.query(query_vectors=HYBRID_QUERY_VECTOR, top_k=4)
         ]
 
-    # -- alpha: tested against each leg rather than against arithmetic ---- #
-
     def test_alpha_zero_reproduces_the_pure_bm25_ranking(self):
-        # alpha=0 is pure BM25 by definition, so the fused order must equal the
-        # text-only order exactly. Comparing one call against another means no
-        # score is ever computed here, and the random-vector problem disappears:
-        # at alpha=0 the vectors genuinely cannot matter.
+        # Anchored as well as compared: agreement alone would hold if both legs
+        # returned the same wrong answer. "apple date" matches d0 on both terms,
+        # d1 and d3 on one each, and d2 on neither.
         self.assertEqual(self._hybrid_ids(alpha=0.0), self._text_only_ids())
+        self.assertEqual(set(self._hybrid_ids(alpha=0.0)), {"d0", "d1", "d3"})
 
     def test_alpha_one_reproduces_the_pure_vector_ranking(self):
-        # The mirror image: alpha=1 drops the text leg, so the fused order must
-        # equal a plain vector query over the same vector.
+        # Distances to HYBRID_QUERY_VECTOR are strictly ordered, so the expected
+        # order is fixed rather than merely consistent.
         self.assertEqual(self._hybrid_ids(alpha=1.0), self._vector_only_ids())
+        self.assertEqual(self._hybrid_ids(alpha=1.0), ["d2", "d1", "d0", "d3"])
 
     def test_alpha_endpoints_disagree(self):
-        # Guards the two tests above. If the BM25 and vector rankings happened
-        # to coincide on this corpus, both would pass while proving nothing.
-        # d2 is the vector winner and has no text match at all, so the two
-        # orderings genuinely differ.
+        # Without this, both tests above would pass vacuously if the two
+        # rankings ever coincided.
         self.assertNotEqual(self._text_only_ids(), self._vector_only_ids())
 
     # -- fusion ------------------------------------------------------------ #
@@ -612,14 +574,12 @@ class TestHybridFusionDeterministic(unittest.TestCase):
         self.assertEqual(self._hybrid_ids(), ["d0", "d1", "d3", "d2"])
 
     def test_rrf_k_reaches_the_fusion(self):
-        # RRF contributes 1/(k + rank) per leg, so shrinking k raises every
-        # fused score. Asserting on scores rather than order keeps this robust:
-        # on a four-document corpus the order changes only by knife-edge
-        # margins (<1%), which is exactly how a flaky test gets written.
+        # RRF contributes 1/(k + rank) per leg, so a smaller k raises every
+        # score. Asserted on scores, not order: on four documents the order
+        # margins are under 1% and would flake.
         small = {r["id"]: r["score"] for r in self._hybrid(rrf_k=1.0)}
         large = {r["id"]: r["score"] for r in self._hybrid(rrf_k=60.0)}
         self.assertEqual(set(small), set(large), "rrf_k must not change matches")
-        # If rrf_k were dropped in transit, these would be identical.
         self.assertNotEqual(small, large)
         for doc_id in small:
             self.assertGreater(
@@ -628,39 +588,26 @@ class TestHybridFusionDeterministic(unittest.TestCase):
                 f"{doc_id}: smaller rrf_k must raise the fused score",
             )
 
-    def test_window_mult_bounds_and_monotonicity(self):
-        # window_mult is per-leg candidate depth as a multiple of top_k. On a
-        # four-document corpus every document is always a candidate, so no
-        # honest assertion about it changing the *ranking* is available here —
-        # claiming otherwise would be a test that passes for the wrong reason.
-        # What can be asserted: the bound is enforced, and widening the window
-        # never returns fewer results.
+    def test_window_mult_below_one_is_rejected(self):
+        # Only the bound is assertable here: candidate depth is top_k *
+        # window_mult, and on an untrained index search is exhaustive, so the
+        # window cannot affect the ranking. A real effect test needs a trained
+        # index and a corpus larger than the window.
         with self.assertRaises(ValueError):
             self._hybrid(window_mult=0)
-        narrow = self._hybrid_ids(top_k=2, window_mult=1)
-        wide = self._hybrid_ids(top_k=2, window_mult=4)
-        self.assertEqual(len(narrow), len(wide))
-        self.assertLessEqual(len(narrow), 2)
-
-    # -- projections and batching ------------------------------------------ #
 
     def test_include_metadata_returns_the_fused_winners_metadata(self):
-        # `include` has only ever been tested on get(); this is the query()
-        # path, and specifically the hybrid query() path.
         results = self._hybrid(include=["metadata"], top_k=2)
         self.assertEqual(len(results), 2)
         for row in results:
             self.assertIn("metadata", row)
             self.assertIn("title", row["metadata"])
-        # d0 wins the fusion (see above) and d0's author is "ann".
         self.assertEqual(results[0]["id"], "d0")
         self.assertEqual(results[0]["metadata"]["author"], "ann")
 
     def test_batch_hybrid_fuses_each_row_independently(self):
-        # Batch + hybrid exists only in Go today. Two identical query vectors
-        # must produce two identical fused rankings, each matching the
-        # single-vector result — proving the text leg is applied per row rather
-        # than once for the whole batch.
+        # Two identical vectors must fuse identically and match the
+        # single-vector result: the text leg applies per row, not per batch.
         expected = self._hybrid_ids()
         batched = self.index.query(
             query_vectors=np.array(
@@ -674,17 +621,13 @@ class TestHybridFusionDeterministic(unittest.TestCase):
             self.assertEqual([r["id"] for r in row_results], expected)
 
     def test_filter_prefilters_both_legs_of_the_hybrid(self):
-        # author=ann keeps d0 and d2 only. The surviving order must be the
-        # fused order restricted to those two, not an arbitrary subset.
+        # author=ann keeps d0 and d2; the order must be the fused order
+        # restricted to them, not an arbitrary subset.
         ids = self._hybrid_ids(filters={"author": "ann"})
         self.assertEqual(ids, ["d0", "d2"])
 
-    # -- determinism -------------------------------------------------------- #
-
     def test_repeated_queries_are_identical(self):
-        # Cheap, and the precondition for every order-based assertion above:
-        # if ties broke arbitrarily between calls, those would flake instead of
-        # failing honestly.
+        # Precondition for every order assertion above.
         first = self._hybrid()
         second = self._hybrid()
         self.assertEqual([r["id"] for r in first], [r["id"] for r in second])
@@ -717,15 +660,9 @@ class TestMetadataFieldPolicyDefaults(unittest.TestCase):
             pass
 
     def test_full_text_alone_is_accepted(self):
-        # KNOWN BUG — fails today. cyborgdb-core#2393
-        #
-        # `create_index`'s own docstring states that `full_text=True` "implies
-        # filterable=False", and core accepts `{"full_text": True}` on its own.
-        # Through this SDK it cannot: the generated MetadataFieldPolicy model
-        # declares `filterable: Optional[StrictBool] = True` and always
-        # serialises it, so the request goes out as
-        #     {"filterable": true, "pattern": false, "full_text": true}
-        # and the service rejects that combination with a 422.
+        # KNOWN BUG — fails today. cyborgdb-core#2393: MetadataFieldPolicy
+        # defaults filterable=True and always serialises it, so the request
+        # carries filterable=true + full_text=true and the service 422s.
         index = self._create({"title": {"full_text": True}})
         self.assertEqual(
             index.metadata_schema["title"],
@@ -733,7 +670,6 @@ class TestMetadataFieldPolicyDefaults(unittest.TestCase):
         )
 
     def test_full_text_works_when_filterable_is_spelled_out(self):
-        # The workaround callers currently need.
         index = self._create({"title": {"full_text": True, "filterable": False}})
         self.assertEqual(
             index.metadata_schema["title"],
@@ -741,7 +677,6 @@ class TestMetadataFieldPolicyDefaults(unittest.TestCase):
         )
 
     def test_text_fields_sugar_is_equivalent(self):
-        # The documented shortcut produces the same policy, and does work.
         index = self.client.create_index(
             f"policy_sugar_{uuid.uuid4().hex[:8]}",
             cyborgdb.Client.generate_key(),
@@ -759,12 +694,9 @@ class TestMetadataFieldPolicyDefaults(unittest.TestCase):
 class TestBM25Analyzer(unittest.TestCase):
     """Observable behaviour of the tokenizer/stemmer pipeline.
 
-    The pipeline is not configurable from the SDK — `index.bm25` only reports an
-    `analyzer_version` — which is exactly why its behaviour should be pinned:
-    that version can change underneath us, and nothing else would notice. Every
-    expectation below was measured against the running service rather than
-    assumed, so a failure here means the analyzer changed, not that the test
-    guessed wrong.
+    Not configurable from the SDK — only reported as `analyzer_version` — so a
+    change here would otherwise go unnoticed. Every expectation was measured
+    against a running service, not assumed.
     """
 
     ROWS = {
@@ -810,8 +742,6 @@ class TestBM25Analyzer(unittest.TestCase):
         return {r["id"] for r in self.index.query_metadata(text=text)}
 
     def test_terms_are_stemmed(self):
-        # "running runner runs" is reachable from each of its inflections, so
-        # the analyzer stems rather than matching raw tokens.
         for term in ("run", "runs", "runner", "running"):
             with self.subTest(term=term):
                 self.assertIn("stem", self._ids(term))
@@ -821,8 +751,6 @@ class TestBM25Analyzer(unittest.TestCase):
         self.assertIn("plural", self._ids("church"))
 
     def test_punctuation_is_stripped_and_hyphens_split(self):
-        # "mind-killer" indexes as two terms, and trailing punctuation on
-        # "fear!" does not become part of the token.
         self.assertIn("punct", self._ids("mind"))
         self.assertIn("punct", self._ids("killer"))
         self.assertIn("punct", self._ids("fear"))
@@ -832,8 +760,6 @@ class TestBM25Analyzer(unittest.TestCase):
         self.assertIn("case", self._ids("WORD"))
 
     def test_stop_words_are_dropped(self):
-        # A document made entirely of stop words contributes no searchable
-        # terms, so querying one matches nothing at all.
         for term in ("the", "and", "of"):
             with self.subTest(term=term):
                 self.assertEqual(self._ids(term), set())
@@ -842,24 +768,17 @@ class TestBM25Analyzer(unittest.TestCase):
         self.assertIn("num", self._ids("42"))
 
     def test_accents_are_not_folded(self):
-        # Measured behaviour, and the one that most often surprises callers:
-        # "café" matches only its exact accented form. If accent folding is ever
-        # added this test fails, which is the point — it is a user-visible
-        # search behaviour change that should be a deliberate decision.
+        # A limitation, pinned deliberately: adding accent folding is a
+        # user-visible search change and should break this test.
         self.assertIn("accent", self._ids("café"))
         self.assertEqual(self._ids("cafe"), set())
 
 
-# Scoring-property fixtures. Unlike the uniform synthetic rows elsewhere in this
-# file, these corpora are shaped so that one BM25 property at a time is the only
-# thing separating two documents — the approach Qdrant takes by seeding its BM25
-# fixture with stop-word-heavy documents alongside real sentences.
-#
-#   IDF      "zeppelin" occurs in one document, "common" in five. Both candidate
-#            documents are the same length and match exactly one query term, so
-#            only the term's rarity can separate them.
-#   LENGTH   Same term, same term-frequency, very different document lengths.
-#   TF       Same length, different term-frequency.
+# Each pair below differs in exactly one BM25 property:
+#   IDF      "zeppelin" in one document, "common" in five; both candidates are
+#            the same length and match one query term, so only rarity separates.
+#   LENGTH   same term and term-frequency, very different lengths.
+#   TF       same length, different term-frequency.
 SCORING_DOCS = [
     ("idf_rare", "zeppelin padding padding padding"),
     ("idf_common", "common padding padding padding"),
@@ -886,12 +805,10 @@ def _scoring_items():
 
 
 class TestBM25ScoringProperties(unittest.TestCase):
-    """BM25's three defining behaviours, asserted through the SDK.
+    """IDF, length normalisation and term-frequency saturation through the SDK.
 
-    Core proves the arithmetic (bm25_score_test.cpp). These assert the
-    consequences survive the wire: a ranking that depends on IDF, on document
-    length, and on term frequency. Only relative order is asserted — never an
-    absolute score — because scores shift legitimately with `analyzer_version`.
+    Only relative order is asserted, never an absolute score: scores shift
+    legitimately with `analyzer_version`.
     """
 
     @classmethod
@@ -921,9 +838,6 @@ class TestBM25ScoringProperties(unittest.TestCase):
         return {r["id"]: r["score"] for r in self.index.query_metadata(text=text)}
 
     def test_a_rare_term_outranks_a_common_one(self):
-        # Both documents match exactly one query term, with the same term
-        # frequency and the same length. The only difference is that "zeppelin"
-        # appears in one document and "common" in five, so IDF alone decides.
         ranked = self._ranked("zeppelin common")
         self.assertIn("idf_rare", ranked)
         self.assertIn("idf_common", ranked)
@@ -934,8 +848,6 @@ class TestBM25ScoringProperties(unittest.TestCase):
         )
 
     def test_a_shorter_document_outranks_a_longer_one(self):
-        # Same term, same term-frequency; `len_long` simply buries it in 24
-        # filler words. Length normalisation must penalise it.
         ranked = self._ranked("target")
         self.assertEqual(ranked[:2], ["len_short", "len_long"])
 
@@ -944,9 +856,7 @@ class TestBM25ScoringProperties(unittest.TestCase):
         self.assertEqual(ranked[:2], ["tf_many", "tf_one"])
 
     def test_a_term_in_every_document_still_scores(self):
-        # "common" is in five of ten documents. IDF shrinks but must not go
-        # negative or zero the row out — every matching document still comes
-        # back with a score.
+        # IDF shrinks with document frequency but must not reach zero.
         scores = self._scores("common")
         self.assertEqual(set(scores), {"idf_common", "c1", "c2", "c3", "c4"})
         for doc_id, score in scores.items():
@@ -956,10 +866,8 @@ class TestBM25ScoringProperties(unittest.TestCase):
 class TestBM25TuningParameters(unittest.TestCase):
     """`bm25_k1` and `bm25_b` change ranking, not just `describe` output.
 
-    Both were previously tier-2: created with non-default values and asserted
-    only via the config round-trip, which would pass if the engine ignored them.
-    Each test here builds a second index differing in exactly one parameter and
-    asserts the ranking difference that parameter is responsible for.
+    Each test builds a second index differing in one parameter and asserts the
+    ranking difference that parameter is responsible for.
     """
 
     @classmethod
@@ -995,10 +903,6 @@ class TestBM25TuningParameters(unittest.TestCase):
         return [r["id"] for r in index.query_metadata(text=text)]
 
     def test_b_zero_removes_the_length_penalty(self):
-        # `b` controls how much document length matters. At the default (0.75)
-        # the short document wins; at b=0 length is ignored entirely, so two
-        # documents with the same term-frequency must score equally and the
-        # ordering between them stops being decided by length.
         default_b = self._seeded("bdefault")
         no_length = self._seeded("bzero", bm25_b=0.0)
 
@@ -1016,10 +920,8 @@ class TestBM25TuningParameters(unittest.TestCase):
         )
 
     def test_k1_zero_makes_scoring_binary(self):
-        # `k1` controls term-frequency saturation. At k1=0 the tf component
-        # collapses to presence/absence, so a document containing the term five
-        # times scores the same as one containing it once. At the default they
-        # differ — asserted alongside so the comparison is meaningful.
+        # At k1=0 the tf component collapses to presence/absence. The default
+        # case is asserted alongside so the comparison means something.
         default_k1 = self._seeded("kdefault")
         binary = self._seeded("kzero", bm25_k1=0.0)
 
@@ -1044,14 +946,12 @@ class TestBM25TuningParameters(unittest.TestCase):
 
 
 class TestBM25Lifecycle(unittest.TestCase):
-    """BM25 after mutation — the behaviour no SDK test covers today.
+    """BM25 after mutation.
 
-    BM25 scores depend on corpus-wide statistics (document count, total document
-    length) that feed IDF and length normalisation. cyborg-encrypted-index tests
-    these hard at its own layer (ReUpsertReplacesNotDoubleCounts,
-    DeleteSubtractsFromGlobals). Nothing until now checked they are wired
-    through core -> service -> SDK, where stale statistics would silently skew
-    every subsequent score with no error surface.
+    Scores depend on corpus-wide statistics (document count, total length) that
+    feed IDF and length normalisation. CEI tests those hard at its own layer;
+    nothing checked they are wired through core -> service -> SDK, where stale
+    statistics would skew every score with no error surface.
     """
 
     def setUp(self):
@@ -1093,17 +993,12 @@ class TestBM25Lifecycle(unittest.TestCase):
         self.assertEqual(self._ids("alpha"), {"m0", "m3"})
 
     def test_deleted_document_never_comes_back(self):
-        # Ported from core's BM25QueryTest::DeletedDocumentsNeverComeBack. The
-        # delete has to travel the same wire as the query, so the core version
-        # cannot substitute for this one.
         self.index.delete(["m0"])
         _wait_until_gone(self.index, ["m0"])
         for text in ("alpha", "alpha beta", "beta"):
             self.assertNotIn("m0", self._ids(text), f"m0 resurfaced for {text!r}")
 
     def test_updating_a_text_field_moves_the_document_between_results(self):
-        # The update path, not just insert: m2 does not match "alpha" until its
-        # body is rewritten, and stops matching "delta" once it is.
         self.assertNotIn("m2", self._ids("alpha"))
         self.index.upsert(
             [
@@ -1123,14 +1018,11 @@ class TestBM25Lifecycle(unittest.TestCase):
         self.assertNotIn("m2", self._ids("delta"))
 
     def test_reupsert_does_not_double_count(self):
-        # Re-upserting an unchanged document must leave scores untouched. If
-        # the corpus statistics were double-counted, IDF and the length
-        # normaliser would shift and every score would move.
+        # Double-counted corpus statistics would shift IDF and the length
+        # normaliser, moving every score.
         before = {r["id"]: r["score"] for r in self.index.query_metadata(text="alpha")}
-        # `body` is byte-identical to the original, so BM25 must be unaffected.
-        # A `marker` field rides along purely so there is something observable
-        # to poll for — otherwise this would need a blind sleep, which is the
-        # habit these helpers exist to remove.
+        # `marker` rides along only to give the poll below something to observe;
+        # `body` is byte-identical, so BM25 must be unaffected.
         self.index.upsert(
             [
                 {

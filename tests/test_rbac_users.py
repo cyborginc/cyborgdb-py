@@ -52,16 +52,7 @@ KMS_NAME = os.getenv("CYBORGDB_KMS_NAME") or os.getenv("CYBORGDB_KMS_NAME_REAL")
 
 DIMENSION = 4
 
-# A denial reaches the caller as either `ValueError` or `AuthenticationError`
-# depending on which code path raised it: PR #126 introduced the custom
-# exception classes and converted some paths but not all, so `load_index` on a
-# revoked key still raises `ValueError` while `query`/`upsert`/`create_user`
-# raise `AuthenticationError`. Both are denials, so the tests accept either.
-#
-# That inconsistency is itself worth fixing — one class of failure should have
-# one type — but it is a behaviour change rather than a test fix, so it is only
-# recorded here. Note this suite skipped in CI until the RBAC step was added, so
-# the exception-type change went unnoticed for as long as it has existed.
+# Denials raise either type depending on the path — see cyborgdb-core#2398.
 DENIED = (ValueError, cyborgdb.AuthenticationError)
 
 
@@ -210,54 +201,39 @@ class RBACUserTests(unittest.TestCase):
             revoked.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
 
     def test_denials_raise_one_consistent_exception_type(self):
-        # KNOWN BUG — fails today. cyborgdb-core#2398
-        #
-        # PR #126 introduced AuthenticationError and converted some denial paths
-        # to raise it, but not all: query/upsert/create_user raise
-        # AuthenticationError while load_index on a revoked key still raises a
-        # bare ValueError. Callers cannot write one `except` clause for "denied".
-        #
-        # This suite skipped in CI until the RBAC step was added, which is why
-        # the half-finished conversion went unnoticed.
+        # KNOWN BUG — fails today. cyborgdb-core#2398: query/upsert raise
+        # AuthenticationError, load_index on a revoked key raises ValueError,
+        # so callers cannot write one `except` clause for "denied".
         out = self.index.create_user(permissions=["read"])
         user_index = self._user_index(out["api_key"])
         self.index.delete_user(out["user_id"])
 
         with self.assertRaises(cyborgdb.AuthenticationError):
             user_index.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
-        # The same denial, reached through load_index, must raise the same type.
         with self.assertRaises(cyborgdb.AuthenticationError):
             self._user_index(out["api_key"]).query(
                 query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1
             )
 
     def test_revoke_after_use_denies_a_previously_working_key(self):
-        # Every revocation test above (and in the js/go suites) revokes a key
-        # that was never used — the case that passes trivially, because nothing
-        # was ever cached or established for it. This exercises the real-world
-        # sequence: mint, USE, revoke, use again.
+        # The other revocation tests revoke a key that was never used, which
+        # passes trivially. This one uses the key first.
         out = self.index.create_user(permissions=["read"])
         user_index = self._user_index(out["api_key"])
 
-        # The key demonstrably works before revocation, so the denial below
-        # cannot be explained by the key having been broken all along.
         results = user_index.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
         self.assertTrue(len(results) >= 1)
 
         self.index.delete_user(out["user_id"])
 
-        # The same client object, already used successfully, must now be denied.
-        # A server-side cache that outlived the revocation would surface here.
+        # A server-side cache outliving the revocation would surface here.
         with self.assertRaises(DENIED):
             user_index.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
-        # And a freshly loaded client with that key fares no better.
         with self.assertRaises(DENIED):
             reloaded = self._user_index(out["api_key"])
             reloaded.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
 
     def test_a_user_key_cannot_reach_another_index(self):
-        # Tenant isolation: a key minted against one index must be useless
-        # against a different one. Nothing in any SDK checked this.
         other_name = f"rbac_other_{uuid.uuid4().hex[:8]}"
         other = self.root.create_index(
             index_name=other_name, kms_name=KMS_NAME, dimension=DIMENSION
@@ -266,8 +242,6 @@ class RBACUserTests(unittest.TestCase):
         out = self.index.create_user(permissions=["read", "write"])
         try:
             intruder = cyborgdb.Client(BASE_URL, api_key=out["api_key"])
-            # Loading the other index, or any operation on it, must be denied —
-            # the user's wrapped DEK exists only for the index they belong to.
             with self.assertRaises(DENIED):
                 foreign = intruder.load_index(other_name)
                 foreign.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
@@ -285,22 +259,10 @@ class RBACUserTests(unittest.TestCase):
                 pass
 
     def test_list_indexes_under_a_user_key_is_scoped_or_denied(self):
-        # SECURITY BUG — fails today. cyborgdb-core#2397
-        #
-        # A tenant-scoped user key can enumerate EVERY index in the deployment,
-        # including indexes belonging to other tenants that the key cannot
-        # otherwise touch. Observed in CI run 35280498184:
-        #
-        #   'rbac_hidden_...' unexpectedly found in
-        #   {'rbac_users_test_...', 'rbac_hidden_...'}
-        #
-        # The key is correctly denied read and write on the foreign index (see
-        # test_a_user_key_cannot_reach_another_index, which passes), so this
-        # discloses index *names* rather than data.
-        #
-        # A tenant-scoped key must not enumerate the whole deployment. Either
-        # listing is refused outright, or it returns only the index the key
-        # belongs to — both are defensible, leaking every index name is not.
+        # SECURITY BUG — fails today. cyborgdb-core#2397: a tenant-scoped key
+        # enumerates every index in the deployment. Data access is correctly
+        # denied (see test_a_user_key_cannot_reach_another_index), so this
+        # discloses index names rather than contents.
         other_name = f"rbac_hidden_{uuid.uuid4().hex[:8]}"
         other = self.root.create_index(
             index_name=other_name, kms_name=KMS_NAME, dimension=DIMENSION
@@ -310,7 +272,7 @@ class RBACUserTests(unittest.TestCase):
             user_client = cyborgdb.Client(BASE_URL, api_key=out["api_key"])
             try:
                 listed = set(user_client.list_indexes())
-            except ValueError:
+            except DENIED:
                 return  # refusing outright is an acceptable contract
             self.assertNotIn(
                 other_name,

@@ -238,9 +238,9 @@ OPERATOR_SCHEMA = {
     "author": {"filterable": True},
 }
 
-# One fixture covering every operator, plus the two cases that make operator
-# semantics ambiguous: documents that omit a field entirely (o2, o4 have no
-# `author`) and an array-valued field (`tags`, including an empty array on o3).
+# Covers every operator plus the two cases that make operator semantics
+# ambiguous: fields omitted entirely (o2, o4 have no `author`) and array-valued
+# fields (`tags`, with an empty array on o3).
 #
 #   id  color  rank  tags                      author
 #   o0  red     0    [design, search]          ada
@@ -257,9 +257,8 @@ OPERATOR_ROWS = [
 ]
 ALL_OPS = {"o0", "o1", "o2", "o3", "o4"}
 
-# Every operator in openapi.json's documented set, each with an expected answer
-# that is a proper subset of the corpus — so a filter that silently matched
-# everything, or nothing, fails rather than passing by luck.
+# Each expected answer is a proper subset of the corpus, so a filter that
+# silently matched everything or nothing fails rather than passing by luck.
 OPERATOR_CASES = [
     ("$eq", {"color": {"$eq": "red"}}, {"o0", "o3"}),
     ("$ne", {"color": {"$ne": "red"}}, {"o1", "o2", "o4"}),
@@ -282,12 +281,7 @@ OPERATOR_CASES = [
 
 
 class TestFilterOperators(unittest.TestCase):
-    """All fifteen documented operators, on both read paths.
-
-    Only four (`$in`, `$gte`, `$regex`, `$contains`) were exercised anywhere in
-    this SDK before, and `$gte` only incidentally as a match-all inside the
-    order_by tests. Read-only, so one fixture serves the whole class.
-    """
+    """All fifteen documented operators, on both read paths."""
 
     @classmethod
     def setUpClass(cls):
@@ -302,8 +296,7 @@ class TestFilterOperators(unittest.TestCase):
         items = []
         for doc_id, color, rank, tags, author in OPERATOR_ROWS:
             metadata = {"color": color, "rank": rank, "tags": tags}
-            # `author` is omitted entirely rather than set to null, so these
-            # exercise absence rather than a stored null.
+            # Omitted rather than null: these exercise absence.
             if author is not None:
                 metadata["author"] = author
             items.append(
@@ -342,31 +335,26 @@ class TestFilterOperators(unittest.TestCase):
                 self.assertEqual(self._meta_ids(filters), expected)
 
     def test_every_operator_on_the_vector_path(self):
-        # The same operators through query(), which post-filters over decrypted
-        # metadata rather than resolving from the index. Same answers required.
+        # query() post-filters over decrypted metadata rather than resolving
+        # from the index; the answers must still match.
         for name, filters, expected in OPERATOR_CASES:
             with self.subTest(operator=name):
                 self.assertEqual(self._vector_ids(filters), expected)
 
     def test_both_read_paths_agree(self):
-        # The congruence check: whatever the right answer is, the two paths must
-        # not disagree. This is the cheapest broad guard we have — it catches a
-        # divergence between the indexed path and the post-filter fallback even
-        # for operators whose expected value above turns out to be wrong.
-        for name, filters, _ in OPERATOR_CASES:
+        # Anchored as well as compared: a bug in the shared filter parser would
+        # break both paths identically and slip past an agreement-only check.
+        for name, filters, expected in OPERATOR_CASES:
             with self.subTest(operator=name):
-                self.assertEqual(
-                    self._meta_ids(filters),
-                    self._vector_ids(filters),
-                    f"{name}: query_metadata and query disagree",
-                )
+                meta, vector = self._meta_ids(filters), self._vector_ids(filters)
+                self.assertEqual(meta, vector, f"{name}: paths disagree")
+                self.assertEqual(meta, expected, f"{name}: both paths wrong")
 
     # -- missing fields ---------------------------------------------------- #
 
     def test_missing_field_is_excluded_by_ne_but_included_by_nin(self):
-        # The asymmetry the design doc specifies: `$ne` drops documents lacking
-        # the field, `$nin` keeps them. Both are defensible in isolation; what
-        # matters is that the contract is pinned rather than inferred.
+        # `$ne` drops documents lacking the field, `$nin` keeps them. Both are
+        # defensible; the point is that the contract is pinned, not inferred.
         self.assertEqual(self._meta_ids({"author": {"$ne": "ada"}}), {"o1"})
         self.assertEqual(
             self._meta_ids({"author": {"$nin": ["ada"]}}), {"o1", "o2", "o4"}
@@ -378,15 +366,8 @@ class TestFilterOperators(unittest.TestCase):
         )
 
     def test_not_operator_works_on_both_paths(self):
-        # KNOWN BUG — fails today. cyborgdb-core#2395
-        #
-        # openapi.json lists `$not` among the supported operators and the SDK
-        # docstrings repeat it, but the engine rejects it on BOTH read paths:
-        #   "Invalid input: Unsupported metadata operator: $not"
-        #
-        # Asserting the documented behaviour rather than the current behaviour,
-        # so the gap shows up as a failure instead of a passing test that reads
-        # like an endorsement.
+        # KNOWN BUG — fails today. cyborgdb-core#2395: the engine rejects `$not`
+        # on both read paths although openapi.json documents it.
         filters = {"color": {"$not": {"$eq": "red"}}}
         self.assertEqual(self._meta_ids(filters), {"o1", "o2", "o4"})
         self.assertEqual(self._vector_ids(filters), {"o1", "o2", "o4"})
@@ -402,15 +383,13 @@ class TestFilterOperators(unittest.TestCase):
         )
 
     def test_has_all_of_these_via_and_of_two_memberships(self):
-        # "contains all" has no dedicated operator; it is expressed as $and of
-        # two membership conditions.
+        # No dedicated operator; expressed as $and of two memberships.
         self.assertEqual(
             self._meta_ids({"$and": [{"tags": "design"}, {"tags": "search"}]}),
             {"o0", "o4"},
         )
 
     def test_empty_array_matches_no_membership(self):
-        # o3's tags are [], so it can never satisfy a membership condition.
         for filters in ({"tags": "design"}, {"tags": {"$in": ["design", "ml"]}}):
             with self.subTest(filters=filters):
                 self.assertNotIn("o3", self._meta_ids(filters))
@@ -421,16 +400,13 @@ class TestFilterOperators(unittest.TestCase):
         self.assertEqual(self._meta_ids({}), ALL_OPS)
 
     def test_empty_in_list_matches_nothing(self):
-        # Qdrant ships dedicated regression tests for empty match-any/match-none
-        # because both were real reported bugs. Ours were untested entirely.
         self.assertEqual(self._meta_ids({"color": {"$in": []}}), set())
 
     def test_empty_nin_list_matches_everything(self):
         self.assertEqual(self._meta_ids({"color": {"$nin": []}}), ALL_OPS)
 
     def test_empty_boolean_operands(self):
-        # $and over nothing is vacuously true; $or over nothing is vacuously
-        # false. Both are easy to get backwards in a query planner.
+        # $and over nothing is vacuously true, $or vacuously false.
         self.assertEqual(self._meta_ids({"$and": []}), ALL_OPS)
         self.assertEqual(self._meta_ids({"$or": []}), set())
 
@@ -439,16 +415,18 @@ class TestFilterOperators(unittest.TestCase):
     def test_int_and_float_are_the_same_key(self):
         # All numbers share one index, so 20 and 20.0 must resolve identically
         # on both equality and range bounds.
-        self.assertEqual(self._meta_ids({"rank": 20}), self._meta_ids({"rank": 20.0}))
-        self.assertEqual(
-            self._meta_ids({"rank": {"$gte": 20}}),
-            self._meta_ids({"rank": {"$gte": 20.0}}),
-        )
+        #
+        # Each form is anchored to its expected answer as well as compared to
+        # the other. Comparing the two calls alone would pass if the numeric
+        # index were broken and both returned nothing — the exact "passes for
+        # the wrong reason" failure this suite is meant to eliminate.
+        self.assertEqual(self._meta_ids({"rank": 20}), {"o2"})
+        self.assertEqual(self._meta_ids({"rank": 20.0}), {"o2"})
+        self.assertEqual(self._meta_ids({"rank": {"$gte": 20}}), {"o2", "o3", "o4"})
+        self.assertEqual(self._meta_ids({"rank": {"$gte": 20.0}}), {"o2", "o3", "o4"})
 
     def test_cross_type_comparison_does_not_match_silently(self):
-        # `rank` holds numbers; filtering it with a string must either raise or
-        # return nothing. What it must not do is match — a silent wrong answer
-        # is the failure mode nobody reports as a bug.
+        # Either contract is acceptable; matching is not.
         try:
             got = self._meta_ids({"rank": "20"})
         except ValueError:
@@ -457,17 +435,10 @@ class TestFilterOperators(unittest.TestCase):
 
 
 class TestDatetimeHandling(unittest.TestCase):
-    """What actually happens to a native `datetime` passed as metadata.
+    """Native `datetime` values passed as metadata.
 
-    This is the boundary the design doc flagged as the one place documentation
-    and code may disagree, and they do. cyborgdb-core converts datetimes to
-    epoch millis (its metadata_datetime_test.py has `test_stored_as_epoch_millis`
-    and `test_query_metadata_datetime_range`), so range filters on a date work
-    there. This SDK serialises to an ISO 8601 string instead, so the value round
-    trips and equality matches, but every range comparison fails.
-
-    These tests pin the SDK's real behaviour rather than the intended contract,
-    so the gap is visible and a fix would surface here as a failure.
+    Core stores epoch millis and supports range filters; this SDK serialises to
+    an ISO 8601 string, so equality matches but every range comparison fails.
     """
 
     BASE = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -492,7 +463,6 @@ class TestDatetimeHandling(unittest.TestCase):
                     "vector": np.random.rand(DIM).astype(np.float32).tolist(),
                     "metadata": {
                         "created": cls.BASE + timedelta(days=10 * i),
-                        # The workaround callers currently need for ranges.
                         "created_ms": int(
                             (cls.BASE + timedelta(days=10 * i)).timestamp() * 1000
                         ),
@@ -511,22 +481,13 @@ class TestDatetimeHandling(unittest.TestCase):
             pass
 
     def test_equality_on_a_datetime_matches(self):
-        # Equality survives because it degenerates to string comparison.
+        # Survives because it degenerates to string comparison.
         got = {r["id"] for r in self.index.query_metadata({"created": self.BASE})}
         self.assertEqual(got, {"t0"})
 
     def test_range_on_a_datetime_works(self):
-        # KNOWN BUG — fails today. cyborgdb-core#2396
-        #
-        # This SDK serialises a native datetime to an ISO 8601 string
-        # ("2026-01-01T00:00:00+00:00") rather than the epoch millis core
-        # stores, so a range comparison is made against a string and the
-        # service rejects it:
-        #   "$gte requires a numeric value, got: \"2026-01-06T00:00:00+00:00\""
-        #
-        # cyborgdb-core supports this query (metadata_datetime_test.py has
-        # test_query_metadata_datetime_range). Asserting the behaviour core
-        # already provides, so the divergence shows up as a failure.
+        # KNOWN BUG — fails today. cyborgdb-core#2396: the ISO string reaches
+        # the service, which rejects it with "$gte requires a numeric value".
         got = {
             r["id"]
             for r in self.index.query_metadata(
@@ -536,7 +497,7 @@ class TestDatetimeHandling(unittest.TestCase):
         self.assertEqual(got, {"t1", "t2"})
 
     def test_epoch_millis_supports_ranges(self):
-        # The workaround: convert to epoch millis yourself and ranges work.
+        # The workaround callers need today.
         cutoff = int((self.BASE + timedelta(days=5)).timestamp() * 1000)
         got = {
             r["id"] for r in self.index.query_metadata({"created_ms": {"$gte": cutoff}})
@@ -544,8 +505,7 @@ class TestDatetimeHandling(unittest.TestCase):
         self.assertEqual(got, {"t1", "t2"})
 
     def test_epoch_millis_round_trips_exactly(self):
-        # Millisecond precision must survive the JSON round trip — a float
-        # conversion anywhere would corrupt the low digits.
+        # A float conversion anywhere would corrupt the low digits.
         expected = int(self.BASE.timestamp() * 1000)
         row = self.index.get(["t0"], include=["metadata"])[0]
         self.assertEqual(row["metadata"]["created_ms"], expected)
