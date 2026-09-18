@@ -325,18 +325,6 @@ class TestBackendCompatibility(unittest.TestCase):
         except Exception:
             pass
 
-    def test_feature_availability_differences(self):
-        """Test feature availability between backend variants"""
-        client = create_client()
-
-        index_name = generate_unique_name()
-        index_key = client.generate_key()
-
-        index = client.create_index(
-            index_name, index_key, dimension=128, metric="euclidean"
-        )
-        index.delete_index()
-
     def test_large_metadata_handling(self):
         """Test handling of large metadata objects"""
         test_cases = [
@@ -358,6 +346,9 @@ class TestBackendCompatibility(unittest.TestCase):
                 results = self.index.get([item_id], include=["metadata"])
                 self.assertEqual(len(results), 1)
                 self.assertEqual(results[0]["id"], item_id)
+                # The point of the test: the metadata survives the round trip
+                # intact. Without this it passed even if metadata was dropped.
+                self.assertEqual(results[0]["metadata"], tc["metadata"])
 
     def _create_deep_nested_metadata(self, depth):
         """Helper to create deeply nested metadata"""

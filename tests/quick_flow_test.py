@@ -582,8 +582,6 @@ class TestUnitFlow(unittest.TestCase):
         for deleted_id in ids_to_delete:
             self.assertNotIn(deleted_id, results, f"ID {deleted_id} was not deleted")
 
-        self.assertTrue(True)
-
     def test_15_get_deleted(self):
         # GET DELETED ITEMS
         num_get = 1000
@@ -595,19 +593,21 @@ class TestUnitFlow(unittest.TestCase):
             get_indices_str, ["vector", "contents", "metadata"]
         )
 
-        self.assertEqual(len(get_results), 0)
-        for i, get_result in enumerate(get_results):
-            self.assertIsNone(get_result, f"Item {get_indices_str[i]} was not deleted")
+        self.assertEqual(len(get_results), 0, "deleted items were still retrievable")
 
     def test_16_query_deleted(self):
         # QUERY DELETED ITEMS
+        # The ids are strings and range() yields ints, so the previous
+        # assertNotIn(id, range(N)) could never fail. Compare against the same
+        # string ids that were deleted.
+        deleted = {str(i) for i in range(self.num_untrained_vectors)}
         results = self.index.query(query_vectors=self.queries, top_k=100, n_probes=24)
 
-        for result in results:
-            for query_result in result:
-                self.assertNotIn(query_result["id"], range(self.num_untrained_vectors))
-
-        self.assertTrue(True)
+        returned = {r["id"] for result in results for r in result}
+        self.assertTrue(returned, "expected the query to return something")
+        self.assertEqual(
+            returned & deleted, set(), "deleted ids came back from a query"
+        )
 
     def test_17_list_indexes(self):
         # LIST INDEXES
