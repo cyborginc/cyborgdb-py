@@ -268,7 +268,14 @@ jobs:
             exit 1
           fi
 
-          pytest tests/test_rbac_users.py -v --cov=cyborgdb --cov-append
+          # The RBAC suite, plus the two auth assertions that are only
+          # meaningful with authentication enabled. Both were previously
+          # unreachable: one was gated on a variable nothing sets, the other
+          # only runs in this posture.
+          pytest -v --cov=cyborgdb --cov-append \
+            tests/test_rbac_users.py \
+            tests/test_client.py::AuthenticationErrorIntegrationTest \
+            tests/comprehensive_test.py::TestErrorHandling::test_invalid_api_key
 
       - name: Kill Server
         if: always()
