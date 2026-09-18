@@ -10,8 +10,6 @@ import time
 import uuid
 import asyncio
 import numpy as np
-from unittest.mock import patch
-import requests
 
 import cyborgdb as cyborgdb
 
@@ -62,60 +60,6 @@ def create_client():
 def generate_unique_name(prefix="test_"):
     """Generate a unique index name with a given prefix by appending a UUID v4."""
     return f"{prefix}{uuid.uuid4()}"
-
-
-class TestSSLVerification(unittest.TestCase):
-    """Test SSL/TLS verification functionality"""
-
-    def setUp(self):
-        self.api_key = os.environ.get("CYBORGDB_API_KEY", "test-key")
-        self.localhost_url = "http://localhost:8000"
-        self.production_url = "https://api.cyborgdb.com"
-
-    def test_ssl_auto_detection_localhost(self):
-        """Test SSL auto-detection for localhost URLs"""
-        with patch("cyborgdb.Client") as mock_client:
-            # Test HTTP localhost - should auto-disable SSL
-            cyborgdb.Client(base_url="http://localhost:8000", api_key=self.api_key)
-            mock_client.assert_called_once()
-
-    def test_ssl_explicit_disable(self):
-        """Test explicit SSL verification disable"""
-        with patch("cyborgdb.Client") as mock_client:
-            cyborgdb.Client(
-                base_url=self.production_url, api_key=self.api_key, verify_ssl=False
-            )
-            mock_client.assert_called_once()
-
-    def test_ssl_explicit_enable(self):
-        """Test explicit SSL verification enable"""
-        with patch("cyborgdb.Client") as mock_client:
-            cyborgdb.Client(
-                base_url=self.production_url, api_key=self.api_key, verify_ssl=True
-            )
-            mock_client.assert_called_once()
-
-    def test_ssl_certificate_validation(self):
-        """Test SSL certificate validation scenarios"""
-        with patch("requests.get") as mock_get:
-            mock_get.side_effect = requests.exceptions.SSLError(
-                "Certificate verification failed"
-            )
-
-            cyborgdb.Client(base_url=self.production_url, api_key=self.api_key)
-
-            with self.assertRaises(requests.exceptions.SSLError):
-                mock_get()
-
-    def test_auto_detection(self):
-        """Test auto-detection works with current environment"""
-        client = create_client()
-        self.assertIsNotNone(client)
-
-        # Try a basic operation to ensure the connection works
-        health = client.get_health()
-        # Accept various health response formats
-        self.assertIsInstance(health, (dict, bool, str, type(None)))
 
 
 class TestErrorHandling(unittest.TestCase):

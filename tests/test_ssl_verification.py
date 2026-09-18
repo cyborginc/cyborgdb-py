@@ -13,6 +13,7 @@ Offline: constructing a Client performs no I/O, so none of this needs a service.
 """
 
 import logging
+import os
 import unittest
 
 import cyborgdb
@@ -140,6 +141,23 @@ class TestSSLDoesNotDisturbTheRestOfTheClient(unittest.TestCase):
     def test_client_without_api_key_sets_no_auth_header(self):
         client = cyborgdb.Client(base_url="https://api.example.com")
         self.assertFalse(getattr(client.config, "api_key", None))
+
+
+class TestSSLAgainstLiveService(unittest.TestCase):
+    """The auto-detected client can actually reach a service.
+
+    Everything above is offline and asserts on `config.verify_ssl`. This is the
+    one case that proves the resolved setting produces a usable connection —
+    replacing the equivalent test from comprehensive_test.py, whose SSL class
+    mocked `cyborgdb.Client` and so could not have caught a real failure.
+    """
+
+    def test_auto_detected_client_reaches_the_service(self):
+        base_url = os.getenv("CYBORGDB_BASE_URL", "http://localhost:8000")
+        client = cyborgdb.Client(
+            base_url=base_url, api_key=os.getenv("CYBORGDB_API_KEY", "")
+        )
+        self.assertIsNotNone(client.get_health())
 
 
 if __name__ == "__main__":
