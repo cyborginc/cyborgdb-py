@@ -137,10 +137,12 @@ class TestBinaryPathParity(unittest.TestCase):
 
 
 class TestLargeBatch(unittest.TestCase):
-    """2000 vectors — enough to cross the auto-train threshold.
+    """2000 vectors — well above the rest of the suite's 100, still exhaustive.
 
-    The rest of the suite tops out at 100 vectors, which never reaches the
-    approximate search path or a batched binary upload of any size.
+    Not enough to train: AUTO_TRAIN_MIN_VECTORS is 65536, so search here is
+    still exact. That makes the assertions below verifiable against brute-force
+    ground truth; the approximate path is covered by the trained fixture in
+    test_trained_index.py.
     """
 
     @classmethod
@@ -222,11 +224,13 @@ class TestTrainingBoundaries(unittest.TestCase):
         return ids
 
     def test_training_below_the_minimum_is_a_silent_no_op(self):
-        # Ticket item 7 assumed this errors. It does not: train() returns
-        # successfully, the index is left untrained, and queries continue to
-        # resolve exhaustively. is_trained() is the only signal that nothing
-        # happened — worth knowing, since a caller who sees train() succeed
-        # will reasonably assume the index is now trained.
+        # The threshold is the service's AUTO_TRAIN_MIN_VECTORS, default 65536,
+        # so this is not an edge case: train() silently does nothing for any
+        # index below ~65k vectors. It returns successfully, leaves the index
+        # untrained, and queries keep resolving exhaustively. is_trained() is
+        # the only signal that nothing happened.
+        #
+        # Ticket item 7 assumed this errors. It does not.
         ids = self._seed(5)
         self.index.train(n_lists=64)
         self.assertFalse(self.index.is_trained())
@@ -236,8 +240,7 @@ class TestTrainingBoundaries(unittest.TestCase):
         self.assertTrue({r["id"] for r in got} <= set(ids))
 
     def test_more_lists_than_vectors_is_a_silent_no_op(self):
-        # The degenerate case: more partitions requested than vectors to fill
-        # them. Same contract — no error, no training, results still correct.
+        # Degenerate case, same contract: no error, no training, correct results.
         ids = self._seed(2)
         self.index.train(n_lists=2)
         self.assertFalse(self.index.is_trained())
