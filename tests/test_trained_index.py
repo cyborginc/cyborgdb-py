@@ -45,11 +45,17 @@ class TrainedIndexTestCase(unittest.TestCase):
         cls.truth = np.asarray(cls.data.trained_neighbors)
 
         cls.client = cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
+        # `fruits` is derived from the dataset's `list` field: ten terms, each
+        # in ~35% of documents, 2-4 per document. Real vocabulary with length
+        # variation, unlike the `string_N` values. Derived rather than marking
+        # `string` full_text, which would make it non-filterable and break the
+        # example-filter test below.
         cls.index = cls.client.create_index(
             f"trained_{uuid.uuid4().hex[:8]}",
             cyborgdb.Client.generate_key(),
             dimension=cls.vectors.shape[1],
             metric=str(cls.data.metric),
+            text_fields=["fruits"],
         )
 
         total = len(cls.ids)
@@ -60,7 +66,10 @@ class TrainedIndexTestCase(unittest.TestCase):
                     {
                         "id": cls.ids[i],
                         "vector": cls.vectors[i],
-                        "metadata": cls.data.metadata[i],
+                        "metadata": {
+                            **cls.data.metadata[i],
+                            "fruits": " ".join(cls.data.metadata[i].get("list", [])),
+                        },
                     }
                     for i in range(start, stop)
                 ]
@@ -198,6 +207,80 @@ class TestTrainedIndex(TrainedIndexTestCase):
                         self._matches(row["metadata"], example["filter"]),
                         f"{row['id']} does not satisfy {example['filter']}",
                     )
+
+    # -- hybrid on the approximate path (ticket item 10) ------------------- #
+    #
+    # These are deliberately not relevance tests. Every term sits in ~35% of
+    # documents, so IDF barely separates them and most of the ranking is ties.
+    # What is assertable is the wiring: that fusion runs at all when the vector
+    # leg is approximate, and that each alpha endpoint still reduces to its own
+    # leg. Both are differential, so the weak text does not matter.
+
+    HYBRID_TEXT = "grape cherry"
+
+    def test_hybrid_returns_fused_scores_on_a_trained_index(self):
+        rows = self.index.query(
+            query_vectors=self.queries[0], text=self.HYBRID_TEXT, top_k=10
+        )
+        self.assertTrue(rows)
+        self.assertTrue(all("score" in r for r in rows))
+        self.assertFalse(any("distance" in r for r in rows))
+
+    def test_alpha_one_reproduces_the_approximate_vector_ranking(self):
+        # The new ground covered here: at alpha=1 the fused result must match
+        # the plain vector query, which on a trained index is the *approximate*
+        # ranking. Nothing else checks that fusion leaves it intact.
+        vector_only = [
+            r["id"] for r in self.index.query(query_vectors=self.queries[0], top_k=10)
+        ]
+        fused = [
+            r["id"]
+            for r in self.index.query(
+                query_vectors=self.queries[0],
+                text=self.HYBRID_TEXT,
+                alpha=1.0,
+                top_k=10,
+            )
+        ]
+        self.assertEqual(fused, vector_only)
+
+    def test_alpha_zero_reproduces_the_pure_bm25_ranking(self):
+        text_only = [
+            r["id"] for r in self.index.query_metadata(text=self.HYBRID_TEXT, top_k=10)
+        ]
+        fused = [
+            r["id"]
+            for r in self.index.query(
+                query_vectors=self.queries[0],
+                text=self.HYBRID_TEXT,
+                alpha=0.0,
+                top_k=10,
+            )
+        ]
+        self.assertEqual(fused, text_only)
+
+    def test_alpha_endpoints_disagree_on_a_trained_index(self):
+        # Guards the two above: if the vector and text rankings coincided they
+        # would both pass while proving nothing.
+        vector_only = [
+            r["id"] for r in self.index.query(query_vectors=self.queries[0], top_k=10)
+        ]
+        text_only = [
+            r["id"] for r in self.index.query_metadata(text=self.HYBRID_TEXT, top_k=10)
+        ]
+        self.assertNotEqual(vector_only, text_only)
+
+    def test_hybrid_filter_prefilters_both_legs_when_trained(self):
+        rows = self.index.query(
+            query_vectors=self.queries[0],
+            text=self.HYBRID_TEXT,
+            filters={"number": {"$lt": 100}},
+            top_k=20,
+            include=["metadata"],
+        )
+        self.assertTrue(rows)
+        for row in rows:
+            self.assertLess(row["metadata"]["number"], 100)
 
     @staticmethod
     def _matches(metadata, filters):
