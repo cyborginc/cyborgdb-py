@@ -4,6 +4,8 @@
 
 # Re-export classes from client module
 from .client.client import Client
+from .client.async_client import AsyncClient
+from .client.async_encrypted_index import AsyncEncryptedIndex
 
 # Re-export public exception hierarchy
 from .exceptions import (
@@ -61,6 +63,8 @@ except PackageNotFoundError:
 
 __all__ = [
     "Client",
+    "AsyncClient",
+    "AsyncEncryptedIndex",
     "EncryptedIndex",
     "MetadataResult",
     "CyborgVectorStore",

@@ -187,8 +187,12 @@ def _retry_after(headers: Any) -> Optional[float]:
         return None
 
 
-def translate_api_error(exc: Exception, context: str) -> Exception:
-    """Map a generated-client or urllib3 exception onto the public taxonomy.
+def translate_api_error(
+    exc: Exception,
+    context: str,
+    transport_error_types: Optional[tuple] = None,
+) -> Exception:
+    """Map a generated-client or transport exception onto the public taxonomy.
 
     This is the single translation point for the SDK: the client modules call
     it instead of each carrying its own cascade, so the mapping cannot drift
@@ -201,13 +205,20 @@ def translate_api_error(exc: Exception, context: str) -> Exception:
     Args:
         exc: The originating exception.
         context: Short description of the operation, used in the message.
+        transport_error_types: Tuple of exception classes that map to
+            ``TransportError``.  Defaults to ``(urllib3.exceptions.HTTPError,)``
+            for the sync client.  Pass
+            ``(httpx.TransportError, httpx.RequestError)`` for the async client.
     """
     # Imported here: cyborgdb.exceptions must stay importable even if the
     # generated client is absent (it is regenerated, not vendored by hand).
     from cyborgdb.openapi_client.exceptions import ApiException
     import urllib3.exceptions
 
-    if isinstance(exc, urllib3.exceptions.HTTPError):
+    if transport_error_types is None:
+        transport_error_types = (urllib3.exceptions.HTTPError,)
+
+    if transport_error_types and isinstance(exc, tuple(transport_error_types)):
         logger.error("%s: %s", context, exc)
         return TransportError(f"{context}: {exc}", detail=str(exc))
 

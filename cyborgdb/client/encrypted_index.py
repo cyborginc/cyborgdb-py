@@ -4,15 +4,22 @@ EncryptedIndex class for CyborgDB
 This module provides the EncryptedIndex class for interacting with encrypted vector indexes in CyborgDB.
 """
 
-import base64
 import binascii
 import json
 import logging
-from typing import Dict, List, Optional, TypedDict, Union, Any
+from typing import Any, Dict, List, Optional, TypedDict, Union
 
 import numpy as np
 import urllib3.exceptions
 
+from cyborgdb.client._request_builders import (
+    build_query_binary_request,
+    build_upsert_binary_request,
+    build_upsert_items_list,
+    parse_query_binary_response,
+    parse_raw_query_response_bytes,
+    prepare_query_request,
+)
 from cyborgdb.exceptions import translate_api_error
 
 # Import the OpenAPI generated client
@@ -21,23 +28,15 @@ try:
     from cyborgdb.openapi_client.api.default_api import DefaultApi
     from cyborgdb.openapi_client.models.train_request import TrainRequest
     from cyborgdb.openapi_client.models.delete_request import DeleteRequest
-    from cyborgdb.openapi_client.models.batch_query_request import BatchQueryRequest
     from cyborgdb.openapi_client.models.index_operation_request import (
         IndexOperationRequest,
     )
     from cyborgdb.openapi_client.exceptions import ApiException
-    from cyborgdb.openapi_client.models.query_request import QueryRequest
     from cyborgdb.openapi_client.models.list_ids_request import ListIDsRequest
     from cyborgdb.openapi_client.models.query_metadata_request import (
         QueryMetadataRequest,
     )
     from cyborgdb.openapi_client.models.order_by import OrderBy
-    from cyborgdb.openapi_client.models.request import Request
-    from cyborgdb.openapi_client.models import Contents
-    from cyborgdb.openapi_client.models.binary_upsert_request import BinaryUpsertRequest
-    from cyborgdb.openapi_client.models.binary_vector_batch import BinaryVectorBatch
-    from cyborgdb.openapi_client.models.binary_query_request import BinaryQueryRequest
-    from cyborgdb.openapi_client.models.binary_query_batch import BinaryQueryBatch
     from cyborgdb.openapi_client.models.create_user_request import CreateUserRequest
 except ImportError:
     raise ImportError(
@@ -382,102 +381,21 @@ class EncryptedIndex:
         if arg2 is not None and isinstance(arg2, np.ndarray):
             if not isinstance(arg1, list):
                 raise TypeError("arg1 must be a list of IDs")
-            # Convert IDs to strings if needed
             ids = [str(id_val) for id_val in arg1]
-            # Use binary upsert for efficiency
             self.upsert_binary(ids, arg2)
             return
 
         try:
-            items = []
-
-            # Case 1: arg1 is a list of dictionaries
-            if arg2 is None:
-                if not isinstance(arg1, list) or not all(
-                    isinstance(item, dict) for item in arg1
-                ):
-                    raise TypeError(
-                        "When arg2 is None, arg1 must be a list of dictionaries"
-                    )
-
-                # Convert each dict to an Item
-                for item_dict in arg1:
-                    if "id" not in item_dict:
-                        raise ValueError(
-                            "Each item dictionary must contain an 'id' field"
-                        )
-
-                    item = {"id": item_dict["id"]}
-
-                    if "vector" in item_dict:
-                        vec = item_dict["vector"]
-                        # Normalize to float32 so JSON serialization matches binary path
-                        if isinstance(vec, np.ndarray):
-                            item["vector"] = vec.astype(np.float32).tolist()
-                        elif isinstance(vec, list):
-                            item["vector"] = np.array(vec, dtype=np.float32).tolist()
-                        else:
-                            item["vector"] = vec
-
-                    if "contents" in item_dict:
-                        contents_value = item_dict["contents"]
-
-                        # Convert bytes to base64 string for JSON serialization
-                        if isinstance(contents_value, bytes):
-                            # Convert bytes to base64 string
-                            contents_value = base64.b64encode(contents_value).decode(
-                                "utf-8"
-                            )
-                        elif isinstance(contents_value, bytearray):
-                            # Convert bytearray to base64 string
-                            contents_value = base64.b64encode(
-                                bytes(contents_value)
-                            ).decode("utf-8")
-                        # If it's already a string, use as-is
-
-                        # Contents model accepts string or bytearray
-                        item["contents"] = Contents(contents_value)
-
-                    if "metadata" in item_dict:
-                        # Convert dict metadata to JSON string if needed
-                        if isinstance(item_dict["metadata"], dict):
-                            item["metadata"] = item_dict[
-                                "metadata"
-                            ]  # json.dumps(item_dict["metadata"])
-                        else:
-                            item["metadata"] = item_dict["metadata"]
-
-                    items.append(item)
-
-            # Case 2: arg1 is a list of IDs, arg2 is a list of vectors (non-numpy)
-            else:
-                if not isinstance(arg1, list):
-                    raise TypeError("arg1 must be a list of IDs")
-
-                vectors = arg2
-                if len(arg1) != len(vectors):
-                    raise ValueError("Number of IDs must match number of vectors")
-
-                # Create items from IDs and vectors
-                for id_val, vector in zip(arg1, vectors):
-                    # Normalize to float32 so JSON serialization matches binary path
-                    if isinstance(vector, np.ndarray):
-                        vector = vector.astype(np.float32).tolist()
-                    elif isinstance(vector, list):
-                        vector = np.array(vector, dtype=np.float32).tolist()
-                    items.append({"id": str(id_val), "vector": vector})
-
-            # Import the UpsertRequest model from the OpenAPI-generated code
             from cyborgdb.openapi_client.models import UpsertRequest
 
-            # Create the upsert request with all required fields
+            items = build_upsert_items_list(arg1, arg2)
             request = UpsertRequest(
-                items=items, index_key=self._key_to_hex(), index_name=self._index_name
+                items=items,
+                index_key=self._key_to_hex(),
+                index_name=self._index_name,
             )
-
-            # Make the API call with the correct parameter
             self._api.upsert_vectors_v1_vectors_upsert_post(
-                upsert_request=request,  # This is the only required parameter
+                upsert_request=request,
                 _headers=self._request_headers(),
             )
 
@@ -510,46 +428,21 @@ class EncryptedIndex:
             ValueError: If vectors shape doesn't match ids length, or if upsert fails.
             TypeError: If vectors is not a numpy array.
         """
-        if not isinstance(vectors, np.ndarray):
-            raise TypeError("vectors must be a numpy array")
-
-        if vectors.ndim != 2:
-            raise ValueError(
-                "vectors must be a 2D array of shape (n_vectors, dimension)"
-            )
-
-        if len(ids) != vectors.shape[0]:
-            raise ValueError(
-                f"Number of ids ({len(ids)}) must match number of vectors ({vectors.shape[0]})"
-            )
-
-        # Ensure little-endian float32 dtype for cross-platform binary compatibility
-        if vectors.dtype != np.dtype("<f4"):
-            vectors = vectors.astype("<f4")
-
-        # Encode vectors as base64
-        vectors_b64 = base64.b64encode(vectors.tobytes()).decode("ascii")
-
-        # Build the request using generated models
-        batch = BinaryVectorBatch(
-            ids=ids,
-            vectors_b64=vectors_b64,
-            dimension=vectors.shape[1],
-            metadata=metadata,
-            contents=contents,
-        )
-
-        request = BinaryUpsertRequest(
-            index_name=self._index_name,
-            index_key=self._key_to_hex(),
-            batch=batch,
-        )
-
         try:
+            request = build_upsert_binary_request(
+                self._index_name,
+                self._key_to_hex(),
+                ids,
+                vectors,
+                metadata=metadata,
+                contents=contents,
+            )
             self._api.upsert_vectors_binary_v1_vectors_upsert_binary_post(
                 binary_upsert_request=request,
                 _headers=self._request_headers(),
             )
+        except (TypeError, ValueError):
+            raise
         except (ApiException, urllib3.exceptions.HTTPError) as e:
             raise translate_api_error(e, "Failed to upsert items (binary)") from e
 
@@ -643,192 +536,60 @@ class EncryptedIndex:
             if v is not None
         }
         try:
-            # Determine the correct vector input
-            vector_list = None
-            is_single_query = False
+            if query_vectors is not None and isinstance(query_vectors, np.ndarray):
+                if query_vectors.ndim not in (1, 2):
+                    raise ValueError(
+                        "Expected 1D or 2D NumPy array for `query_vectors`."
+                    )
+                return self.query_binary(
+                    query_vectors=query_vectors,
+                    top_k=top_k,
+                    n_probes=n_probes,
+                    filters=filters,
+                    include=include,
+                    greedy=greedy,
+                    rerank_mult=rerank_mult,
+                    **hybrid_kwargs,
+                )
 
-            if query_vectors is not None:
-                if isinstance(query_vectors, np.ndarray):
-                    if query_vectors.ndim == 1 or query_vectors.ndim == 2:
-                        # NumPy arrays (1D or 2D) -> use binary format for efficiency
-                        return self.query_binary(
-                            query_vectors=query_vectors,
-                            top_k=top_k,
-                            n_probes=n_probes,
-                            filters=filters,
-                            include=include,
-                            greedy=greedy,
-                            rerank_mult=rerank_mult,
-                            **hybrid_kwargs,
-                        )
-                    else:
-                        raise ValueError(
-                            "Expected 1D or 2D NumPy array for `query_vectors`."
-                        )
-                elif isinstance(query_vectors, list):
-                    if not query_vectors:
-                        raise ValueError("Empty list provided for `query_vectors`.")
-                    if isinstance(query_vectors[0], (list, np.ndarray)):
-                        # Batch of vectors as list of lists
-                        # Normalize to float32 so JSON serialization matches binary path
-                        vector_list = [
-                            np.array(v, dtype=np.float32).tolist()
-                            for v in query_vectors
-                        ]
-                    else:
-                        # Single vector as flat list
-                        # Normalize to float32 so JSON serialization matches binary path
-                        is_single_query = True
-                        vector_list = np.array(query_vectors, dtype=np.float32).tolist()
-                else:
-                    raise ValueError("Invalid type for `query_vectors`")
+            dispatch, request, is_single_query = prepare_query_request(
+                self._index_name,
+                self._key_to_hex(),
+                query_vectors,
+                query_contents,
+                top_k,
+                n_probes,
+                filters,
+                include,
+                greedy,
+                rerank_mult,
+                hybrid_kwargs,
+            )
+            # numpy dispatch handled above; prepare_query_request will not
+            # return dispatch=True here
+            assert not dispatch
 
-            if is_single_query or query_contents is not None:
-                # Use QueryRequest for single vector or content-based query
-                # Build kwargs to avoid passing None values (which would be serialized)
-                query_kwargs = {
-                    "index_key": self._key_to_hex(),
-                    "index_name": self._index_name,
-                    "query_vectors": vector_list,
-                }
-                if query_contents is not None:
-                    query_kwargs["query_contents"] = query_contents
-                if top_k is not None:
-                    query_kwargs["top_k"] = top_k
-                if n_probes is not None:
-                    query_kwargs["n_probes"] = n_probes
-                if greedy is not None:
-                    query_kwargs["greedy"] = greedy
-                if rerank_mult is not None:
-                    query_kwargs["rerank_mult"] = rerank_mult
-                if filters is not None:
-                    query_kwargs["filters"] = filters
-                if include is not None:
-                    query_kwargs["include"] = include
-                query_kwargs.update(hybrid_kwargs)
-                query_request = QueryRequest(**query_kwargs)
-            else:
-                # Use BatchQueryRequest for multiple vectors
-                # Build kwargs to avoid passing None values (which would be serialized)
-                query_kwargs = {
-                    "index_key": self._key_to_hex(),
-                    "index_name": self._index_name,
-                    "query_vectors": vector_list,
-                }
-                if top_k is not None:
-                    query_kwargs["top_k"] = top_k
-                if n_probes is not None:
-                    query_kwargs["n_probes"] = n_probes
-                if greedy is not None:
-                    query_kwargs["greedy"] = greedy
-                if rerank_mult is not None:
-                    query_kwargs["rerank_mult"] = rerank_mult
-                if filters is not None:
-                    query_kwargs["filters"] = filters
-                if include is not None:
-                    query_kwargs["include"] = include
-                query_kwargs.update(hybrid_kwargs)
-                query_request = BatchQueryRequest(**query_kwargs)
-
-            request = Request(query_request)
-
-            # Execute query via REST
-            try:
-                # Get raw response instead of deserialized object
-                raw_response = self._api.query_vectors_v1_vectors_query_post_without_preload_content(
+            raw_response = (
+                self._api.query_vectors_v1_vectors_query_post_without_preload_content(
                     request=request,
                     _headers=self._request_headers(),
                 )
+            )
 
-                # _without_preload_content skips status validation, so surface
-                # 4xx/5xx (e.g. an RBAC 403) instead of parsing the error body.
-                if not 200 <= raw_response.status <= 299:
-                    raise ApiException.from_response(
-                        http_resp=raw_response,
-                        body=raw_response.data.decode("utf-8"),
-                        data=None,
-                    )
+            if not 200 <= raw_response.status <= 299:
+                raise ApiException.from_response(
+                    http_resp=raw_response,
+                    body=raw_response.data.decode("utf-8"),
+                    data=None,
+                )
 
-                # Parse raw JSON response manually
-                response_text = raw_response.data.decode("utf-8")
-                response_json = json.loads(response_text)
+            return parse_raw_query_response_bytes(raw_response.data, include)
 
-                # Determine include filtering strategy
-                include_all = (
-                    include is None
-                )  # None means include everything server returns
-                include_set = set(include) if include else set()
-
-                # Process the results as plain dictionaries
-                results = []
-                if "results" in response_json:
-                    # Check if the results is a list of lists or just a list
-                    if response_json["results"] and isinstance(
-                        response_json["results"][0], list
-                    ):
-                        # It's a list of lists (batch query results)
-                        for query_result in response_json["results"]:
-                            query_items = []
-                            for item in query_result:
-                                result_item = {"id": item["id"]}
-
-                                # Always include distance if present (core part of query results)
-                                if item.get("distance") is not None:
-                                    result_item["distance"] = item["distance"]
-
-                                # Hybrid (text=...) results carry a fused score
-                                # instead of a distance.
-                                if item.get("score") is not None:
-                                    result_item["score"] = item["score"]
-
-                                # Check metadata against include list
-                                if "metadata" in item and (
-                                    include_all or "metadata" in include_set
-                                ):
-                                    result_item["metadata"] = item["metadata"]
-
-                                query_items.append(result_item)
-                            results.append(query_items)
-                    else:
-                        # It's a flat list (single query results)
-                        query_items = []
-                        for item in response_json["results"]:
-                            result_item = {"id": item["id"]}
-
-                            # Always include distance if present (core part of query results)
-                            if item.get("distance") is not None:
-                                result_item["distance"] = item["distance"]
-
-                            # Hybrid (text=...) results carry a fused score
-                            # instead of a distance.
-                            if item.get("score") is not None:
-                                result_item["score"] = item["score"]
-
-                            # Check metadata against include list
-                            if "metadata" in item and (
-                                include_all or "metadata" in include_set
-                            ):
-                                result_item["metadata"] = item["metadata"]
-
-                            query_items.append(result_item)
-                        results = query_items
-
-                return results
-            except Exception as e:
-                error_msg = f"Unexpected error in query: {str(e)}"
-                logger.error(error_msg)
-                import traceback
-
-                logger.error(traceback.format_exc())
-                raise
         except (ApiException, urllib3.exceptions.HTTPError) as e:
             raise translate_api_error(e, "Query failed") from e
         except Exception as e:
             error_msg = f"Unexpected error in query: {str(e)}"
             logger.error(error_msg)
-            import traceback
-
-            logger.error(traceback.format_exc())
             raise
 
     def query_binary(
@@ -880,85 +641,41 @@ class EncryptedIndex:
             ValueError: If query fails or vectors have wrong shape.
             TypeError: If query_vectors is not a numpy array.
         """
-        if not isinstance(query_vectors, np.ndarray):
-            raise TypeError("query_vectors must be a numpy array")
-
-        # Handle 1D array (single query vector)
-        is_single_query = False
-        if query_vectors.ndim == 1:
-            is_single_query = True
-            query_vectors = query_vectors.reshape(1, -1)
-        elif query_vectors.ndim != 2:
-            raise ValueError(
-                "query_vectors must be a 1D array (single query) or 2D array (batch queries)"
-            )
-
-        # Ensure little-endian float32 dtype for cross-platform binary compatibility
-        if query_vectors.dtype != np.dtype("<f4"):
-            query_vectors = query_vectors.astype("<f4")
-
-        # Encode vectors as base64
-        vectors_b64 = base64.b64encode(query_vectors.tobytes()).decode("ascii")
-
-        # Build the request using generated models
-        batch = BinaryQueryBatch(
-            vectors_b64=vectors_b64,
-            dimension=query_vectors.shape[1],
-        )
-
-        # Build kwargs to avoid passing None values (which would be serialized)
-        request_kwargs = {
-            "index_name": self._index_name,
-            "index_key": self._key_to_hex(),
-            "batch": batch,
+        hybrid_kwargs = {
+            k: v
+            for k, v in {
+                "text": text,
+                "text_fields": text_fields,
+                "text_field_weights": text_field_weights,
+                "require_all_terms": require_all_terms,
+                "alpha": alpha,
+                "rrf_k": rrf_k,
+                "window_mult": window_mult,
+            }.items()
+            if v is not None
         }
-        if top_k is not None:
-            request_kwargs["top_k"] = top_k
-        if n_probes is not None:
-            request_kwargs["n_probes"] = n_probes
-        if filters is not None:
-            request_kwargs["filters"] = filters
-        if include is not None:
-            request_kwargs["include"] = include
-        if greedy is not None:
-            request_kwargs["greedy"] = greedy
-        if rerank_mult is not None:
-            request_kwargs["rerank_mult"] = rerank_mult
-        for key, value in {
-            "text": text,
-            "text_fields": text_fields,
-            "text_field_weights": text_field_weights,
-            "require_all_terms": require_all_terms,
-            "alpha": alpha,
-            "rrf_k": rrf_k,
-            "window_mult": window_mult,
-        }.items():
-            if value is not None:
-                request_kwargs[key] = value
-        request = BinaryQueryRequest(**request_kwargs)
 
         try:
+            request, is_single_query = build_query_binary_request(
+                self._index_name,
+                self._key_to_hex(),
+                query_vectors,
+                top_k,
+                n_probes,
+                filters,
+                include,
+                greedy,
+                rerank_mult,
+                hybrid_kwargs,
+            )
             response = self._api.query_vectors_binary_v1_vectors_query_binary_post(
                 binary_query_request=request,
                 _headers=self._request_headers(),
             )
+            return parse_query_binary_response(response, is_single_query)
 
-            # Results is an anyOf wrapper - extract actual_instance
-            results = response.results.actual_instance
-            # Convert QueryResultItem objects to dicts
-            if results and isinstance(results[0], list):
-                # Batch results: List[List[QueryResultItem]]
-                batch_results = [
-                    [item.to_dict() for item in result_list] for result_list in results
-                ]
-                # If input was 1D, return just the first result list
-                if is_single_query:
-                    return batch_results[0]
-                return batch_results
-            else:
-                # Single query: List[QueryResultItem]
-                return [item.to_dict() for item in results]
-
+        except (TypeError, ValueError):
+            raise
         except (ApiException, urllib3.exceptions.HTTPError) as e:
             raise translate_api_error(e, "Failed to query (binary)") from e
 

@@ -72,20 +72,16 @@ class Client:
     """
 
     def __init__(self, base_url, api_key: Optional[str] = None, verify_ssl=None):
-        # If base_url is http, disable SSL verification
-        if base_url.startswith("http://"):
-            verify_ssl = False
-
         # Set up the OpenAPI client configuration
         self.config = Configuration()
         self.config.host = base_url
 
         # Configure SSL verification
         if verify_ssl is None:
-            # Auto-detect: disable SSL verification for localhost/127.0.0.1 (development)
-            if "localhost" in base_url or "127.0.0.1" in base_url:
-                self.config.verify_ssl = False
-                # Disable SSL warnings for localhost
+            if base_url.startswith("http://"):
+                verify_ssl = False
+            elif "localhost" in base_url or "127.0.0.1" in base_url:
+                verify_ssl = False
                 import urllib3
 
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -93,16 +89,15 @@ class Client:
                     "SSL verification disabled for localhost (development mode)"
                 )
             else:
-                self.config.verify_ssl = True
-        else:
-            self.config.verify_ssl = verify_ssl
-            if not verify_ssl:
-                import urllib3
+                verify_ssl = True
+        elif not verify_ssl:
+            import urllib3
 
-                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                logger.warning(
-                    "SSL verification is disabled. Not recommended for production."
-                )
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            logger.warning(
+                "SSL verification is disabled. Not recommended for production."
+            )
+        self.config.verify_ssl = verify_ssl
 
         # Add authentication if provided
         if api_key:
@@ -338,6 +333,19 @@ class Client:
             error_msg = f"Validation error while loading index '{index_name}': {ve}"
             logger.error(error_msg)
             raise ValueError(error_msg)
+
+    def close(self) -> None:
+        """Release the underlying urllib3 connection pool."""
+        try:
+            self.api_client.rest_client.pool_manager.clear()
+        except Exception:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args) -> None:
+        self.close()
 
     def get_health(self) -> Dict[str, str]:
         """
