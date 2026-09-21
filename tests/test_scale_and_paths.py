@@ -75,11 +75,13 @@ class TestBinaryPathParity(unittest.TestCase):
             dimension=DIM,
             metric="euclidean",
         )
-        cls.binary_index.upsert(
-            [
-                {"id": i, "vector": v, "metadata": {"n": int(n)}}
-                for n, (i, v) in enumerate(zip(cls.ids, cls.vectors))
-            ]
+        # upsert_binary explicitly: passing a list of dicts to upsert() routes
+        # to the JSON encoder regardless of the vector type, so the earlier form
+        # exercised binary on the query side only.
+        cls.binary_index.upsert_binary(
+            cls.ids,
+            cls.vectors,
+            metadata=[{"n": n} for n in range(len(cls.ids))],
         )
 
         wait_for_ids(cls.json_index, cls.ids)
@@ -109,6 +111,23 @@ class TestBinaryPathParity(unittest.TestCase):
         # would agree with each other.
         self.assertEqual(json_ids, binary_ids)
         self.assertEqual(json_ids[0], self.ids[7], "a vector must be its own nearest")
+
+    def test_both_encoders_return_the_same_result_shape(self):
+        # The two paths build their result dicts differently, so compare keys
+        # and not just ids. `include` is exercised across its supported values;
+        # `vector`/`contents` are absent on query() either way — see
+        # cyborgdb-core#2404.
+        for include in ([], ["distance"], ["metadata"], ["distance", "metadata"]):
+            with self.subTest(include=include):
+                json_rows = self.json_index.query(
+                    query_vectors=self.vectors[1].tolist(), top_k=3, include=include
+                )
+                binary_rows = self.binary_index.query(
+                    query_vectors=self.vectors[1], top_k=3, include=include
+                )
+                self.assertEqual(
+                    sorted(json_rows[0].keys()), sorted(binary_rows[0].keys())
+                )
 
     def test_both_encoders_round_trip_vectors_identically(self):
         got_json = self.json_index.get([self.ids[3]], include=["vector"])[0]["vector"]
