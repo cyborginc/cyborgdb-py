@@ -176,7 +176,17 @@ class TestTrainedIndex(TrainedIndexTestCase):
         # the error names the parameter responsible.
         with self.assertRaises(ValueError) as caught:
             self.index.query(query_vectors=self.queries[0], top_k=5000, rerank_mult=4)
-        self.assertIn("10000", str(caught.exception))
+        message = str(caught.exception)
+        self.assertIn("10000", message)
+        # KNOWN BUG — this assertion fails today. cyborgdb-core#2401: the
+        # message says "top_k exceeds kMaxTopK" even though top_k=5000 is
+        # itself under the limit; it is the product with rerank_mult that
+        # breaches it. A caller reducing top_k to 2500 still fails.
+        self.assertIn(
+            "rerank_mult",
+            message,
+            f"the error should name the parameter responsible, got: {message}",
+        )
 
     def test_the_ceiling_is_inclusive(self):
         # Exactly 10000 is accepted; only above it is rejected. Without this the

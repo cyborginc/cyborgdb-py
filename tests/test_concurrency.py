@@ -338,8 +338,9 @@ class TestConcurrentReadsAndWrites(unittest.TestCase):
 
         errors = []
         lock = threading.Lock()
-        # Known delete/query race yields an empty-string id; skip on it, don't
-        # fail. Matches js DeletesDuringQueries.
+        # Known delete/query race yields an empty-string id: cyborgdb-core#2405.
+        # Skipped rather than failed because it is intermittent; remove this
+        # branch when the issue is fixed. Matches js DeletesDuringQueries.
         empty_id_race = {"hit": False}
 
         def deleter():
@@ -378,7 +379,7 @@ class TestConcurrentReadsAndWrites(unittest.TestCase):
         join_threads(self, threads, timeout=60)
 
         if empty_id_race["hit"] and not errors:
-            self.skipTest("hit the known empty-id delete/query race — not a regression")
+            self.skipTest("hit the empty-id delete/query race — cyborgdb-core#2405")
 
         self.assertEqual(len(errors), 0, f"Delete-during-query errors: {errors}")
 

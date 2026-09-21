@@ -84,7 +84,7 @@ class TestErrorHandling(unittest.TestCase):
         )
 
         # Try to create an index - this should require authentication
-        with self.assertRaises(Exception) as context:
+        with self.assertRaises(cyborgdb.AuthenticationError) as context:
             client.create_index(
                 generate_unique_name(),
                 client.generate_key(),
@@ -114,13 +114,13 @@ class TestErrorHandling(unittest.TestCase):
         index_key = self.client.generate_key()
 
         # Test invalid dimension
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             self.client.create_index(
                 index_name, index_key, dimension=-1, metric="euclidean"
             )
 
         # Test invalid metric
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             self.client.create_index(
                 index_name, index_key, dimension=128, metric="invalid_metric"
             )
@@ -131,7 +131,7 @@ class TestErrorHandling(unittest.TestCase):
             base_url="http://non-existent-server:8000", api_key="test-key"
         )
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(cyborgdb.ServiceUnavailableError):
             client.get_health()
 
     def test_invalid_vector_dimensions(self):
@@ -145,7 +145,7 @@ class TestErrorHandling(unittest.TestCase):
 
         try:
             # Test wrong vector dimension
-            with self.assertRaises(Exception):
+            with self.assertRaises(ValueError):
                 invalid_vector = np.random.rand(64).astype(np.float32)
                 index.upsert([{"id": "test", "vector": invalid_vector, "metadata": {}}])
         finally:
@@ -156,7 +156,7 @@ class TestErrorHandling(unittest.TestCase):
         # Test with empty index name (should cause an error)
         index_key = self.client.generate_key()
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             self.client.create_index(
                 "",  # Empty name should cause error
                 index_key,
@@ -165,7 +165,7 @@ class TestErrorHandling(unittest.TestCase):
             )
 
         # Test invalid index key format
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             self.client.create_index(
                 generate_unique_name(),
                 b"invalid_short_key",  # Invalid key length
@@ -209,7 +209,7 @@ class TestEdgeCases(unittest.TestCase):
         vectors = [np.random.rand(128).astype(np.float32) for _ in range(3)]
 
         # Test with missing required fields - should fail
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             # Missing 'id' field
             items_missing_id = [
                 {
@@ -220,7 +220,7 @@ class TestEdgeCases(unittest.TestCase):
             self.index.upsert(items_missing_id)
 
         # Test with missing vector - should fail
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             items_missing_vector = [
                 {
                     "id": "test_id",
@@ -230,7 +230,7 @@ class TestEdgeCases(unittest.TestCase):
             self.index.upsert(items_missing_vector)
 
         # Test with empty items list
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             self.index.upsert([])
 
     def test_content_preservation_through_operations(self):
@@ -274,7 +274,7 @@ class TestEdgeCases(unittest.TestCase):
         test_index.delete_index()
 
         # Try to delete again - should handle gracefully
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             test_index.delete_index()
 
     def test_concurrent_operations(self):
@@ -486,7 +486,7 @@ class TestDataIntegrity(unittest.TestCase):
             name, self.client.generate_key(), dimension=128, metric="euclidean"
         )
         try:
-            with self.assertRaises(Exception):
+            with self.assertRaises(ValueError):
                 self.client.create_index(
                     name,
                     self.client.generate_key(),
@@ -512,7 +512,9 @@ class TestDataIntegrity(unittest.TestCase):
                 ]
             )
             time.sleep(2)
-            with self.assertRaises(Exception):
+            # A real index with the wrong key is an auth failure (401 "Wrong
+            # encryption key"); a non-existent index name is a ValueError.
+            with self.assertRaises(cyborgdb.AuthenticationError):
                 self.client.load_index(name, self.client.generate_key())
         finally:
             idx.delete_index()

@@ -155,6 +155,73 @@ class TestBinaryPathParity(unittest.TestCase):
         self.assertEqual(json_ids, set(self.ids[:50]))
 
 
+class TestIncludeProjection(unittest.TestCase):
+    """What `include` accepts and what it silently discards.
+
+    Only the unknown-value case is asserted as a bug. Whether `query()` should
+    return `vector`/`contents` the way `get()` does is an open question —
+    cyborgdb-core#2404 asks for a decision rather than asserting one, so there
+    is no test here pretending the answer is known.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client = _client()
+        cls.index = cls.client.create_index(
+            f"include_{uuid.uuid4().hex[:8]}",
+            cyborgdb.Client.generate_key(),
+            dimension=DIM,
+            metric="euclidean",
+        )
+        cls.vector = _RNG.random(DIM, dtype=np.float32)
+        cls.index.upsert(
+            [
+                {
+                    "id": "only",
+                    "vector": cls.vector,
+                    "metadata": {"n": 1},
+                    "contents": "hello",
+                }
+            ]
+        )
+        wait_for_ids(cls.index, ["only"])
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.index.delete_index()
+        except Exception:
+            pass
+
+    def test_supported_include_values_are_honoured(self):
+        rows = self.index.query(
+            query_vectors=self.vector, top_k=1, include=["distance"]
+        )
+        self.assertIn("distance", rows[0])
+        rows = self.index.query(
+            query_vectors=self.vector, top_k=1, include=["metadata"]
+        )
+        self.assertEqual(rows[0]["metadata"], {"n": 1})
+
+    def test_get_honours_vector_and_contents(self):
+        # The asymmetry in cyborgdb-core#2404: these work on get() and are
+        # discarded on query(). Asserted here only for get(), where the
+        # contract is documented.
+        row = self.index.get(["only"], include=["vector", "contents"])[0]
+        self.assertIn("vector", row)
+        self.assertEqual(row["contents"], "hello")
+
+    def test_unknown_include_values_are_rejected(self):
+        # KNOWN BUG — fails today. cyborgdb-core#2404: an unrecognised value is
+        # silently discarded on both methods, so a typo such as "metdata" costs
+        # the caller the field with no error. Unlike the vector/contents
+        # question, this needs no documentation to be wrong.
+        with self.assertRaises(ValueError):
+            self.index.query(query_vectors=self.vector, top_k=1, include=["bogus"])
+        with self.assertRaises(ValueError):
+            self.index.get(["only"], include=["bogus"])
+
+
 class TestLargeBatch(unittest.TestCase):
     """2000 vectors — well above the rest of the suite's 100, still exhaustive.
 
