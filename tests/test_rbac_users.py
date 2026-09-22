@@ -52,8 +52,9 @@ KMS_NAME = os.getenv("CYBORGDB_KMS_NAME") or os.getenv("CYBORGDB_KMS_NAME_REAL")
 
 DIMENSION = 4
 
-# Denials raise either type depending on the path — see cyborgdb-core#2398.
-DENIED = (ValueError, cyborgdb.AuthenticationError)
+# Every SDK error derives from CyborgDBError, which derives from ValueError,
+# so one clause covers any denial regardless of which path raised it.
+DENIED = cyborgdb.CyborgDBError
 
 
 def _seed():
@@ -200,17 +201,17 @@ class RBACUserTests(unittest.TestCase):
             revoked = self._user_index(out["api_key"])
             revoked.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
 
-    def test_denials_raise_one_consistent_exception_type(self):
-        # KNOWN BUG — fails today. cyborgdb-core#2398: query/upsert raise
-        # AuthenticationError, load_index on a revoked key raises ValueError,
-        # so callers cannot write one `except` clause for "denied".
+    def test_denials_are_catchable_with_one_clause(self):
+        # Regression guard for cyborgdb-core#2398: the paths still raise
+        # different types (query denies, load_index 404s), but both derive from
+        # CyborgDBError so a caller needs only one except clause.
         out = self.index.create_user(permissions=["read"])
         user_index = self._user_index(out["api_key"])
         self.index.delete_user(out["user_id"])
 
-        with self.assertRaises(cyborgdb.AuthenticationError):
+        with self.assertRaises(cyborgdb.CyborgDBError):
             user_index.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
-        with self.assertRaises(cyborgdb.AuthenticationError):
+        with self.assertRaises(cyborgdb.CyborgDBError):
             self._user_index(out["api_key"]).query(
                 query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1
             )

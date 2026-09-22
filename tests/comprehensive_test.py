@@ -131,7 +131,7 @@ class TestErrorHandling(unittest.TestCase):
             base_url="http://non-existent-server:8000", api_key="test-key"
         )
 
-        with self.assertRaises(cyborgdb.ServiceUnavailableError):
+        with self.assertRaises(cyborgdb.TransportError):
             client.get_health()
 
     def test_invalid_vector_dimensions(self):
@@ -512,10 +512,17 @@ class TestDataIntegrity(unittest.TestCase):
                 ]
             )
             time.sleep(2)
-            # A real index with the wrong key is an auth failure (401 "Wrong
-            # encryption key"); a non-existent index name is a ValueError.
-            with self.assertRaises(cyborgdb.AuthenticationError):
+            # A populated index with the wrong key is a 401 "Wrong encryption
+            # key". An *empty* index returns 404 instead, so the type depends on
+            # whether there is data to fail decrypting — see cyborgdb-core#2406.
+            with self.assertRaises(cyborgdb.AuthenticationError) as caught:
                 self.client.load_index(name, self.client.generate_key())
+            # KNOWN BUG — fails today. cyborgdb-core#2406: client.py:336 is
+            # missing its f-prefix, so the message carries a literal
+            # "{index_name}". Asserting the placeholder is absent rather than
+            # that the name is present — the name also appears further down in
+            # the echoed HTTP body, which would mask the bug.
+            self.assertNotIn("{index_name}", str(caught.exception))
         finally:
             idx.delete_index()
 
