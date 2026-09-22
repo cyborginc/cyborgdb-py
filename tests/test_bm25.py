@@ -463,17 +463,10 @@ class TestMetadataResultContract(unittest.TestCase):
 
 HYBRID_DIM = 4
 
-# Ported from cyborgdb-core tests/bm25_api_test.py. Every other hybrid test in
-# this file seeds random vectors, which makes the vector leg noise and leaves
-# `alpha`, `rrf_k` and the fused ranking unassertable. Here the document vectors
-# are basis vectors and the query sits at a fixed point, so squared-euclidean
-# distances are strictly ordered —
-#
-#     d2 (0.0125) < d1 (1.8125) < d0 (1.9125) < d3 (2.0125)
-#
-# — and nothing below rests on a distance tie-break. `metric="euclidean"` and
-# `dimension=4` are load-bearing: change either and the ordering above stops
-# holding, taking the expected results with it.
+# Ported from cyborgdb-core tests/bm25_api_test.py. Distances to the query are
+# strictly ordered — d2 (0.0125) < d1 (1.8125) < d0 (1.9125) < d3 (2.0125) — so
+# no assertion rests on a tie-break. `metric="euclidean"` and `dimension=4` are
+# load-bearing: change either and the ordering stops holding.
 HYBRID_DOCS = [
     ("d0", [1.0, 0.0, 0.0, 0.0], "apple banana", "date date elder", "ann"),
     ("d1", [0.0, 1.0, 0.0, 0.0], "banana", "date", "bob"),
@@ -560,17 +553,11 @@ class TestHybridFusionDeterministic(unittest.TestCase):
     # -- fusion ------------------------------------------------------------ #
 
     def test_fusion_promotes_a_document_neither_leg_ranked_first(self):
-        # Vector ranking (by distance to HYBRID_QUERY_VECTOR): d2, d1, d0, d3.
-        # Text ranking for "apple date":                       d0, then d1/d3.
-        #
-        # At the defaults (alpha 0.5, rrf_k 60) d0 wins on agreement across both
-        # legs — 0.5/61 + 0.5/63 — ahead of d1 at 0.5/62 + 0.5/62, while d2,
-        # rank 1 in the vector leg but absent from the text leg, falls to last
-        # on 0.5/61 alone. Both orderings of the d1/d3 text tie fuse the same
-        # way, so this does not depend on how that tie breaks.
-        #
-        # This is the assertion random vectors make impossible: it is only
-        # meaningful because the distances above are fixed.
+        # Vector order d2, d1, d0, d3; text order d0, then d1/d3. At the
+        # defaults (alpha 0.5, rrf_k 60) d0 wins on agreement across both legs
+        # (0.5/61 + 0.5/63) ahead of d1 (0.5/62 + 0.5/62), while d2 — rank 1 on
+        # vectors, absent from text — falls to last on 0.5/61 alone. Either
+        # ordering of the d1/d3 text tie fuses the same way.
         self.assertEqual(self._hybrid_ids(), ["d0", "d1", "d3", "d2"])
 
     def test_rrf_k_reaches_the_fusion(self):
@@ -589,10 +576,8 @@ class TestHybridFusionDeterministic(unittest.TestCase):
             )
 
     def test_window_mult_below_one_is_rejected(self):
-        # Only the bound is assertable here: candidate depth is top_k *
-        # window_mult, and on an untrained index search is exhaustive, so the
-        # window cannot affect the ranking. A real effect test needs a trained
-        # index and a corpus larger than the window.
+        # Only the bound is assertable: search is exhaustive on an untrained
+        # index, so the candidate window cannot affect the ranking.
         with self.assertRaises(ValueError):
             self._hybrid(window_mult=0)
 

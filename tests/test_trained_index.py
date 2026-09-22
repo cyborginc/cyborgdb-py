@@ -45,11 +45,9 @@ class TrainedIndexTestCase(unittest.TestCase):
         cls.truth = np.asarray(cls.data.trained_neighbors)
 
         cls.client = cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
-        # `fruits` is derived from the dataset's `list` field: ten terms, each
-        # in ~35% of documents, 2-4 per document. Real vocabulary with length
-        # variation, unlike the `string_N` values. Derived rather than marking
-        # `string` full_text, which would make it non-filterable and break the
-        # example-filter test below.
+        # `fruits` derives from the dataset's `list` field: ten terms, each in
+        # ~35% of documents. Marking `string` full_text instead would make it
+        # non-filterable and break the example-filter test below.
         cls.index = cls.client.create_index(
             f"trained_{uuid.uuid4().hex[:8]}",
             cyborgdb.Client.generate_key(),
@@ -220,11 +218,9 @@ class TestTrainedIndex(TrainedIndexTestCase):
 
     # -- hybrid on the approximate path (ticket item 10) ------------------- #
     #
-    # These are deliberately not relevance tests. Every term sits in ~35% of
-    # documents, so IDF barely separates them and most of the ranking is ties.
-    # What is assertable is the wiring: that fusion runs at all when the vector
-    # leg is approximate, and that each alpha endpoint still reduces to its own
-    # leg. Both are differential, so the weak text does not matter.
+    # Not relevance tests: every term sits in ~35% of documents, so the ranking
+    # is mostly ties. These assert the wiring only, and are differential, so the
+    # weak text does not matter.
 
     HYBRID_TEXT = "grape cherry"
 

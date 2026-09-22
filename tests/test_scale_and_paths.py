@@ -310,13 +310,9 @@ class TestTrainingBoundaries(unittest.TestCase):
         return ids
 
     def test_training_below_the_minimum_is_a_silent_no_op(self):
-        # The threshold is the service's AUTO_TRAIN_MIN_VECTORS, default 65536,
-        # so this is not an edge case: train() silently does nothing for any
-        # index below ~65k vectors. It returns successfully, leaves the index
-        # untrained, and queries keep resolving exhaustively. is_trained() is
-        # the only signal that nothing happened.
-        #
-        # Ticket item 7 assumed this errors. It does not.
+        # AUTO_TRAIN_MIN_VECTORS is 65536, so train() silently does nothing for
+        # any index below it — returns successfully, leaves the index untrained,
+        # and is_trained() is the only signal. Ticket item 7 assumed it errors.
         ids = self._seed(5)
         self.index.train(n_lists=64)
         self.assertFalse(self.index.is_trained())

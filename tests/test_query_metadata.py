@@ -238,16 +238,8 @@ OPERATOR_SCHEMA = {
     "author": {"filterable": True},
 }
 
-# Covers every operator plus the two cases that make operator semantics
-# ambiguous: fields omitted entirely (o2, o4 have no `author`) and array-valued
-# fields (`tags`, with an empty array on o3).
-#
-#   id  color  rank  tags                      author
-#   o0  red     0    [design, search]          ada
-#   o1  green  10    [design]                  bob
-#   o2  blue   20    [search]                  <missing>
-#   o3  red    30    []                        ada
-#   o4  green  40    [design, search, ml]      <missing>
+# o2 and o4 omit `author` entirely, and o3's `tags` is empty — the two cases
+# that make operator semantics ambiguous.
 OPERATOR_ROWS = [
     ("o0", "red", 0, ["design", "search"], "ada"),
     ("o1", "green", 10, ["design"], "bob"),
@@ -413,13 +405,8 @@ class TestFilterOperators(unittest.TestCase):
     # -- type handling ------------------------------------------------------ #
 
     def test_int_and_float_are_the_same_key(self):
-        # All numbers share one index, so 20 and 20.0 must resolve identically
-        # on both equality and range bounds.
-        #
-        # Each form is anchored to its expected answer as well as compared to
-        # the other. Comparing the two calls alone would pass if the numeric
-        # index were broken and both returned nothing — the exact "passes for
-        # the wrong reason" failure this suite is meant to eliminate.
+        # Anchored to the expected answer, not just compared to each other:
+        # two empty results would otherwise satisfy the comparison.
         self.assertEqual(self._meta_ids({"rank": 20}), {"o2"})
         self.assertEqual(self._meta_ids({"rank": 20.0}), {"o2"})
         self.assertEqual(self._meta_ids({"rank": {"$gte": 20}}), {"o2", "o3", "o4"})
