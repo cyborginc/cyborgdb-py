@@ -7,10 +7,14 @@ from .client.client import Client
 
 # Re-export public exception hierarchy
 from .exceptions import (
-    CyborgError,
+    CyborgDBError,
+    ValidationError,
     AuthenticationError,
-    ServiceUnavailableError,
-    ConnectionTimeoutError,
+    NotFoundError,
+    ConflictError,
+    RateLimitError,
+    ServiceError,
+    TransportError,
 )
 
 # Re-export from encrypted_index.py
@@ -66,8 +70,12 @@ __all__ = [
     "SAMPLE_DATASETS_BASE_URL",
     "DEFAULT_SAMPLE_DATASET",
     "__version__",
-    "CyborgError",
+    "CyborgDBError",
+    "ValidationError",
     "AuthenticationError",
-    "ServiceUnavailableError",
-    "ConnectionTimeoutError",
+    "NotFoundError",
+    "ConflictError",
+    "RateLimitError",
+    "ServiceError",
+    "TransportError",
 ]

@@ -4,7 +4,7 @@ import numpy as np
 import time
 from dotenv import load_dotenv
 from cyborgdb import Client, EncryptedIndex
-from cyborgdb.exceptions import AuthenticationError, CyborgError
+from cyborgdb.exceptions import AuthenticationError, CyborgDBError
 
 # Load environment variables from .env.local
 load_dotenv(".env.local")
@@ -194,4 +194,4 @@ class AuthenticationErrorIntegrationTest(unittest.TestCase):
         client = Client(base_url=service_url, api_key="WRONG_KEY")
         with self.assertRaises(AuthenticationError) as ctx:
             client.list_indexes()
-        self.assertIsInstance(ctx.exception, CyborgError)
+        self.assertIsInstance(ctx.exception, CyborgDBError)
