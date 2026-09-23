@@ -333,7 +333,7 @@ class Client:
             return index
 
         except (ApiException, urllib3.exceptions.HTTPError) as e:
-            raise translate_api_error(e, "Failed to load index '{index_name}'") from e
+            raise translate_api_error(e, f"Failed to load index '{index_name}'") from e
         except ValidationError as ve:
             error_msg = f"Validation error while loading index '{index_name}': {ve}"
             logger.error(error_msg)
