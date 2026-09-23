@@ -48,6 +48,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 _EPOCH = _dt.datetime(1970, 1, 1, tzinfo=_dt.timezone.utc)
+_MS = _dt.timedelta(milliseconds=1)
 
 
 def _coerce_datetimes(value):
@@ -63,19 +64,11 @@ def _coerce_datetimes(value):
     """
     if isinstance(value, _dt.datetime):
         if value.tzinfo is None:
-            dt = value.replace(tzinfo=_dt.timezone.utc)
-        else:
-            dt = value.astimezone(_dt.timezone.utc)
-        delta = dt - _EPOCH
-        return (
-            delta.days * 86_400_000 + delta.seconds * 1000 + delta.microseconds // 1000
-        )
+            value = value.replace(tzinfo=_dt.timezone.utc)
+        return (value - _EPOCH) // _MS
     if isinstance(value, _dt.date):
-        delta = (
-            _dt.datetime(value.year, value.month, value.day, tzinfo=_dt.timezone.utc)
-            - _EPOCH
-        )
-        return delta.days * 86_400_000
+        midnight = _dt.datetime.combine(value, _dt.time(), tzinfo=_dt.timezone.utc)
+        return (midnight - _EPOCH) // _MS
     if isinstance(value, dict):
         return {k: _coerce_datetimes(v) for k, v in value.items()}
     if isinstance(value, list):
