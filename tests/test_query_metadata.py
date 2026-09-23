@@ -16,6 +16,7 @@ import os
 import time
 import unittest
 import uuid
+from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
 from dotenv import load_dotenv
@@ -228,6 +229,117 @@ class TestQueryMetadataDefaultPosture(unittest.TestCase):
         # so query_metadata cannot resolve $regex on any of them.
         with self.assertRaises(ValueError):
             self.index.query_metadata({"color": {"$regex": "^r"}})
+
+
+class TestDatetimeHandling(unittest.TestCase):
+    """datetime/date objects are coerced to epoch milliseconds before reaching the engine.
+
+    Mirrors cyborgdb-core tests/metadata_datetime_test.py.
+    """
+
+    # 2026-01-01T00:00:00Z in epoch milliseconds
+    _BASE_MS = 1767225600000
+    _BASE_DT = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    def setUp(self):
+        from cyborgdb.client.encrypted_index import _coerce_datetimes
+
+        self._coerce = _coerce_datetimes
+        self.client = cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
+        self.index = self.client.create_index(
+            f"dt_{uuid.uuid4().hex[:8]}",
+            cyborgdb.Client.generate_key(),
+            dimension=DIM,
+            metric="euclidean",
+        )
+        self.index.upsert(
+            [
+                {
+                    "id": f"t{i}",
+                    "vector": [float(i + 1) / 10] * DIM,
+                    "metadata": {"created": self._BASE_DT + timedelta(days=i)},
+                }
+                for i in range(4)
+            ]
+        )
+        time.sleep(2)
+
+    def tearDown(self):
+        try:
+            self.index.delete_index()
+        except Exception:
+            pass
+
+    # -- unit conversion (no network) -------------------------------------- #
+
+    def test_utc_aware_datetime_to_millis(self):
+        self.assertEqual(self._coerce(self._BASE_DT), self._BASE_MS)
+
+    def test_naive_datetime_treated_as_utc(self):
+        self.assertEqual(self._coerce(datetime(2026, 1, 1)), self._BASE_MS)
+
+    def test_date_object_midnight_utc(self):
+        self.assertEqual(self._coerce(date(2026, 1, 1)), self._BASE_MS)
+
+    def test_offset_datetime_normalised_to_utc(self):
+        tz_plus5 = timezone(timedelta(hours=5))
+        dt = datetime(2026, 1, 1, 5, 0, 0, tzinfo=tz_plus5)
+        self.assertEqual(self._coerce(dt), self._BASE_MS)
+
+    def test_millisecond_precision_truncated(self):
+        dt = datetime(2026, 1, 1, 0, 0, 0, 500999, tzinfo=timezone.utc)
+        self.assertEqual(self._coerce(dt), self._BASE_MS + 500)
+
+    def test_plain_string_passthrough(self):
+        self.assertEqual(self._coerce("hello"), "hello")
+
+    # -- integration: read-back and filter paths --------------------------- #
+
+    def test_get_returns_epoch_millis_integer(self):
+        results = self.index.get(["t0"], include=["metadata"])
+        val = results[0]["metadata"]["created"]
+        self.assertIsInstance(val, int)
+        self.assertEqual(val, self._BASE_MS)
+
+    def test_range_on_a_datetime_works(self):
+        low = self._BASE_DT + timedelta(days=1)
+        high = self._BASE_DT + timedelta(days=3)
+        rows = self.index.query_metadata({"created": {"$gte": low, "$lt": high}})
+        self.assertEqual(set(_ids(rows)), {"t1", "t2"})
+
+    def test_query_metadata_nested_and_with_datetime_predicates(self):
+        low = self._BASE_DT + timedelta(days=1)
+        high = self._BASE_DT + timedelta(days=3)
+        rows = self.index.query_metadata(
+            {"$and": [{"created": {"$gte": low}}, {"created": {"$lt": high}}]}
+        )
+        self.assertEqual(set(_ids(rows)), {"t1", "t2"})
+
+    def test_query_metadata_in_with_datetime_list(self):
+        rows = self.index.query_metadata(
+            {"created": {"$in": [self._BASE_DT, self._BASE_DT + timedelta(days=2)]}}
+        )
+        self.assertEqual(set(_ids(rows)), {"t0", "t2"})
+
+    def test_query_metadata_or_with_datetime_predicates(self):
+        rows = self.index.query_metadata(
+            {
+                "$or": [
+                    {"created": self._BASE_DT},
+                    {"created": self._BASE_DT + timedelta(days=2)},
+                ]
+            }
+        )
+        self.assertEqual(set(_ids(rows)), {"t0", "t2"})
+
+    def test_query_vector_path_filter_with_datetime(self):
+        cutoff = self._BASE_DT + timedelta(days=2)
+        results = self.index.query(
+            query_vectors=np.array([0.1] * DIM, dtype=np.float32),
+            top_k=N,
+            filters={"created": {"$gte": cutoff}},
+        )
+        self.assertEqual({r["id"] for r in results}, {"t2", "t3"})
 
 
 if __name__ == "__main__":

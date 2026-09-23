@@ -6,6 +6,7 @@ This module provides the EncryptedIndex class for interacting with encrypted vec
 
 import base64
 import binascii
+import datetime as _dt
 import json
 import logging
 from typing import Dict, List, Optional, TypedDict, Union, Any
@@ -45,6 +46,34 @@ except ImportError:
     )
 
 logger = logging.getLogger(__name__)
+
+_EPOCH = _dt.datetime(1970, 1, 1, tzinfo=_dt.timezone.utc)
+_MS = _dt.timedelta(milliseconds=1)
+
+
+def _coerce_datetimes(value):
+    """Recursively replace datetime/date objects with integer epoch milliseconds.
+
+    No single stdlib function covers every case here: ``datetime.timestamp()``
+    interprets naive datetimes using the local system timezone, but the engine
+    contract requires naive → UTC. We also need recursive traversal so nested
+    filter dicts (``$and``/``$or``/``$in``) are coerced transparently.
+
+    Naive datetimes are treated as UTC. Sub-millisecond precision is truncated.
+    Strings, numbers, and other types pass through unchanged.
+    """
+    if isinstance(value, _dt.datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=_dt.timezone.utc)
+        return (value - _EPOCH) // _MS
+    if isinstance(value, _dt.date):
+        midnight = _dt.datetime.combine(value, _dt.time(), tzinfo=_dt.timezone.utc)
+        return (midnight - _EPOCH) // _MS
+    if isinstance(value, dict):
+        return {k: _coerce_datetimes(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_coerce_datetimes(item) for item in value]
+    return value
 
 
 # Split into two TypedDicts so `id` stays required while `score` is optional
@@ -439,13 +468,7 @@ class EncryptedIndex:
                         item["contents"] = Contents(contents_value)
 
                     if "metadata" in item_dict:
-                        # Convert dict metadata to JSON string if needed
-                        if isinstance(item_dict["metadata"], dict):
-                            item["metadata"] = item_dict[
-                                "metadata"
-                            ]  # json.dumps(item_dict["metadata"])
-                        else:
-                            item["metadata"] = item_dict["metadata"]
+                        item["metadata"] = _coerce_datetimes(item_dict["metadata"])
 
                     items.append(item)
 
@@ -531,11 +554,14 @@ class EncryptedIndex:
         vectors_b64 = base64.b64encode(vectors.tobytes()).decode("ascii")
 
         # Build the request using generated models
+        coerced_metadata = (
+            [_coerce_datetimes(m) for m in metadata] if metadata is not None else None
+        )
         batch = BinaryVectorBatch(
             ids=ids,
             vectors_b64=vectors_b64,
             dimension=vectors.shape[1],
-            metadata=metadata,
+            metadata=coerced_metadata,
             contents=contents,
         )
 
@@ -702,7 +728,7 @@ class EncryptedIndex:
                 if rerank_mult is not None:
                     query_kwargs["rerank_mult"] = rerank_mult
                 if filters is not None:
-                    query_kwargs["filters"] = filters
+                    query_kwargs["filters"] = _coerce_datetimes(filters)
                 if include is not None:
                     query_kwargs["include"] = include
                 query_kwargs.update(hybrid_kwargs)
@@ -724,7 +750,7 @@ class EncryptedIndex:
                 if rerank_mult is not None:
                     query_kwargs["rerank_mult"] = rerank_mult
                 if filters is not None:
-                    query_kwargs["filters"] = filters
+                    query_kwargs["filters"] = _coerce_datetimes(filters)
                 if include is not None:
                     query_kwargs["include"] = include
                 query_kwargs.update(hybrid_kwargs)
@@ -917,7 +943,7 @@ class EncryptedIndex:
         if n_probes is not None:
             request_kwargs["n_probes"] = n_probes
         if filters is not None:
-            request_kwargs["filters"] = filters
+            request_kwargs["filters"] = _coerce_datetimes(filters)
         if include is not None:
             request_kwargs["include"] = include
         if greedy is not None:
@@ -1032,7 +1058,7 @@ class EncryptedIndex:
         request_kwargs = {
             "index_key": self._key_to_hex(),
             "index_name": self._index_name,
-            "filters": filters or {},
+            "filters": _coerce_datetimes(filters or {}),
             "top_k": top_k,
             # order_by is now an anyOf(str, {field: 1|-1}); after the
             # normalization above it is always a field name, so wrap the string.
