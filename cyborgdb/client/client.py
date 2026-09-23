@@ -6,6 +6,7 @@ This module provides a Python client for interacting with the CyborgDB REST API.
 
 from pathlib import Path
 from typing import Dict, List, Literal, Optional
+from urllib.parse import urlparse
 import secrets
 import logging
 from pydantic import ValidationError
@@ -26,6 +27,7 @@ except ImportError:
         "Failed to import openapi_client. Make sure the OpenAPI client library is properly installed."
     )
 
+import urllib3
 import urllib3.exceptions
 
 from cyborgdb.client.encrypted_index import EncryptedIndex
@@ -72,8 +74,11 @@ class Client:
     """
 
     def __init__(self, base_url, api_key: Optional[str] = None, verify_ssl=None):
-        # If base_url is http, disable SSL verification
         if base_url.startswith("http://"):
+            if verify_ssl is True:
+                logger.warning(
+                    "verify_ssl=True has no effect on http:// URLs (no TLS to negotiate); ignored."
+                )
             verify_ssl = False
 
         # Set up the OpenAPI client configuration
@@ -82,23 +87,20 @@ class Client:
 
         # Configure SSL verification
         if verify_ssl is None:
-            # Auto-detect: disable SSL verification for localhost/127.0.0.1 (development)
-            if "localhost" in base_url or "127.0.0.1" in base_url:
+            parsed = urlparse(base_url)
+            if parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
                 self.config.verify_ssl = False
-                # Disable SSL warnings for localhost
-                import urllib3
-
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                logger.info(
-                    "SSL verification disabled for localhost (development mode)"
+                logger.warning(
+                    "SSL verification auto-disabled for %r (loopback host detected; development mode). "
+                    "Not recommended for production.",
+                    parsed.hostname,
                 )
             else:
                 self.config.verify_ssl = True
         else:
             self.config.verify_ssl = verify_ssl
             if not verify_ssl:
-                import urllib3
-
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
                 logger.warning(
                     "SSL verification is disabled. Not recommended for production."
