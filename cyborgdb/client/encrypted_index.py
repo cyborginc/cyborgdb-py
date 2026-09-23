@@ -53,6 +53,11 @@ _EPOCH = _dt.datetime(1970, 1, 1, tzinfo=_dt.timezone.utc)
 def _coerce_datetimes(value):
     """Recursively replace datetime/date objects with integer epoch milliseconds.
 
+    No single stdlib function covers every case here: ``datetime.timestamp()``
+    interprets naive datetimes using the local system timezone, but the engine
+    contract requires naive → UTC. We also need recursive traversal so nested
+    filter dicts (``$and``/``$or``/``$in``) are coerced transparently.
+
     Naive datetimes are treated as UTC. Sub-millisecond precision is truncated.
     Strings, numbers, and other types pass through unchanged.
     """
