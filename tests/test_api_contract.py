@@ -805,13 +805,11 @@ class TestAPIContract(unittest.TestCase):
         # Single query should return a flat list of results
         self.assertIsInstance(results, list)
         self.assertGreater(len(results), 0)
-        # Check that first element is a dict (result), not a list
-        if len(results) > 0:
-            self.assertIsInstance(
-                results[0], dict, "Single vector query should return flat list of dicts"
-            )
-            self.assertIn("id", results[0])
-            self.assertIn("distance", results[0])
+        self.assertIsInstance(
+            results[0], dict, "Single vector query should return flat list of dicts"
+        )
+        self.assertIn("id", results[0])
+        self.assertIn("distance", results[0])
 
         # Test Pattern 2: Single vector in nested list -> flat list return (API update)
         single_vector_nested = [self.test_vectors[1].tolist()]
@@ -822,12 +820,11 @@ class TestAPIContract(unittest.TestCase):
         # Single query now returns flat list of results directly
         self.assertIsInstance(results, list)
         self.assertGreater(len(results), 0, "Should have results for single query")
-        if len(results) > 0:
-            self.assertIsInstance(
-                results[0], dict, "Single query should return flat list of dicts"
-            )
-            self.assertIn("id", results[0])
-            self.assertIn("distance", results[0])
+        self.assertIsInstance(
+            results[0], dict, "Single query should return flat list of dicts"
+        )
+        self.assertIn("id", results[0])
+        self.assertIn("distance", results[0])
 
         # Test Pattern 3: Multiple vectors -> multiple result lists
         multiple_vectors = [
@@ -886,22 +883,23 @@ class TestAPIContract(unittest.TestCase):
 
         # Single numpy vector should return flat list
         self.assertIsInstance(results, list)
-        if len(results) > 0:
-            self.assertIsInstance(
-                results[0], dict, "Single numpy vector should return flat list of dicts"
-            )
+        self.assertGreater(len(results), 0, "numpy query returned nothing")
+        self.assertIsInstance(
+            results[0], dict, "Single numpy vector should return flat list of dicts"
+        )
 
         # Verify consistency: same query vector should return same top result
         query_vec = self.test_vectors[8]
         results1 = self.index.query(query_vectors=query_vec, top_k=1)
         results2 = self.index.query(query_vectors=query_vec, top_k=1)
 
-        if len(results1) > 0 and len(results2) > 0:
-            self.assertEqual(
-                results1[0]["id"],
-                results2[0]["id"],
-                "Same query should return same top result",
-            )
+        self.assertGreater(len(results1), 0, "repeated query returned nothing")
+        self.assertGreater(len(results2), 0, "repeated query returned nothing")
+        self.assertEqual(
+            results1[0]["id"],
+            results2[0]["id"],
+            "Same query should return same top result",
+        )
 
         # Test Pattern 6: Text-based query with query_contents
         # Single text query (returns flat list directly)
@@ -912,13 +910,16 @@ class TestAPIContract(unittest.TestCase):
 
         # Should return flat list for single text query
         self.assertIsInstance(results, list)
-        if len(results) > 0:
-            self.assertIsInstance(
-                results[0], dict, "Text query should return flat list of dicts"
-            )
-            self.assertIn("id", results[0])
-            self.assertIn("distance", results[0])
-            self.assertIn("metadata", results[0])
+        # The index carries an embedding model, so a text query must match
+        # something. Without this a service returning [] for every text query
+        # would satisfy the shape checks below.
+        self.assertGreater(len(results), 0, "query_contents returned nothing")
+        self.assertIsInstance(
+            results[0], dict, "Text query should return flat list of dicts"
+        )
+        self.assertIn("id", results[0])
+        self.assertIn("distance", results[0])
+        self.assertIn("metadata", results[0])
 
         # Test text query with specific include parameter
         results = self.index.query(

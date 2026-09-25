@@ -52,6 +52,10 @@ KMS_NAME = os.getenv("CYBORGDB_KMS_NAME") or os.getenv("CYBORGDB_KMS_NAME_REAL")
 
 DIMENSION = 4
 
+# Every SDK error derives from CyborgDBError, which derives from ValueError,
+# so one clause covers any denial regardless of which path raised it.
+DENIED = cyborgdb.CyborgDBError
+
 
 def _seed():
     return [
@@ -102,7 +106,7 @@ class RBACUserTests(unittest.TestCase):
             results = reader.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
             self.assertTrue(len(results) >= 1)
             # write op is cryptographically denied
-            with self.assertRaises(ValueError):
+            with self.assertRaises(DENIED):
                 reader.upsert([{"id": "z", "vector": [0.0, 0.0, 0.0, 1.0]}])
         finally:
             self.index.delete_user(out["user_id"])
@@ -133,7 +137,7 @@ class RBACUserTests(unittest.TestCase):
             # write op succeeds
             writer.upsert([{"id": "wo", "vector": [0.0, 0.0, 1.0, 0.0]}])
             # read op is cryptographically denied — no read DEK for this user
-            with self.assertRaises(ValueError):
+            with self.assertRaises(DENIED):
                 writer.query(query_vectors=[0.0, 0.0, 1.0, 0.0], top_k=1)
         finally:
             self.index.delete_user(out["user_id"])
@@ -141,9 +145,9 @@ class RBACUserTests(unittest.TestCase):
     def test_invalid_permissions_rejected(self):
         # The grant must be a non-empty subset of {"read", "write"}; the
         # service rejects an empty set and unknown permission names alike.
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DENIED):
             self.index.create_user(permissions=[])
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DENIED):
             self.index.create_user(permissions=["admin"])
 
     def test_non_root_user_cannot_manage_users(self):
@@ -152,11 +156,11 @@ class RBACUserTests(unittest.TestCase):
             user_index = self._user_index(out["api_key"])
             # Minting, listing, and revoking users are root-only operations;
             # a user key is rejected on each.
-            with self.assertRaises(ValueError):
+            with self.assertRaises(DENIED):
                 user_index.create_user(permissions=["read"])
-            with self.assertRaises(ValueError):
+            with self.assertRaises(DENIED):
                 user_index.list_users()
-            with self.assertRaises(ValueError):
+            with self.assertRaises(DENIED):
                 user_index.delete_user(out["user_id"])
         finally:
             self.index.delete_user(out["user_id"])
@@ -193,9 +197,96 @@ class RBACUserTests(unittest.TestCase):
         self.assertNotIn(
             out["user_id"], {u["user_id"] for u in self.index.list_users()}
         )
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DENIED):
             revoked = self._user_index(out["api_key"])
             revoked.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
+
+    def test_denials_are_catchable_with_one_clause(self):
+        # Regression guard for cyborgdb-core#2398: the paths still raise
+        # different types (query denies, load_index 404s), but both derive from
+        # CyborgDBError so a caller needs only one except clause.
+        out = self.index.create_user(permissions=["read"])
+        user_index = self._user_index(out["api_key"])
+        self.index.delete_user(out["user_id"])
+
+        with self.assertRaises(cyborgdb.CyborgDBError):
+            user_index.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
+        with self.assertRaises(cyborgdb.CyborgDBError):
+            self._user_index(out["api_key"]).query(
+                query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1
+            )
+
+    def test_revoke_after_use_denies_a_previously_working_key(self):
+        # The other revocation tests revoke a key that was never used, which
+        # passes trivially. This one uses the key first.
+        out = self.index.create_user(permissions=["read"])
+        user_index = self._user_index(out["api_key"])
+
+        results = user_index.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
+        self.assertTrue(len(results) >= 1)
+
+        self.index.delete_user(out["user_id"])
+
+        # A server-side cache outliving the revocation would surface here.
+        with self.assertRaises(DENIED):
+            user_index.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
+        with self.assertRaises(DENIED):
+            reloaded = self._user_index(out["api_key"])
+            reloaded.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
+
+    def test_a_user_key_cannot_reach_another_index(self):
+        other_name = f"rbac_other_{uuid.uuid4().hex[:8]}"
+        other = self.root.create_index(
+            index_name=other_name, kms_name=KMS_NAME, dimension=DIMENSION
+        )
+        other.upsert(_seed())
+        out = self.index.create_user(permissions=["read", "write"])
+        try:
+            intruder = cyborgdb.Client(BASE_URL, api_key=out["api_key"])
+            with self.assertRaises(DENIED):
+                foreign = intruder.load_index(other_name)
+                foreign.query(query_vectors=[0.1, 0.2, 0.3, 0.4], top_k=1)
+            with self.assertRaises(DENIED):
+                foreign = intruder.load_index(other_name)
+                foreign.upsert([{"id": "x", "vector": [0.0, 0.0, 0.0, 1.0]}])
+            with self.assertRaises(DENIED):
+                foreign = intruder.load_index(other_name)
+                foreign.get(["a"])
+        finally:
+            self.index.delete_user(out["user_id"])
+            try:
+                other.delete_index()
+            except Exception:
+                pass
+
+    def test_list_indexes_under_a_user_key_is_scoped_or_denied(self):
+        # SECURITY BUG — fails today. cyborgdb-core#2397: a tenant-scoped key
+        # enumerates every index in the deployment. Data access is correctly
+        # denied (see test_a_user_key_cannot_reach_another_index), so this
+        # discloses index names rather than contents.
+        other_name = f"rbac_hidden_{uuid.uuid4().hex[:8]}"
+        other = self.root.create_index(
+            index_name=other_name, kms_name=KMS_NAME, dimension=DIMENSION
+        )
+        out = self.index.create_user(permissions=["read"])
+        try:
+            user_client = cyborgdb.Client(BASE_URL, api_key=out["api_key"])
+            try:
+                listed = set(user_client.list_indexes())
+            except DENIED:
+                return  # refusing outright is an acceptable contract
+            self.assertNotIn(
+                other_name,
+                listed,
+                "a tenant-scoped key must not see another tenant's index",
+            )
+            self.assertLessEqual(listed, {self.index_name})
+        finally:
+            self.index.delete_user(out["user_id"])
+            try:
+                other.delete_index()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

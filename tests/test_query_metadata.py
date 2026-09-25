@@ -22,6 +22,7 @@ import numpy as np
 from dotenv import load_dotenv
 
 import cyborgdb
+from helpers import wait_for_ids
 
 load_dotenv(".env.local")
 
@@ -72,7 +73,7 @@ class TestQueryMetadata(unittest.TestCase):
                 for i in range(N)
             ]
         )
-        time.sleep(2)
+        wait_for_ids(self.index, [f"i{i}" for i in range(N)])
 
     def tearDown(self):
         try:
@@ -210,7 +211,7 @@ class TestQueryMetadataDefaultPosture(unittest.TestCase):
                 for i in range(N)
             ]
         )
-        time.sleep(2)
+        wait_for_ids(self.index, [f"i{i}" for i in range(N)])
 
     def tearDown(self):
         try:
@@ -229,6 +230,196 @@ class TestQueryMetadataDefaultPosture(unittest.TestCase):
         # so query_metadata cannot resolve $regex on any of them.
         with self.assertRaises(ValueError):
             self.index.query_metadata({"color": {"$regex": "^r"}})
+
+
+OPERATOR_SCHEMA = {
+    "color": {"filterable": True, "pattern": True},
+    "rank": {"filterable": True},
+    "tags": {"filterable": True},
+    "author": {"filterable": True},
+}
+
+# o2 and o4 omit `author` entirely, and o3's `tags` is empty — the two cases
+# that make operator semantics ambiguous.
+OPERATOR_ROWS = [
+    ("o0", "red", 0, ["design", "search"], "ada"),
+    ("o1", "green", 10, ["design"], "bob"),
+    ("o2", "blue", 20, ["search"], None),
+    ("o3", "red", 30, [], "ada"),
+    ("o4", "green", 40, ["design", "search", "ml"], None),
+]
+ALL_OPS = {"o0", "o1", "o2", "o3", "o4"}
+
+# Each expected answer is a proper subset of the corpus, so a filter that
+# silently matched everything or nothing fails rather than passing by luck.
+OPERATOR_CASES = [
+    ("$eq", {"color": {"$eq": "red"}}, {"o0", "o3"}),
+    ("$ne", {"color": {"$ne": "red"}}, {"o1", "o2", "o4"}),
+    ("$in", {"color": {"$in": ["red", "blue"]}}, {"o0", "o2", "o3"}),
+    ("$nin", {"color": {"$nin": ["red"]}}, {"o1", "o2", "o4"}),
+    ("$gt", {"rank": {"$gt": 20}}, {"o3", "o4"}),
+    ("$gte", {"rank": {"$gte": 20}}, {"o2", "o3", "o4"}),
+    ("$lt", {"rank": {"$lt": 20}}, {"o0", "o1"}),
+    ("$lte", {"rank": {"$lte": 20}}, {"o0", "o1", "o2"}),
+    ("$exists-true", {"author": {"$exists": True}}, {"o0", "o1", "o3"}),
+    ("$exists-false", {"author": {"$exists": False}}, {"o2", "o4"}),
+    ("$and", {"$and": [{"color": "red"}, {"rank": {"$gte": 30}}]}, {"o3"}),
+    ("$or", {"$or": [{"color": "blue"}, {"rank": {"$lt": 10}}]}, {"o0", "o2"}),
+    ("$nor", {"$nor": [{"color": "red"}, {"color": "green"}]}, {"o2"}),
+    # `$not` is deliberately absent — openapi.json documents it, but the engine
+    # rejects it on both read paths. See test_not_is_documented_but_unsupported.
+    ("$regex", {"color": {"$regex": "^r"}}, {"o0", "o3"}),
+    ("$contains", {"color": {"$contains": "ree"}}, {"o1", "o4"}),
+]
+
+
+class TestFilterOperators(unittest.TestCase):
+    """All fifteen documented operators, on both read paths."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client = cyborgdb.Client(base_url=BASE_URL, api_key=API_KEY)
+        cls.index = cls.client.create_index(
+            f"operators_{uuid.uuid4().hex[:8]}",
+            cyborgdb.Client.generate_key(),
+            dimension=DIM,
+            metric="euclidean",
+            metadata_schema=OPERATOR_SCHEMA,
+        )
+        items = []
+        for doc_id, color, rank, tags, author in OPERATOR_ROWS:
+            metadata = {"color": color, "rank": rank, "tags": tags}
+            # Omitted rather than null: these exercise absence.
+            if author is not None:
+                metadata["author"] = author
+            items.append(
+                {
+                    "id": doc_id,
+                    "vector": np.random.rand(DIM).astype(np.float32).tolist(),
+                    "metadata": metadata,
+                }
+            )
+        cls.index.upsert(items)
+        wait_for_ids(cls.index, ALL_OPS)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.index.delete_index()
+        except Exception:
+            pass
+
+    def _meta_ids(self, filters):
+        return {row["id"] for row in self.index.query_metadata(filters)}
+
+    def _vector_ids(self, filters):
+        return {
+            r["id"]
+            for r in self.index.query(
+                query_vectors=np.random.rand(DIM).astype(np.float32),
+                top_k=len(ALL_OPS),
+                filters=filters,
+            )
+        }
+
+    def test_every_operator_on_the_metadata_path(self):
+        for name, filters, expected in OPERATOR_CASES:
+            with self.subTest(operator=name):
+                self.assertEqual(self._meta_ids(filters), expected)
+
+    def test_every_operator_on_the_vector_path(self):
+        # query() post-filters over decrypted metadata rather than resolving
+        # from the index; the answers must still match.
+        for name, filters, expected in OPERATOR_CASES:
+            with self.subTest(operator=name):
+                self.assertEqual(self._vector_ids(filters), expected)
+
+    def test_both_read_paths_agree(self):
+        # Anchored as well as compared: a bug in the shared filter parser would
+        # break both paths identically and slip past an agreement-only check.
+        for name, filters, expected in OPERATOR_CASES:
+            with self.subTest(operator=name):
+                meta, vector = self._meta_ids(filters), self._vector_ids(filters)
+                self.assertEqual(meta, vector, f"{name}: paths disagree")
+                self.assertEqual(meta, expected, f"{name}: both paths wrong")
+
+    # -- missing fields ---------------------------------------------------- #
+
+    def test_missing_field_is_excluded_by_ne_but_included_by_nin(self):
+        # `$ne` drops documents lacking the field, `$nin` keeps them. Both are
+        # defensible; the point is that the contract is pinned, not inferred.
+        self.assertEqual(self._meta_ids({"author": {"$ne": "ada"}}), {"o1"})
+        self.assertEqual(
+            self._meta_ids({"author": {"$nin": ["ada"]}}), {"o1", "o2", "o4"}
+        )
+
+    def test_missing_field_is_included_by_nor(self):
+        self.assertEqual(
+            self._meta_ids({"$nor": [{"author": "ada"}]}), {"o1", "o2", "o4"}
+        )
+
+    def test_not_operator_works_on_both_paths(self):
+        # KNOWN BUG — fails today. cyborgdb-core#2395: the engine rejects `$not`
+        # on both read paths although openapi.json documents it.
+        filters = {"color": {"$not": {"$eq": "red"}}}
+        self.assertEqual(self._meta_ids(filters), {"o1", "o2", "o4"})
+        self.assertEqual(self._vector_ids(filters), {"o1", "o2", "o4"})
+
+    # -- arrays ------------------------------------------------------------- #
+
+    def test_bare_value_on_an_array_field_means_contains(self):
+        self.assertEqual(self._meta_ids({"tags": "design"}), {"o0", "o1", "o4"})
+
+    def test_in_on_an_array_field_means_any_of(self):
+        self.assertEqual(
+            self._meta_ids({"tags": {"$in": ["ml", "search"]}}), {"o0", "o2", "o4"}
+        )
+
+    def test_has_all_of_these_via_and_of_two_memberships(self):
+        # No dedicated operator; expressed as $and of two memberships.
+        self.assertEqual(
+            self._meta_ids({"$and": [{"tags": "design"}, {"tags": "search"}]}),
+            {"o0", "o4"},
+        )
+
+    def test_empty_array_matches_no_membership(self):
+        for filters in ({"tags": "design"}, {"tags": {"$in": ["design", "ml"]}}):
+            with self.subTest(filters=filters):
+                self.assertNotIn("o3", self._meta_ids(filters))
+
+    # -- degenerate operands ------------------------------------------------ #
+
+    def test_empty_filter_matches_everything(self):
+        self.assertEqual(self._meta_ids({}), ALL_OPS)
+
+    def test_empty_in_list_matches_nothing(self):
+        self.assertEqual(self._meta_ids({"color": {"$in": []}}), set())
+
+    def test_empty_nin_list_matches_everything(self):
+        self.assertEqual(self._meta_ids({"color": {"$nin": []}}), ALL_OPS)
+
+    def test_empty_boolean_operands(self):
+        # $and over nothing is vacuously true, $or vacuously false.
+        self.assertEqual(self._meta_ids({"$and": []}), ALL_OPS)
+        self.assertEqual(self._meta_ids({"$or": []}), set())
+
+    # -- type handling ------------------------------------------------------ #
+
+    def test_int_and_float_are_the_same_key(self):
+        # Anchored to the expected answer, not just compared to each other:
+        # two empty results would otherwise satisfy the comparison.
+        self.assertEqual(self._meta_ids({"rank": 20}), {"o2"})
+        self.assertEqual(self._meta_ids({"rank": 20.0}), {"o2"})
+        self.assertEqual(self._meta_ids({"rank": {"$gte": 20}}), {"o2", "o3", "o4"})
+        self.assertEqual(self._meta_ids({"rank": {"$gte": 20.0}}), {"o2", "o3", "o4"})
+
+    def test_cross_type_comparison_does_not_match_silently(self):
+        # Either contract is acceptable; matching is not.
+        try:
+            got = self._meta_ids({"rank": "20"})
+        except ValueError:
+            return  # raising is an acceptable contract
+        self.assertEqual(got, set(), "a string filter matched a numeric field")
 
 
 class TestDatetimeHandling(unittest.TestCase):
