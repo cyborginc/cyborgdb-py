@@ -105,10 +105,19 @@ class TestSSLWarnings(unittest.TestCase):
     def test_auto_disable_is_announced(self):
         # Auto-detected localhost currently logs at INFO; explicit disable logs
         # at WARNING. Either level is defensible — silence is not.
+        #
+        # Matched on "auto-disabled" plus the host rather than the full
+        # sentence: the wording changed once already (PR #133 replaced a bare
+        # "SSL verification disabled" with a message naming the host and the
+        # reason), and pinning the prose would break on the next improvement
+        # while proving nothing extra.
         with self.assertLogs("cyborgdb", level=logging.INFO) as captured:
             verify_ssl_for("https://localhost:8000")
         self.assertTrue(
-            any("SSL verification disabled" in line for line in captured.output),
+            any(
+                "auto-disabled" in line and "localhost" in line
+                for line in captured.output
+            ),
             captured.output,
         )
 
