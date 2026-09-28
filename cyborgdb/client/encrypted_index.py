@@ -286,15 +286,11 @@ class EncryptedIndex:
 
         Returns:
             bool: True if the index is trained, otherwise False.
+
+        Raises:
+            CyborgDBError: If the training status could not be retrieved.
         """
-        try:
-            response = self._api.get_index_info_v1_indexes_describe_post(
-                index_operation_request=self._ior()
-            )
-            return response.is_trained
-        except ApiException as e:
-            logger.error(f"Failed to get index training status: {e}")
-            return False
+        return self._describe_translated().is_trained
 
     def delete_index(self) -> None:
         """
@@ -304,7 +300,7 @@ class EncryptedIndex:
             This action is irreversible.
 
         Raises:
-            ValueError: If the index could not be deleted.
+            CyborgDBError: If the index could not be deleted.
         """
         try:
             self._api.delete_index_v1_indexes_delete_post(
@@ -329,7 +325,7 @@ class EncryptedIndex:
             IDs will always be included in the returned items.
 
         Raises:
-            ValueError: If the items could not be retrieved or decrypted.
+            CyborgDBError: If the items could not be retrieved or decrypted.
         """
         try:
             from cyborgdb.openapi_client.models import GetRequest
@@ -405,8 +401,7 @@ class EncryptedIndex:
             this function.
 
         Raises:
-            ValueError: If there are not enough vector embeddings in the index for training,
-                or if the index could not be trained.
+            CyborgDBError: If the service rejects the training request.
         """
         try:
             request = TrainRequest(
@@ -642,7 +637,7 @@ class EncryptedIndex:
             ids: IDs to delete.
 
         Raises:
-            ValueError: If the items could not be deleted.
+            CyborgDBError: If the items could not be deleted.
         """
         try:
             delete_request = DeleteRequest(
@@ -1063,7 +1058,7 @@ class EncryptedIndex:
         the index's ``metadata_schema`` is enforced rather than advisory:
         ``$regex``/``$contains`` require a ``pattern`` field, and a field
         declared ``filterable=False`` cannot be filtered on at all. Both raise
-        ``ValueError``. Use :meth:`query` with a vector for those.
+        ``ValidationError``. Use :meth:`query` with a vector for those.
 
         Passing ``text`` adds a BM25 full-text leg (requires an index with at
         least one ``full_text`` field). Results are then ranked by relevance
@@ -1095,7 +1090,7 @@ class EncryptedIndex:
             ranked by descending BM25 score.
 
         Raises:
-            ValueError: If the filter cannot be resolved from the metadata
+            ValidationError: If the filter cannot be resolved from the metadata
                 index, or ``order_by`` is malformed.
         """
         # Accept core's {field: 1|-1} form and normalize; the service takes a
@@ -1208,8 +1203,8 @@ class EncryptedIndex:
             ``Client`` and need no index key of their own.
 
         Raises:
-            ValueError: If the user could not be created (e.g. the client
-                is not using the root key, or ``permissions`` is invalid).
+            AuthenticationError: If the client is not using the root key.
+            ValidationError: If ``permissions`` is invalid.
         """
         # SDK-supplied-KEK indexes: the service needs the index key to
         # unwrap the root DEK and re-wrap it under the new user's key.
@@ -1234,8 +1229,8 @@ class EncryptedIndex:
             user (the cryptographic source of truth), not a stored field.
 
         Raises:
-            ValueError: If the users could not be listed (e.g. the client
-                is not using the root key).
+            AuthenticationError: If the client is not using the root key.
+            CyborgDBError: If the users could not be listed for another reason.
         """
         try:
             response = self._api.list_users_v1_indexes_index_name_users_get(
@@ -1259,7 +1254,7 @@ class EncryptedIndex:
                 surfaced by ``list_users``).
 
         Raises:
-            ValueError: If the user could not be deleted.
+            CyborgDBError: If the user could not be deleted.
         """
         try:
             self._api.delete_user_v1_indexes_index_name_users_user_id_delete(

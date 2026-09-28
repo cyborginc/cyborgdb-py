@@ -6,10 +6,17 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import numpy as np
+import urllib3.exceptions
 
 from cyborgdb.client.client import Client
 from cyborgdb.client.encrypted_index import EncryptedIndex
-from cyborgdb.exceptions import CyborgDBError, NotFoundError, ValidationError
+from cyborgdb.exceptions import (
+    AuthenticationError,
+    CyborgDBError,
+    NotFoundError,
+    TransportError,
+    ValidationError,
+)
 from cyborgdb.openapi_client.exceptions import ApiException
 
 KEY = b"\x01" * 32
@@ -103,6 +110,28 @@ class TestGetterErrors(unittest.TestCase):
                 api.get_index_info_v1_indexes_describe_post.side_effect = _not_found()
                 with self.assertRaises(NotFoundError):
                     getattr(_index(api), name)
+
+
+class TestIsTrained(unittest.TestCase):
+    def test_errors_propagate_instead_of_returning_false(self):
+        unauthorized = ApiException(status=401, reason="Unauthorized")
+        unauthorized.headers = {}
+        for exc, expected in (
+            (unauthorized, AuthenticationError),
+            (urllib3.exceptions.NewConnectionError(None, "refused"), TransportError),
+        ):
+            with self.subTest(expected=expected.__name__):
+                api = MagicMock()
+                api.get_index_info_v1_indexes_describe_post.side_effect = exc
+                with self.assertRaises(expected):
+                    _index(api).is_trained()
+
+    def test_returns_the_reported_status(self):
+        api = MagicMock()
+        api.get_index_info_v1_indexes_describe_post.return_value = SimpleNamespace(
+            dimension=8, metric="euclidean", is_trained=True
+        )
+        self.assertIs(_index(api).is_trained(), True)
 
 
 class TestLoadIndexErrors(unittest.TestCase):

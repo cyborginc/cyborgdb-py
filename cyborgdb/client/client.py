@@ -31,7 +31,7 @@ import urllib3
 import urllib3.exceptions
 
 from cyborgdb.client.encrypted_index import EncryptedIndex
-from cyborgdb.exceptions import ValidationError, translate_api_error
+from cyborgdb.exceptions import CyborgDBError, ValidationError, translate_api_error
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ class Client:
         except Exception as e:
             error_msg = f"Failed to initialize client: {e}"
             logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise CyborgDBError(error_msg) from e
 
     def _request_headers(self) -> Dict[str, str]:
         """Build the request headers for data-path calls. Only includes
@@ -177,7 +177,7 @@ class Client:
             A list of index names.
 
         Raises:
-            ValueError: If the list of indexes could not be retrieved.
+            CyborgDBError: If the list of indexes could not be retrieved.
         """
         try:
             response = self.api.list_indexes_v1_indexes_list_get()
@@ -346,7 +346,7 @@ class Client:
             A dictionary containing health status information.
 
         Raises:
-            ValueError: If the health status could not be retrieved.
+            CyborgDBError: If the health status could not be retrieved.
         """
         try:
             return self.api.health_check_v1_health_get()
