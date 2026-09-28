@@ -129,10 +129,7 @@ class TestEmbeddingRoundTrip(unittest.TestCase):
             embedding_model=MODEL,
         )
         cls.index.upsert(
-            [
-                {"id": doc_id, "contents": text}
-                for doc_id, text in CORPUS.items()
-            ]
+            [{"id": doc_id, "contents": text} for doc_id, text in CORPUS.items()]
         )
         wait_for_ids(cls.index, list(CORPUS))
 
