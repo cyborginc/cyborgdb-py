@@ -1,2 +1,27 @@
-# Require Kevin and Alex's review on all changes to this public SDK repo's main branch.
 * @kkopczynski-cyborg @ahellegit
+
+# Tests, test tooling, and testing docs: QA (@lubna-khalid) is auto-requested
+# alongside the code owners. Keep this block last: the last matching pattern wins.
+test/                 @kkopczynski-cyborg @ahellegit @lubna-khalid
+tests/                @kkopczynski-cyborg @ahellegit @lubna-khalid
+__tests__/            @kkopczynski-cyborg @ahellegit @lubna-khalid
+testing/              @kkopczynski-cyborg @ahellegit @lubna-khalid
+integration_tests/    @kkopczynski-cyborg @ahellegit @lubna-khalid
+load_tests/           @kkopczynski-cyborg @ahellegit @lubna-khalid
+*_test.go             @kkopczynski-cyborg @ahellegit @lubna-khalid
+*_test.py             @kkopczynski-cyborg @ahellegit @lubna-khalid
+test_*.py             @kkopczynski-cyborg @ahellegit @lubna-khalid
+conftest.py           @kkopczynski-cyborg @ahellegit @lubna-khalid
+pytest.ini            @kkopczynski-cyborg @ahellegit @lubna-khalid
+*.test.ts             @kkopczynski-cyborg @ahellegit @lubna-khalid
+*.test.tsx            @kkopczynski-cyborg @ahellegit @lubna-khalid
+*.test.js             @kkopczynski-cyborg @ahellegit @lubna-khalid
+*.spec.ts             @kkopczynski-cyborg @ahellegit @lubna-khalid
+*.spec.js             @kkopczynski-cyborg @ahellegit @lubna-khalid
+jest.config.*         @kkopczynski-cyborg @ahellegit @lubna-khalid
+vitest.config.*       @kkopczynski-cyborg @ahellegit @lubna-khalid
+playwright.config.*   @kkopczynski-cyborg @ahellegit @lubna-khalid
+TESTING.md            @kkopczynski-cyborg @ahellegit @lubna-khalid
+*TEST*.md             @kkopczynski-cyborg @ahellegit @lubna-khalid
+*Test*.md             @kkopczynski-cyborg @ahellegit @lubna-khalid
+*testing*.md          @kkopczynski-cyborg @ahellegit @lubna-khalid
