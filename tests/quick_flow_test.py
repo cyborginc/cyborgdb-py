@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import time
 
 import cyborgdb as cyborgdb
+from helpers import wait_for_ids, wait_until_gone
 
 # Load environment variables from .env.local
 load_dotenv(".env.local")
@@ -190,7 +191,7 @@ class TestUnitFlow(unittest.TestCase):
         self.index.upsert(items)
 
         # Wait for 1 second to ensure upsert is processed
-        time.sleep(1)
+        wait_for_ids(self.index, [str(i) for i in range(self.num_untrained_vectors)])
 
         # Check if the index has all IDs
         results = self.index.list_ids()
@@ -309,7 +310,7 @@ class TestUnitFlow(unittest.TestCase):
         self.index.upsert(items)
 
         # Wait for upsert to be processed
-        time.sleep(1)
+        wait_for_ids(self.index, [str(i) for i in range(auto_train_trigger)])
 
         # Verify IDs are present
         results = self.index.list_ids()
@@ -353,7 +354,7 @@ class TestUnitFlow(unittest.TestCase):
         self.index.upsert(items)
 
         # Wait for upsert to be processed
-        time.sleep(1)
+        wait_for_ids(self.index, [str(i) for i in range(self.total_num_vectors)])
 
         # Verify all IDs are present
         results = self.index.list_ids()
@@ -575,7 +576,7 @@ class TestUnitFlow(unittest.TestCase):
         self.index.delete(ids_to_delete)
 
         # Wait for 1 second to ensure delete is processed
-        time.sleep(1)
+        wait_until_gone(self.index, ids_to_delete)
 
         # Check if the index has deleted the IDs
         results = self.index.list_ids()

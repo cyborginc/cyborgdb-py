@@ -7,7 +7,6 @@ quantised storage.
 """
 
 import os
-import time
 import unittest
 import uuid
 
@@ -116,7 +115,7 @@ class TestBinaryPathParity(unittest.TestCase):
         # The two paths build their result dicts differently, so compare keys
         # and not just ids. `include` is exercised across its supported values;
         # `vector`/`contents` are absent on query() either way — see
-        # cyborgdb-core#2404.
+        # decision.
         for include in ([], ["distance"], ["metadata"], ["distance", "metadata"]):
             with self.subTest(include=include):
                 json_rows = self.json_index.query(
@@ -160,7 +159,8 @@ class TestIncludeProjection(unittest.TestCase):
 
     Only the unknown-value case is asserted as a bug. Whether `query()` should
     return `vector`/`contents` the way `get()` does is an open question —
-    cyborgdb-core#2404 asks for a decision rather than asserting one, so there
+    that is an open question rather than a settled contract (cyborgdb-core#2404),
+    so there
     is no test here pretending the answer is known.
     """
 
@@ -212,10 +212,9 @@ class TestIncludeProjection(unittest.TestCase):
         self.assertEqual(row["contents"], "hello")
 
     def test_unknown_include_values_are_rejected(self):
-        # KNOWN BUG — fails today. cyborgdb-core#2404: an unrecognised value is
-        # silently discarded on both methods, so a typo such as "metdata" costs
-        # the caller the field with no error. Unlike the vector/contents
-        # question, this needs no documentation to be wrong.
+        # An unrecognised include value should be rejected rather than
+        # silently dropped: a typo such as "metdata" otherwise costs the caller
+        # the field with no error. Currently failing; see cyborgdb-core#2404.
         with self.assertRaises(ValueError):
             self.index.query(query_vectors=self.vector, top_k=1, include=["bogus"])
         with self.assertRaises(ValueError):
@@ -376,9 +375,12 @@ class TestStoragePrecisionAccuracy(unittest.TestCase):
             )
             index.upsert([{"id": i, "vector": v} for i, v in zip(cls.ids, cls.vectors)])
             cls.indexes[precision] = index
+        # Every id, not just the first: the recall assertions below compare
+        # against ground truth over the whole corpus, so a partially-visible
+        # index would score badly for a reason that has nothing to do with the
+        # precision tier under test.
         for index in cls.indexes.values():
-            wait_for_ids(index, cls.ids[:1])
-        time.sleep(1)
+            wait_for_ids(index, cls.ids)
 
     @classmethod
     def tearDownClass(cls):

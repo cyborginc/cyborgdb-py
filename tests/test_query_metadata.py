@@ -13,7 +13,6 @@ points at the policy rather than at a broken filter.
 """
 
 import os
-import time
 import unittest
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -359,8 +358,8 @@ class TestFilterOperators(unittest.TestCase):
         )
 
     def test_not_operator_works_on_both_paths(self):
-        # KNOWN BUG — fails today. cyborgdb-core#2395: the engine rejects `$not`
-        # on both read paths although openapi.json documents it.
+        # `$not` is documented in openapi.json, so it should resolve on both
+        # read paths. Currently failing; see cyborgdb-core#2395.
         filters = {"color": {"$not": {"$eq": "red"}}}
         self.assertEqual(self._meta_ids(filters), {"o1", "o2", "o4"})
         self.assertEqual(self._vector_ids(filters), {"o1", "o2", "o4"})
@@ -453,7 +452,7 @@ class TestDatetimeHandling(unittest.TestCase):
                 for i in range(4)
             ]
         )
-        time.sleep(2)
+        wait_for_ids(self.index, [f"t{i}" for i in range(4)])
 
     def tearDown(self):
         try:

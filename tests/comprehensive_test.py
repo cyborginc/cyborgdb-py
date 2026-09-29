@@ -6,12 +6,12 @@ Implements missing SSL, IVFPQ, error handling, and edge case tests
 
 import unittest
 import os
-import time
 import uuid
 import asyncio
 import numpy as np
 
 import cyborgdb as cyborgdb
+from helpers import wait_for, wait_for_ids, wait_until_gone
 
 
 def create_client():
@@ -249,7 +249,7 @@ class TestEdgeCases(unittest.TestCase):
             ]
         )
 
-        time.sleep(1)
+        wait_for_ids(self.index, ["preserve_test"])
 
         # Retrieve and verify
         results = self.index.get(["preserve_test"], include=["vector", "metadata"])
@@ -294,7 +294,7 @@ class TestEdgeCases(unittest.TestCase):
                 self.index.upsert(item)
 
             # Verify all items were inserted
-            time.sleep(2)
+            wait_for_ids(self.index, [f"concurrent_{i}" for i in range(5)])
             results = self.index.list_ids()
             concurrent_ids = [id for id in results if id.startswith("concurrent_")]
             self.assertEqual(len(concurrent_ids), 5)
@@ -341,7 +341,7 @@ class TestBackendCompatibility(unittest.TestCase):
                 items = [{"id": item_id, "vector": vector, "metadata": tc["metadata"]}]
 
                 self.index.upsert(items)
-                time.sleep(2)
+                wait_for_ids(self.index, [item_id])
 
                 results = self.index.get([item_id], include=["metadata"])
                 self.assertEqual(len(results), 1)
@@ -389,7 +389,7 @@ class TestDataIntegrity(unittest.TestCase):
                 }
             ]
         )
-        time.sleep(2)
+        wait_for_ids(self.index, ["overwrite_test"])
 
         vec_v2 = (np.random.rand(128) + 10.0).astype(np.float32)
         self.index.upsert(
@@ -401,7 +401,16 @@ class TestDataIntegrity(unittest.TestCase):
                 }
             ]
         )
-        time.sleep(2)
+        # The id already exists from v1, so poll the value that changed.
+        wait_for(
+            lambda: (
+                self.index.get(["overwrite_test"], include=["metadata"])[0]["metadata"][
+                    "version"
+                ]
+                == 2
+            ),
+            "overwrite_test reports version 2",
+        )
 
         results = self.index.get(["overwrite_test"], include=["vector", "metadata"])
         self.assertEqual(len(results), 1)
@@ -422,11 +431,11 @@ class TestDataIntegrity(unittest.TestCase):
         self.index.upsert(
             [{"id": f"del_test_{i}", "vector": vectors[i]} for i in range(10)]
         )
-        time.sleep(2)
+        wait_for_ids(self.index, [f"del_test_{i}" for i in range(10)])
 
         delete_ids = [f"del_test_{i}" for i in range(5)]
         self.index.delete(delete_ids)
-        time.sleep(2)
+        wait_until_gone(self.index, delete_ids)
 
         # get() returns nothing for deleted IDs
         got = self.index.get(delete_ids, include=["vector"])
@@ -450,7 +459,7 @@ class TestDataIntegrity(unittest.TestCase):
         self.index.upsert(
             [{"id": "exists", "vector": np.random.rand(128).astype(np.float32)}]
         )
-        time.sleep(2)
+        wait_for_ids(self.index, ["exists"])
 
         results = self.index.get(["exists", "ghost_1", "ghost_2"], include=["vector"])
         self.assertEqual(len(results), 1)
@@ -469,7 +478,7 @@ class TestDataIntegrity(unittest.TestCase):
         ]
         for i, (_, vec) in enumerate(cases):
             self.index.upsert([{"id": f"boundary_{i}", "vector": vec}])
-        time.sleep(2)
+        wait_for_ids(self.index, [f"boundary_{i}" for i in range(len(cases))])
 
         for i, (name, vec) in enumerate(cases):
             with self.subTest(name):
@@ -511,17 +520,22 @@ class TestDataIntegrity(unittest.TestCase):
                     }
                 ]
             )
-            time.sleep(2)
             # A populated index with the wrong key is a 401 "Wrong encryption
             # key". An *empty* index returns 404 instead, so the type depends on
-            # whether there is data to fail decrypting — see cyborgdb-core#2406.
+            # whether there is data to fail decrypting.
+            #
+            # That makes the wait load-bearing rather than cosmetic: a fixed
+            # sleep that expired before the upsert landed would query an empty
+            # index and get the 404, failing on timing rather than on the
+            # behaviour under test.
+            wait_for_ids(idx, ["secret_data"])
             with self.assertRaises(cyborgdb.AuthenticationError) as caught:
                 self.client.load_index(name, self.client.generate_key())
-            # KNOWN BUG — fails today. cyborgdb-core#2406: client.py:336 is
-            # missing its f-prefix, so the message carries a literal
-            # "{index_name}". Asserting the placeholder is absent rather than
-            # that the name is present — the name also appears further down in
-            # the echoed HTTP body, which would mask the bug.
+            # The message should name the index, not carry an unsubstituted
+            # placeholder. Asserting the placeholder is absent rather than that
+            # the name is present: the name also appears further down in the
+            # echoed HTTP body, which would mask the problem.
+            # Currently failing; see cyborgdb-core#2406.
             self.assertNotIn("{index_name}", str(caught.exception))
         finally:
             idx.delete_index()

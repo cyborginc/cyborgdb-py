@@ -10,7 +10,6 @@ It validates:
 """
 
 import os
-import time
 import uuid
 import inspect
 import numpy as np
@@ -20,6 +19,7 @@ import urllib3
 from dotenv import load_dotenv
 
 import cyborgdb
+from helpers import wait_for, wait_for_ids, wait_until_gone
 from cyborgdb.openapi_client.models import (
     CreateIndexRequest,
     DeleteRequest,
@@ -342,7 +342,6 @@ class TestAPIContract(unittest.TestCase):
 
         # Clean up this index
         index.delete_index()
-        time.sleep(1)
 
         # Test with no dimension (auto-detected from first upsert)
         index = self.client.create_index(
@@ -356,7 +355,6 @@ class TestAPIContract(unittest.TestCase):
 
         # Clean up this index
         index.delete_index()
-        time.sleep(1)
 
         # Test with storage_precision
         index = self.client.create_index(
@@ -370,7 +368,6 @@ class TestAPIContract(unittest.TestCase):
 
         # Clean up this index
         index.delete_index()
-        time.sleep(1)
 
         # Test with all defaults + embedding model
         index = self.client.create_index(
@@ -543,7 +540,7 @@ class TestAPIContract(unittest.TestCase):
         result = self.index.upsert(items_bytes)
         self.assertIsNone(result, "upsert must return None")
 
-        time.sleep(1)
+        wait_for_ids(self.index, [it["id"] for it in items_bytes])
 
         # Test 2: Prepare test data with contents as strings with no vectors (auto-embed)
         items_strings = []
@@ -559,8 +556,6 @@ class TestAPIContract(unittest.TestCase):
         result = self.index.upsert(items_strings)
         self.assertIsNone(result, "upsert must return None")
 
-        time.sleep(1)
-
         # Test 4: Additional items using dict format
         items_remaining = []
         for i in range(5, 10):
@@ -575,8 +570,6 @@ class TestAPIContract(unittest.TestCase):
         result = self.index.upsert(items_remaining)
         self.assertIsNone(result, "upsert must return None")
 
-        time.sleep(1)
-
         # Test 3: Separate arrays format (documented as: upsert(ids, vectors))
         ids_array = [str(i) for i in range(10, 15)]
         vectors_array = self.test_vectors[5:10]
@@ -585,7 +578,9 @@ class TestAPIContract(unittest.TestCase):
         result = self.index.upsert(ids_array, vectors_array)
         self.assertIsNone(result, "upsert must return None")
 
-        time.sleep(1)
+        # test_13 asserts every id 0-14 is visible, so wait for the whole
+        # set rather than guessing at a propagation delay.
+        wait_for_ids(self.index, [str(i) for i in range(15)])
 
     def test_13_encrypted_index_list_ids(self):
         """Test EncryptedIndex.list_ids() exact response format."""
@@ -974,7 +969,7 @@ class TestAPIContract(unittest.TestCase):
         result = self.index.upsert(binary_items)
         self.assertIsNone(result, "upsert must return None")
 
-        time.sleep(1)
+        wait_for_ids(self.index, [str(start_id + i) for i in range(num_vectors)])
 
         # Verify the vectors were upserted correctly
         ids_to_check = [str(start_id + i) for i in range(num_vectors)]
@@ -1061,8 +1056,6 @@ class TestAPIContract(unittest.TestCase):
         result = self.index.train(n_lists=5, batch_size=1024)
         self.assertIsNone(result, "train must return None")
 
-        time.sleep(2)
-
     def test_20_encrypted_index_delete(self):
         """Test EncryptedIndex.delete() exact behavior."""
         ids_to_delete = ["0", "5"]
@@ -1075,7 +1068,7 @@ class TestAPIContract(unittest.TestCase):
         result = self.index.delete(["9"])
         self.assertIsNone(result, "delete must return None")
 
-        time.sleep(1)
+        wait_until_gone(self.index, ["9"])
 
         # Verify deletion worked
         remaining = self.index.list_ids()
@@ -1107,7 +1100,10 @@ class TestAPIContract(unittest.TestCase):
         result = self.index.delete_index()
         self.assertIsNone(result, "delete_index must return None")
 
-        time.sleep(1)
+        wait_for(
+            lambda: self.index_name not in self.client.list_indexes(),
+            f"{self.index_name} disappears from list_indexes",
+        )
 
         # Verify deletion
         indexes = self.client.list_indexes()
