@@ -80,7 +80,7 @@ class TrainedIndexTestCase(unittest.TestCase):
         while time.monotonic() < deadline:
             if cls.index.is_trained():
                 break
-            time.sleep(5)
+            time.sleep(2)
         else:
             raise AssertionError(
                 f"index did not train within {TRAIN_TIMEOUT}s of upserting {total} vectors"
