@@ -14,7 +14,11 @@ from typing import Dict, List, Optional, TypedDict, Union, Any
 import numpy as np
 import urllib3.exceptions
 
-from cyborgdb.exceptions import translate_api_error
+from cyborgdb.exceptions import (
+    ValidationError,
+    _ArgumentTypeError,
+    translate_api_error,
+)
 
 # Import the OpenAPI generated client
 try:
@@ -37,6 +41,9 @@ try:
     from cyborgdb.openapi_client.models import Contents
     from cyborgdb.openapi_client.models.binary_upsert_request import BinaryUpsertRequest
     from cyborgdb.openapi_client.models.binary_vector_batch import BinaryVectorBatch
+    from cyborgdb.openapi_client.models.binary_vector_batch_contents_inner import (
+        BinaryVectorBatchContentsInner,
+    )
     from cyborgdb.openapi_client.models.binary_query_request import BinaryQueryRequest
     from cyborgdb.openapi_client.models.binary_query_batch import BinaryQueryBatch
     from cyborgdb.openapi_client.models.create_user_request import CreateUserRequest
@@ -74,6 +81,29 @@ def _coerce_datetimes(value):
     if isinstance(value, list):
         return [_coerce_datetimes(item) for item in value]
     return value
+
+
+def _wrap_binary_contents(
+    contents: Optional[List[Optional[Union[str, bytes, bytearray]]]],
+) -> Optional[List[BinaryVectorBatchContentsInner]]:
+    """Wrap per-item contents in the generated anyOf model, base64-encoding
+    bytes the same way ``upsert()`` does on the JSON path.
+
+    ``None`` becomes ``""`` rather than staying ``None``: the generated
+    ``BinaryVectorBatch.to_dict()`` drops ``None`` entries, which would shift
+    every later item's contents onto the wrong id. The service treats empty
+    contents as absent, so the stored result is the same.
+    """
+    if contents is None:
+        return None
+    wrapped = []
+    for value in contents:
+        if value is None:
+            value = ""
+        elif isinstance(value, (bytes, bytearray)):
+            value = base64.b64encode(bytes(value)).decode("utf-8")
+        wrapped.append(BinaryVectorBatchContentsInner(value))
+    return wrapped
 
 
 # Split into two TypedDicts so `id` stays required while `score` is optional
@@ -133,21 +163,32 @@ class EncryptedIndex:
         )
         self._api = api
         self._api_client = api_client
-        # Lazy-cached describe-derived metadata. `dimension` and `metric`
-        # are immutable post-creation, so the first describe populates
-        # both and we reuse the values. `n_lists` is fetched fresh on
-        # every read because training mutates it (default 1 → trained
-        # cluster count).
+        # Lazy-cached describe-derived metadata. `metric` is immutable
+        # post-creation. `dimension` is too once set, but an auto-dimension
+        # index reports 0 until its first upsert, so 0 is never cached.
+        # `n_lists` is fetched fresh on every read because training
+        # mutates it (default 1 → trained cluster count).
         self._dimension: Optional[int] = None
         self._metric: Optional[str] = None
 
     def _describe(self):
         """Fire the describe endpoint with this index's key (None for
-        KMS-backed indexes). Shared by the lazy property accessors and
-        by `Client.load_index`'s existence probe."""
-        return self._api.get_index_info_v1_indexes_describe_post(
+        KMS-backed indexes) and refresh the cached immutable fields.
+        Raises the raw ``ApiException`` so `Client.load_index` can
+        translate it with its own context."""
+        response = self._api.get_index_info_v1_indexes_describe_post(
             index_operation_request=self._ior()
         )
+        if response.dimension:
+            self._dimension = response.dimension
+        self._metric = response.metric
+        return response
+
+    def _describe_translated(self):
+        try:
+            return self._describe()
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Failed to describe index") from e
 
     def _request_headers(self) -> Dict[str, str]:
         """Build the request headers for data-path calls. Only includes
@@ -173,12 +214,10 @@ class EncryptedIndex:
     def dimension(self) -> int:
         """Vector dimensionality. `0` if create_index was called
         without an explicit dimension and the first upsert hasn't
-        happened yet; otherwise the real dimension. Cached on first
-        read."""
+        happened yet; otherwise the real dimension. Cached once
+        non-zero."""
         if self._dimension is None:
-            response = self._describe()
-            self._dimension = response.dimension
-            self._metric = response.metric
+            return self._describe_translated().dimension
         return self._dimension
 
     @property
@@ -186,9 +225,7 @@ class EncryptedIndex:
         """Distance metric (`euclidean`, `cosine`, or
         `squared_euclidean`). Cached on first read."""
         if self._metric is None:
-            response = self._describe()
-            self._dimension = response.dimension
-            self._metric = response.metric
+            self._describe_translated()
         return self._metric
 
     @property
@@ -196,7 +233,7 @@ class EncryptedIndex:
         """Number of inverted lists. `1` for untrained indexes; set to
         the trained cluster count after `train()`. Fetched fresh on
         every read so post-training callers see the new value."""
-        return self._describe().n_lists
+        return self._describe_translated().n_lists
 
     @property
     def metadata_schema(self) -> Dict[str, Dict[str, bool]]:
@@ -218,7 +255,9 @@ class EncryptedIndex:
                 "pattern": policy.pattern,
                 "full_text": policy.full_text,
             }
-            for field, policy in (self._describe().metadata_schema or {}).items()
+            for field, policy in (
+                self._describe_translated().metadata_schema or {}
+            ).items()
         }
 
     @property
@@ -232,7 +271,7 @@ class EncryptedIndex:
 
         Returned as a plain dict so generated openapi_client models never leak
         out of the wrapper."""
-        config = self._describe().bm25
+        config = self._describe_translated().bm25
         if config is None:
             return None
         return {
@@ -247,15 +286,11 @@ class EncryptedIndex:
 
         Returns:
             bool: True if the index is trained, otherwise False.
+
+        Raises:
+            CyborgDBError: If the training status could not be retrieved.
         """
-        try:
-            response = self._api.get_index_info_v1_indexes_describe_post(
-                index_operation_request=self._ior()
-            )
-            return response.is_trained
-        except ApiException as e:
-            logger.error(f"Failed to get index training status: {e}")
-            return False
+        return self._describe_translated().is_trained
 
     def delete_index(self) -> None:
         """
@@ -265,7 +300,7 @@ class EncryptedIndex:
             This action is irreversible.
 
         Raises:
-            ValueError: If the index could not be deleted.
+            CyborgDBError: If the index could not be deleted.
         """
         try:
             self._api.delete_index_v1_indexes_delete_post(
@@ -290,7 +325,7 @@ class EncryptedIndex:
             IDs will always be included in the returned items.
 
         Raises:
-            ValueError: If the items could not be retrieved or decrypted.
+            CyborgDBError: If the items could not be retrieved or decrypted.
         """
         try:
             from cyborgdb.openapi_client.models import GetRequest
@@ -345,6 +380,7 @@ class EncryptedIndex:
         batch_size: Optional[int] = None,
         max_iters: Optional[int] = None,
         tolerance: Optional[float] = None,
+        max_memory: Optional[int] = None,
     ) -> None:
         """
         Build the index using the specified training configuration.
@@ -357,14 +393,15 @@ class EncryptedIndex:
             batch_size: Size of each batch for training. Default is 2048.
             max_iters: Maximum iterations for training. Default is 100.
             tolerance: Convergence tolerance for training. Default is 1e-6.
+            max_memory: Maximum memory (MB) used during training. Default is 0
+                (no limit).
 
         Note:
             There must be at least 2 * n_lists vector embeddings in the index prior to calling
             this function.
 
         Raises:
-            ValueError: If there are not enough vector embeddings in the index for training,
-                or if the index could not be trained.
+            CyborgDBError: If the service rejects the training request.
         """
         try:
             request = TrainRequest(
@@ -374,6 +411,7 @@ class EncryptedIndex:
                 batch_size=batch_size,
                 max_iters=max_iters,
                 tolerance=tolerance,
+                max_memory=max_memory,
             )
 
             self._api.train_index_v1_indexes_train_post(train_request=request)
@@ -402,15 +440,15 @@ class EncryptedIndex:
             arg2: If arg1 is a list of IDs, this should be an array of vector embeddings.
 
         Raises:
-            ValueError: If vector dimensions are incompatible with the index configuration,
-                if index was not created or loaded yet, if there is a mismatch between
-                the number of vectors and IDs, or if the vectors could not be upserted.
-            TypeError: If the arguments do not match expected types.
+            ValidationError: If the arguments are malformed (wrong types, a missing
+                ``id``, or mismatched ID and vector counts). A wrong-type error is
+                also a ``TypeError``.
+            CyborgDBError: If the service rejects the upsert.
         """
         # Case 2: arg1 is a list of IDs, arg2 is a numpy array -> use binary format
         if arg2 is not None and isinstance(arg2, np.ndarray):
             if not isinstance(arg1, list):
-                raise TypeError("arg1 must be a list of IDs")
+                raise _ArgumentTypeError("arg1 must be a list of IDs")
             # Convert IDs to strings if needed
             ids = [str(id_val) for id_val in arg1]
             # Use binary upsert for efficiency
@@ -425,14 +463,14 @@ class EncryptedIndex:
                 if not isinstance(arg1, list) or not all(
                     isinstance(item, dict) for item in arg1
                 ):
-                    raise TypeError(
+                    raise _ArgumentTypeError(
                         "When arg2 is None, arg1 must be a list of dictionaries"
                     )
 
                 # Convert each dict to an Item
                 for item_dict in arg1:
                     if "id" not in item_dict:
-                        raise ValueError(
+                        raise ValidationError(
                             "Each item dictionary must contain an 'id' field"
                         )
 
@@ -475,11 +513,11 @@ class EncryptedIndex:
             # Case 2: arg1 is a list of IDs, arg2 is a list of vectors (non-numpy)
             else:
                 if not isinstance(arg1, list):
-                    raise TypeError("arg1 must be a list of IDs")
+                    raise _ArgumentTypeError("arg1 must be a list of IDs")
 
                 vectors = arg2
                 if len(arg1) != len(vectors):
-                    raise ValueError("Number of IDs must match number of vectors")
+                    raise ValidationError("Number of IDs must match number of vectors")
 
                 # Create items from IDs and vectors
                 for id_val, vector in zip(arg1, vectors):
@@ -530,21 +568,28 @@ class EncryptedIndex:
             contents: Optional list of contents for each vector.
 
         Raises:
-            ValueError: If vectors shape doesn't match ids length, or if upsert fails.
-            TypeError: If vectors is not a numpy array.
+            ValidationError: If ``vectors`` is not a 2D numpy array (a wrong type
+                is also a ``TypeError``), or if ``vectors``, ``metadata`` or
+                ``contents`` don't match ``ids`` in length.
+            CyborgDBError: If the service rejects the upsert.
         """
         if not isinstance(vectors, np.ndarray):
-            raise TypeError("vectors must be a numpy array")
+            raise _ArgumentTypeError("vectors must be a numpy array")
 
         if vectors.ndim != 2:
-            raise ValueError(
+            raise ValidationError(
                 "vectors must be a 2D array of shape (n_vectors, dimension)"
             )
 
         if len(ids) != vectors.shape[0]:
-            raise ValueError(
+            raise ValidationError(
                 f"Number of ids ({len(ids)}) must match number of vectors ({vectors.shape[0]})"
             )
+        for name, values in (("metadata", metadata), ("contents", contents)):
+            if values is not None and len(values) != len(ids):
+                raise ValidationError(
+                    f"Number of {name} entries ({len(values)}) must match number of ids ({len(ids)})"
+                )
 
         # Ensure little-endian float32 dtype for cross-platform binary compatibility
         if vectors.dtype != np.dtype("<f4"):
@@ -562,7 +607,7 @@ class EncryptedIndex:
             vectors_b64=vectors_b64,
             dimension=vectors.shape[1],
             metadata=coerced_metadata,
-            contents=contents,
+            contents=_wrap_binary_contents(contents),
         )
 
         request = BinaryUpsertRequest(
@@ -592,7 +637,7 @@ class EncryptedIndex:
             ids: IDs to delete.
 
         Raises:
-            ValueError: If the items could not be deleted.
+            CyborgDBError: If the items could not be deleted.
         """
         try:
             delete_request = DeleteRequest(
@@ -688,12 +733,14 @@ class EncryptedIndex:
                             **hybrid_kwargs,
                         )
                     else:
-                        raise ValueError(
+                        raise ValidationError(
                             "Expected 1D or 2D NumPy array for `query_vectors`."
                         )
                 elif isinstance(query_vectors, list):
                     if not query_vectors:
-                        raise ValueError("Empty list provided for `query_vectors`.")
+                        raise ValidationError(
+                            "Empty list provided for `query_vectors`."
+                        )
                     if isinstance(query_vectors[0], (list, np.ndarray)):
                         # Batch of vectors as list of lists
                         # Normalize to float32 so JSON serialization matches binary path
@@ -707,7 +754,7 @@ class EncryptedIndex:
                         is_single_query = True
                         vector_list = np.array(query_vectors, dtype=np.float32).tolist()
                 else:
-                    raise ValueError("Invalid type for `query_vectors`")
+                    raise ValidationError("Invalid type for `query_vectors`")
 
             if is_single_query or query_contents is not None:
                 # Use QueryRequest for single vector or content-based query
@@ -903,11 +950,12 @@ class EncryptedIndex:
             For batch query (2D input): List of lists of result dictionaries, one list per query vector.
 
         Raises:
-            ValueError: If query fails or vectors have wrong shape.
-            TypeError: If query_vectors is not a numpy array.
+            ValidationError: If ``query_vectors`` is not a 1D or 2D numpy array
+                (a wrong type is also a ``TypeError``).
+            CyborgDBError: If the service rejects the query.
         """
         if not isinstance(query_vectors, np.ndarray):
-            raise TypeError("query_vectors must be a numpy array")
+            raise _ArgumentTypeError("query_vectors must be a numpy array")
 
         # Handle 1D array (single query vector)
         is_single_query = False
@@ -915,7 +963,7 @@ class EncryptedIndex:
             is_single_query = True
             query_vectors = query_vectors.reshape(1, -1)
         elif query_vectors.ndim != 2:
-            raise ValueError(
+            raise ValidationError(
                 "query_vectors must be a 1D array (single query) or 2D array (batch queries)"
             )
 
@@ -1010,7 +1058,7 @@ class EncryptedIndex:
         the index's ``metadata_schema`` is enforced rather than advisory:
         ``$regex``/``$contains`` require a ``pattern`` field, and a field
         declared ``filterable=False`` cannot be filtered on at all. Both raise
-        ``ValueError``. Use :meth:`query` with a vector for those.
+        ``ValidationError``. Use :meth:`query` with a vector for those.
 
         Passing ``text`` adds a BM25 full-text leg (requires an index with at
         least one ``full_text`` field). Results are then ranked by relevance
@@ -1042,14 +1090,14 @@ class EncryptedIndex:
             ranked by descending BM25 score.
 
         Raises:
-            ValueError: If the filter cannot be resolved from the metadata
+            ValidationError: If the filter cannot be resolved from the metadata
                 index, or ``order_by`` is malformed.
         """
         # Accept core's {field: 1|-1} form and normalize; the service takes a
         # field name plus a direction flag.
         if isinstance(order_by, dict):
             if len(order_by) != 1:
-                raise ValueError(
+                raise ValidationError(
                     f"order_by dict must specify exactly one field, got {len(order_by)}"
                 )
             ((order_by, direction),) = order_by.items()
@@ -1155,8 +1203,8 @@ class EncryptedIndex:
             ``Client`` and need no index key of their own.
 
         Raises:
-            ValueError: If the user could not be created (e.g. the client
-                is not using the root key, or ``permissions`` is invalid).
+            AuthenticationError: If the client is not using the root key.
+            ValidationError: If ``permissions`` is invalid.
         """
         # SDK-supplied-KEK indexes: the service needs the index key to
         # unwrap the root DEK and re-wrap it under the new user's key.
@@ -1181,8 +1229,8 @@ class EncryptedIndex:
             user (the cryptographic source of truth), not a stored field.
 
         Raises:
-            ValueError: If the users could not be listed (e.g. the client
-                is not using the root key).
+            AuthenticationError: If the client is not using the root key.
+            CyborgDBError: If the users could not be listed for another reason.
         """
         try:
             response = self._api.list_users_v1_indexes_index_name_users_get(
@@ -1206,7 +1254,7 @@ class EncryptedIndex:
                 surfaced by ``list_users``).
 
         Raises:
-            ValueError: If the user could not be deleted.
+            CyborgDBError: If the user could not be deleted.
         """
         try:
             self._api.delete_user_v1_indexes_index_name_users_user_id_delete(

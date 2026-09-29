@@ -6,7 +6,6 @@ on a standard query.
 """
 
 import os
-import time
 import unittest
 import uuid
 
@@ -14,6 +13,7 @@ import numpy as np
 from dotenv import load_dotenv
 
 import cyborgdb
+from helpers import wait_for_ids
 
 load_dotenv(".env.local")
 
@@ -34,7 +34,7 @@ class TestQueryWithRerankMult(unittest.TestCase):
         vectors = np.random.rand(20, DIM).astype(np.float32)
         ids = [f"rerank_{i}" for i in range(20)]
         self.index.upsert(ids, vectors)
-        time.sleep(2)
+        wait_for_ids(self.index, ids)
 
     def tearDown(self):
         try:

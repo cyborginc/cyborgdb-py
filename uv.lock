@@ -287,7 +287,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.25.0" },
     { name = "sentence-transformers", marker = "extra == 'langchain'", specifier = ">=2.2.0" },
     { name = "typing-extensions", specifier = ">=4.7.1" },
-    { name = "urllib3", specifier = ">=1.25.3,<3.0.0" },
+    { name = "urllib3", specifier = ">=1.26.0,<3.0.0" },
 ]
 provides-extras = ["langchain", "test"]
 
