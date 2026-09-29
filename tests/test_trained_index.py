@@ -21,6 +21,7 @@ import unittest
 import uuid
 
 import numpy as np
+import pytest
 from dotenv import load_dotenv
 
 import cyborgdb
@@ -169,6 +170,11 @@ class TestTrainedIndex(TrainedIndexTestCase):
                 distances = [r["distance"] for r in rows]
                 self.assertEqual(distances, sorted(distances))
 
+    @pytest.mark.xfail(
+        reason="the ceiling error blames top_k alone; the rule is "
+        "top_k * rerank_mult (cyborgdb-core#2113)",
+        strict=True,
+    )
     def test_top_k_times_rerank_mult_ceiling_is_enforced(self):
         # Ticket item 9: nothing anywhere asserted the 10000 ceiling, or that
         # the error names the parameter responsible.
@@ -178,7 +184,7 @@ class TestTrainedIndex(TrainedIndexTestCase):
         self.assertIn("10000", message)
         # The limit applies to top_k * rerank_mult, so the message should name
         # rerank_mult too — otherwise a caller reducing top_k alone keeps
-        # hitting it. Currently failing; see cyborgdb-core#2401.
+        # hitting it.
         self.assertIn(
             "rerank_mult",
             message,

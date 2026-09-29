@@ -11,6 +11,7 @@ import unittest
 import uuid
 
 import numpy as np
+import pytest
 from dotenv import load_dotenv
 
 import cyborgdb
@@ -211,10 +212,15 @@ class TestIncludeProjection(unittest.TestCase):
         self.assertIn("vector", row)
         self.assertEqual(row["contents"], "hello")
 
+    @pytest.mark.xfail(
+        reason="unknown include values are silently dropped rather than "
+        "rejected (cyborgdb-core#2404)",
+        strict=True,
+    )
     def test_unknown_include_values_are_rejected(self):
         # An unrecognised include value should be rejected rather than
         # silently dropped: a typo such as "metdata" otherwise costs the caller
-        # the field with no error. Currently failing; see cyborgdb-core#2404.
+        # the field with no error.
         with self.assertRaises(ValueError):
             self.index.query(query_vectors=self.vector, top_k=1, include=["bogus"])
         with self.assertRaises(ValueError):

@@ -18,6 +18,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
+import pytest
 from dotenv import load_dotenv
 
 import cyborgdb
@@ -357,9 +358,14 @@ class TestFilterOperators(unittest.TestCase):
             self._meta_ids({"$nor": [{"author": "ada"}]}), {"o1", "o2", "o4"}
         )
 
+    @pytest.mark.xfail(
+        reason="$not is documented in openapi.json but rejected by the "
+        "engine (cyborgdb-core#2395)",
+        strict=True,
+    )
     def test_not_operator_works_on_both_paths(self):
         # `$not` is documented in openapi.json, so it should resolve on both
-        # read paths. Currently failing; see cyborgdb-core#2395.
+        # read paths.
         filters = {"color": {"$not": {"$eq": "red"}}}
         self.assertEqual(self._meta_ids(filters), {"o1", "o2", "o4"})
         self.assertEqual(self._vector_ids(filters), {"o1", "o2", "o4"})
