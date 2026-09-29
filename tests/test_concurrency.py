@@ -338,7 +338,8 @@ class TestConcurrentReadsAndWrites(unittest.TestCase):
 
         errors = []
         lock = threading.Lock()
-        # Known delete/query race yields an empty-string id: cyborgdb-core#2405.
+        # A delete landing mid-query can yield an empty-string id;
+        # see cyborgdb-core#2405.
         # Skipped rather than failed because it is intermittent; remove this
         # branch when the issue is fixed. Matches js DeletesDuringQueries.
         empty_id_race = {"hit": False}

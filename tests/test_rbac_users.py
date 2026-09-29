@@ -260,10 +260,10 @@ class RBACUserTests(unittest.TestCase):
                 pass
 
     def test_list_indexes_under_a_user_key_is_scoped_or_denied(self):
-        # SECURITY BUG — fails today. cyborgdb-core#2397: a tenant-scoped key
-        # enumerates every index in the deployment. Data access is correctly
-        # denied (see test_a_user_key_cannot_reach_another_index), so this
-        # discloses index names rather than contents.
+        # A user key is scoped to the index it was granted. Listing under
+        # that key should return only its own index, or be refused outright.
+        # Either is an acceptable contract; seeing another tenant's index is
+        # not. See cyborgdb-core#2397.
         other_name = f"rbac_hidden_{uuid.uuid4().hex[:8]}"
         other = self.root.create_index(
             index_name=other_name, kms_name=KMS_NAME, dimension=DIMENSION

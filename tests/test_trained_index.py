@@ -176,10 +176,9 @@ class TestTrainedIndex(TrainedIndexTestCase):
             self.index.query(query_vectors=self.queries[0], top_k=5000, rerank_mult=4)
         message = str(caught.exception)
         self.assertIn("10000", message)
-        # KNOWN BUG — this assertion fails today. cyborgdb-core#2401: the
-        # message says "top_k exceeds kMaxTopK" even though top_k=5000 is
-        # itself under the limit; it is the product with rerank_mult that
-        # breaches it. A caller reducing top_k to 2500 still fails.
+        # The limit applies to top_k * rerank_mult, so the message should name
+        # rerank_mult too — otherwise a caller reducing top_k alone keeps
+        # hitting it. Currently failing; see cyborgdb-core#2401.
         self.assertIn(
             "rerank_mult",
             message,

@@ -7,7 +7,7 @@ Python's two incidental mentions.
 an `http://` URL forces it off, an unset value is auto-detected from the host,
 and an explicit value otherwise wins. These pin each branch, and the boundary
 between "local development convenience" and "a host that merely looks local" —
-which is where cyborgdb-core#2399 lives.
+which is where the host check lives (cyborgdb-core#2399).
 
 Offline: constructing a Client performs no I/O, so none of this needs a service.
 """
@@ -52,9 +52,8 @@ class TestSSLAutoDetection(unittest.TestCase):
         self.assertFalse(verify_ssl_for("http://localhost:8000"))
 
     def test_lookalike_hosts_still_verify(self):
-        # SECURITY BUG — fails today. cyborgdb-core#2399: the host check is a
-        # substring match over the whole URL, so any of these silently connects
-        # without verifying the server certificate.
+        # None of these is a local host, so certificate verification must stay
+        # on for all of them. Currently failing; see cyborgdb-core#2399.
         for url in LOOKALIKE_HOSTS:
             with self.subTest(url=url):
                 self.assertTrue(

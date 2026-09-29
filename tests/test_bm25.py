@@ -489,7 +489,8 @@ class TestHybridFusionDeterministic(unittest.TestCase):
             cyborgdb.Client.generate_key(),
             dimension=HYBRID_DIM,
             metric="euclidean",
-            # filterable spelled out because of cyborgdb-core#2393.
+            # filterable spelled out: the full_text-only shorthand is not
+            # accepted yet (cyborgdb-core#2393).
             metadata_schema={
                 "title": {"full_text": True, "filterable": False},
                 "body": {"full_text": True, "filterable": False},
@@ -645,9 +646,9 @@ class TestMetadataFieldPolicyDefaults(unittest.TestCase):
             pass
 
     def test_full_text_alone_is_accepted(self):
-        # KNOWN BUG — fails today. cyborgdb-core#2393: MetadataFieldPolicy
-        # defaults filterable=True and always serialises it, so the request
-        # carries filterable=true + full_text=true and the service 422s.
+        # The documented shorthand: declaring a field full_text alone should
+        # be enough, without having to spell out the other flags.
+        # Currently failing; see cyborgdb-core#2393.
         index = self._create({"title": {"full_text": True}})
         self.assertEqual(
             index.metadata_schema["title"],
