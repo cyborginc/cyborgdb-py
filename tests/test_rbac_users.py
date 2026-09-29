@@ -142,11 +142,11 @@ class RBACUserTests(unittest.TestCase):
             self.index.delete_user(out["user_id"])
 
     def test_invalid_permissions_rejected(self):
-        # The grant must be a non-empty subset of {"read", "write"}; the
-        # service rejects an empty set and unknown permission names alike.
-        with self.assertRaises(DENIED):
+        # A malformed grant is a 400, not a denial: the grant must be a
+        # non-empty subset of {"read", "write"}.
+        with self.assertRaises(cyborgdb.ValidationError):
             self.index.create_user(permissions=[])
-        with self.assertRaises(DENIED):
+        with self.assertRaises(cyborgdb.ValidationError):
             self.index.create_user(permissions=["admin"])
 
     def test_non_root_user_cannot_manage_users(self):
