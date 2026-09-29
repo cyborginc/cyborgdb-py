@@ -102,7 +102,7 @@ class ConflictError(CyborgDBError):
 class RateLimitError(CyborgDBError):
     """HTTP 429. Honor ``retry_after`` when it is set.
 
-    The service does not rate-limit yet (cyborgdb-core#2386); this type exists
+    The service does not rate-limit yet; this type exists
     so callers can write the handler once.
     """
 

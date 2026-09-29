@@ -34,6 +34,7 @@ from dotenv import load_dotenv
 from pydantic import ValidationError
 
 import cyborgdb
+from helpers import wait_for
 from cyborgdb.openapi_client.models import CreateIndexRequest
 
 load_dotenv(".env.local")
@@ -152,7 +153,10 @@ class StoragePrecisionIntegrationTest(unittest.TestCase):
         self.addCleanup(self._safe_delete, index)
 
         index.upsert(self.ids, self.vectors)
-        time.sleep(1)
+        wait_for(
+            lambda: len(index.list_ids()) == NUM_VECTORS,
+            f"all {NUM_VECTORS} vectors visible at {precision}",
+        )
         self.assertEqual(len(index.list_ids()), NUM_VECTORS)
 
         index.train(n_lists=N_LISTS)

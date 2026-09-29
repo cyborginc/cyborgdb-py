@@ -200,11 +200,91 @@ jobs:
           # Run the API contract test separately to avoid affecting coverage of other tests
           pytest tests/test_api_contract.py -v
 
+      # RBAC pass. CYBORGDB_SERVICE_ROOT_KEY switches the service from "auth
+      # disabled" to "auth required" for every request, so RBAC cannot share the
+      # service instance above — it needs its own, started with the key. The
+      # licensed CYBORGDB_API_KEY doubles as the root key, mirroring
+      # cyborgdb-service's e2e-test.yml, so this needs no additional secret.
+      #
+      # Without this step tests/test_rbac_users.py skips on every run: its
+      # skipUnless needs both a root key and a KMS slot, and only the KMS half
+      # was ever set here.
+      - name: RBAC tests
+        if: ${{ !cancelled() && steps.install-sdk.outcome == 'success' }}
+        env:
+          CYBORGDB_SERVICE_ROOT_KEY: ${{ env.CYBORGDB_API_KEY }}
+          # Same registry slots and BYOK credentials as the main test step —
+          # user keys resolve the index KEK server-side, so RBAC only works
+          # against a KMS-backed index.
+          CYBORGDB_KMS_NAME_REAL: aws-kms-self-test
+          CYBORGDB_KMS_NAME_SM: aws-secrets-self-test
+          CYBORGDB_CONFIG_FILE: ${{ runner.temp }}/cyborgdb.yaml
+          AWS_ACCESS_KEY_ID: ${{ steps.byok.outputs.BYOK_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.byok.outputs.BYOK_AWS_SECRET_ACCESS_KEY }}
+          CYBORGDB_BYOK_ROLE_ARN: ${{ steps.byok.outputs.CYBORGDB_BYOK_ROLE_ARN }}
+          CYBORGDB_BYOK_EXTERNAL_ID: ${{ steps.byok.outputs.CYBORGDB_BYOK_EXTERNAL_ID }}
+        run: |
+          set -euo pipefail
+          echo "=== RBAC pass (authentication enabled) ==="
+          # As in the main test step: the static BYOK key must not be combined
+          # with the OIDC session token left behind by the CodeArtifact step.
+          unset AWS_SESSION_TOKEN
+
+          # Fail loudly rather than letting the suite skip silently — a skip
+          # here would mean this setup broke and nobody noticed.
+          : "${CYBORGDB_SERVICE_ROOT_KEY:?root key is empty; RBAC tests would skip}"
+          : "${CYBORGDB_KMS_NAME_REAL:?KMS slot is empty; RBAC tests would skip}"
+
+          # Stop the non-RBAC service and wait for the port to free up.
+          if [ -f server-standard.pid ]; then
+            kill "$(cat server-standard.pid)" 2>/dev/null || true
+            rm -f server-standard.pid
+          fi
+          for i in {1..15}; do
+            curl -fs http://localhost:8000/v1/health > /dev/null || break
+            sleep 1
+          done
+
+          export CYBORGDB_DB_TYPE=disk
+          export CYBORGDB_SERVICE_LOG_LEVEL=DEBUG
+          # Fresh data directory so this service does not inherit indexes
+          # created while authentication was disabled.
+          export CYBORGDB_DISK_PATH="${RUNNER_TEMP}/cyborgdb-rbac-disk"
+
+          nohup cyborgdb-service > server-rbac.log 2>&1 &
+          echo $! > server-rbac.pid
+
+          # /v1/health is unauthenticated, so it stays a valid readiness probe.
+          for i in {1..30}; do
+            if curl -fs http://localhost:8000/v1/health > /dev/null; then
+              echo "RBAC service is up!"
+              break
+            fi
+            sleep 1
+          done
+          if ! curl -fs http://localhost:8000/v1/health > /dev/null; then
+            echo "RBAC service failed to start"
+            cat server-rbac.log
+            exit 1
+          fi
+
+          # The RBAC suite, plus the two auth assertions that are only
+          # meaningful with authentication enabled. Both were previously
+          # unreachable: one was gated on a variable nothing sets, the other
+          # only runs in this posture.
+          pytest -v --cov=cyborgdb --cov-append \
+            tests/test_rbac_users.py \
+            tests/test_client.py::AuthenticationErrorIntegrationTest \
+            tests/comprehensive_test.py::TestErrorHandling::test_invalid_api_key
+
       - name: Kill Server
         if: always()
         run: |
           if [ -f server-standard.pid ]; then
             kill $(cat server-standard.pid) || true
+          fi
+          if [ -f server-rbac.pid ]; then
+            kill $(cat server-rbac.pid) || true
           fi
           
       - name: Upload coverage reports

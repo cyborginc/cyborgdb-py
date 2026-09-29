@@ -6,15 +6,12 @@ Implements missing SSL, IVFPQ, error handling, and edge case tests
 
 import unittest
 import os
-import time
 import uuid
 import asyncio
 import numpy as np
-from unittest.mock import patch
-import requests
 
 import cyborgdb as cyborgdb
-from cyborgdb.exceptions import CyborgDBError
+from helpers import wait_for, wait_for_ids, wait_until_gone
 
 
 def create_client():
@@ -65,60 +62,6 @@ def generate_unique_name(prefix="test_"):
     return f"{prefix}{uuid.uuid4()}"
 
 
-class TestSSLVerification(unittest.TestCase):
-    """Test SSL/TLS verification functionality"""
-
-    def setUp(self):
-        self.api_key = os.environ.get("CYBORGDB_API_KEY", "test-key")
-        self.localhost_url = "http://localhost:8000"
-        self.production_url = "https://api.cyborgdb.com"
-
-    def test_ssl_auto_detection_localhost(self):
-        """Test SSL auto-detection for localhost URLs"""
-        with patch("cyborgdb.Client") as mock_client:
-            # Test HTTP localhost - should auto-disable SSL
-            cyborgdb.Client(base_url="http://localhost:8000", api_key=self.api_key)
-            mock_client.assert_called_once()
-
-    def test_ssl_explicit_disable(self):
-        """Test explicit SSL verification disable"""
-        with patch("cyborgdb.Client") as mock_client:
-            cyborgdb.Client(
-                base_url=self.production_url, api_key=self.api_key, verify_ssl=False
-            )
-            mock_client.assert_called_once()
-
-    def test_ssl_explicit_enable(self):
-        """Test explicit SSL verification enable"""
-        with patch("cyborgdb.Client") as mock_client:
-            cyborgdb.Client(
-                base_url=self.production_url, api_key=self.api_key, verify_ssl=True
-            )
-            mock_client.assert_called_once()
-
-    def test_ssl_certificate_validation(self):
-        """Test SSL certificate validation scenarios"""
-        with patch("requests.get") as mock_get:
-            mock_get.side_effect = requests.exceptions.SSLError(
-                "Certificate verification failed"
-            )
-
-            cyborgdb.Client(base_url=self.production_url, api_key=self.api_key)
-
-            with self.assertRaises(requests.exceptions.SSLError):
-                mock_get()
-
-    def test_auto_detection(self):
-        """Test auto-detection works with current environment"""
-        client = create_client()
-        self.assertIsNotNone(client)
-
-        # Try a basic operation to ensure the connection works
-        health = client.get_health()
-        # Accept various health response formats
-        self.assertIsInstance(health, (dict, bool, str, type(None)))
-
-
 class TestErrorHandling(unittest.TestCase):
     """Test comprehensive error scenarios"""
 
@@ -141,7 +84,7 @@ class TestErrorHandling(unittest.TestCase):
         )
 
         # Try to create an index - this should require authentication
-        with self.assertRaises(Exception) as context:
+        with self.assertRaises(cyborgdb.AuthenticationError) as context:
             client.create_index(
                 generate_unique_name(),
                 client.generate_key(),
@@ -171,13 +114,13 @@ class TestErrorHandling(unittest.TestCase):
         index_key = self.client.generate_key()
 
         # Test invalid dimension
-        with self.assertRaises(Exception):
+        with self.assertRaises(cyborgdb.ValidationError):
             self.client.create_index(
                 index_name, index_key, dimension=-1, metric="euclidean"
             )
 
         # Test invalid metric
-        with self.assertRaises(Exception):
+        with self.assertRaises(cyborgdb.ValidationError):
             self.client.create_index(
                 index_name, index_key, dimension=128, metric="invalid_metric"
             )
@@ -188,7 +131,7 @@ class TestErrorHandling(unittest.TestCase):
             base_url="http://non-existent-server:8000", api_key="test-key"
         )
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(cyborgdb.TransportError):
             client.get_health()
 
     def test_invalid_vector_dimensions(self):
@@ -202,7 +145,7 @@ class TestErrorHandling(unittest.TestCase):
 
         try:
             # Test wrong vector dimension
-            with self.assertRaises(Exception):
+            with self.assertRaises(ValueError):
                 invalid_vector = np.random.rand(64).astype(np.float32)
                 index.upsert([{"id": "test", "vector": invalid_vector, "metadata": {}}])
         finally:
@@ -213,7 +156,7 @@ class TestErrorHandling(unittest.TestCase):
         # Test with empty index name (should cause an error)
         index_key = self.client.generate_key()
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             self.client.create_index(
                 "",  # Empty name should cause error
                 index_key,
@@ -222,7 +165,7 @@ class TestErrorHandling(unittest.TestCase):
             )
 
         # Test invalid index key format
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             self.client.create_index(
                 generate_unique_name(),
                 b"invalid_short_key",  # Invalid key length
@@ -266,7 +209,7 @@ class TestEdgeCases(unittest.TestCase):
         vectors = [np.random.rand(128).astype(np.float32) for _ in range(3)]
 
         # Test with missing required fields - should fail
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             # Missing 'id' field
             items_missing_id = [
                 {
@@ -277,7 +220,7 @@ class TestEdgeCases(unittest.TestCase):
             self.index.upsert(items_missing_id)
 
         # Test with missing vector - should fail
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             items_missing_vector = [
                 {
                     "id": "test_id",
@@ -287,7 +230,7 @@ class TestEdgeCases(unittest.TestCase):
             self.index.upsert(items_missing_vector)
 
         # Test with empty items list
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             self.index.upsert([])
 
     def test_content_preservation_through_operations(self):
@@ -306,7 +249,7 @@ class TestEdgeCases(unittest.TestCase):
             ]
         )
 
-        time.sleep(1)
+        wait_for_ids(self.index, ["preserve_test"])
 
         # Retrieve and verify
         results = self.index.get(["preserve_test"], include=["vector", "metadata"])
@@ -331,7 +274,7 @@ class TestEdgeCases(unittest.TestCase):
         test_index.delete_index()
 
         # Try to delete again - should handle gracefully
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             test_index.delete_index()
 
     def test_concurrent_operations(self):
@@ -351,7 +294,7 @@ class TestEdgeCases(unittest.TestCase):
                 self.index.upsert(item)
 
             # Verify all items were inserted
-            time.sleep(2)
+            wait_for_ids(self.index, [f"concurrent_{i}" for i in range(5)])
             results = self.index.list_ids()
             concurrent_ids = [id for id in results if id.startswith("concurrent_")]
             self.assertEqual(len(concurrent_ids), 5)
@@ -382,18 +325,6 @@ class TestBackendCompatibility(unittest.TestCase):
         except Exception:
             pass
 
-    def test_feature_availability_differences(self):
-        """Test feature availability between backend variants"""
-        client = create_client()
-
-        index_name = generate_unique_name()
-        index_key = client.generate_key()
-
-        index = client.create_index(
-            index_name, index_key, dimension=128, metric="euclidean"
-        )
-        index.delete_index()
-
     def test_large_metadata_handling(self):
         """Test handling of large metadata objects"""
         test_cases = [
@@ -410,11 +341,14 @@ class TestBackendCompatibility(unittest.TestCase):
                 items = [{"id": item_id, "vector": vector, "metadata": tc["metadata"]}]
 
                 self.index.upsert(items)
-                time.sleep(2)
+                wait_for_ids(self.index, [item_id])
 
                 results = self.index.get([item_id], include=["metadata"])
                 self.assertEqual(len(results), 1)
                 self.assertEqual(results[0]["id"], item_id)
+                # The point of the test: the metadata survives the round trip
+                # intact. Without this it passed even if metadata was dropped.
+                self.assertEqual(results[0]["metadata"], tc["metadata"])
 
     def _create_deep_nested_metadata(self, depth):
         """Helper to create deeply nested metadata"""
@@ -455,7 +389,7 @@ class TestDataIntegrity(unittest.TestCase):
                 }
             ]
         )
-        time.sleep(2)
+        wait_for_ids(self.index, ["overwrite_test"])
 
         vec_v2 = (np.random.rand(128) + 10.0).astype(np.float32)
         self.index.upsert(
@@ -467,7 +401,16 @@ class TestDataIntegrity(unittest.TestCase):
                 }
             ]
         )
-        time.sleep(2)
+        # The id already exists from v1, so poll the value that changed.
+        wait_for(
+            lambda: (
+                self.index.get(["overwrite_test"], include=["metadata"])[0]["metadata"][
+                    "version"
+                ]
+                == 2
+            ),
+            "overwrite_test reports version 2",
+        )
 
         results = self.index.get(["overwrite_test"], include=["vector", "metadata"])
         self.assertEqual(len(results), 1)
@@ -488,11 +431,11 @@ class TestDataIntegrity(unittest.TestCase):
         self.index.upsert(
             [{"id": f"del_test_{i}", "vector": vectors[i]} for i in range(10)]
         )
-        time.sleep(2)
+        wait_for_ids(self.index, [f"del_test_{i}" for i in range(10)])
 
         delete_ids = [f"del_test_{i}" for i in range(5)]
         self.index.delete(delete_ids)
-        time.sleep(2)
+        wait_until_gone(self.index, delete_ids)
 
         # get() returns nothing for deleted IDs
         got = self.index.get(delete_ids, include=["vector"])
@@ -516,7 +459,7 @@ class TestDataIntegrity(unittest.TestCase):
         self.index.upsert(
             [{"id": "exists", "vector": np.random.rand(128).astype(np.float32)}]
         )
-        time.sleep(2)
+        wait_for_ids(self.index, ["exists"])
 
         results = self.index.get(["exists", "ghost_1", "ghost_2"], include=["vector"])
         self.assertEqual(len(results), 1)
@@ -535,7 +478,7 @@ class TestDataIntegrity(unittest.TestCase):
         ]
         for i, (_, vec) in enumerate(cases):
             self.index.upsert([{"id": f"boundary_{i}", "vector": vec}])
-        time.sleep(2)
+        wait_for_ids(self.index, [f"boundary_{i}" for i in range(len(cases))])
 
         for i, (name, vec) in enumerate(cases):
             with self.subTest(name):
@@ -552,7 +495,7 @@ class TestDataIntegrity(unittest.TestCase):
             name, self.client.generate_key(), dimension=128, metric="euclidean"
         )
         try:
-            with self.assertRaises(Exception):
+            with self.assertRaises(ValueError):
                 self.client.create_index(
                     name,
                     self.client.generate_key(),
@@ -577,10 +520,14 @@ class TestDataIntegrity(unittest.TestCase):
                     }
                 ]
             )
-            time.sleep(2)
-            with self.assertRaises(CyborgDBError) as ctx:
+            # An empty index 404s instead of 401ing, so the wait is
+            # load-bearing: it guarantees the populated path.
+            wait_for_ids(idx, ["secret_data"])
+            with self.assertRaises(cyborgdb.AuthenticationError) as caught:
                 self.client.load_index(name, self.client.generate_key())
-            err_str = str(ctx.exception)
+            err_str = str(caught.exception)
+            # The name also appears in the echoed HTTP body, so the absent
+            # placeholder is the half that actually catches the bug.
             self.assertIn(name, err_str)
             self.assertNotIn("{index_name}", err_str)
         finally:
