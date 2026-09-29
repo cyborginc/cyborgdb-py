@@ -72,27 +72,23 @@ class TestUrlParsing(unittest.TestCase):
         client = _make_client("https://api.example.com", api_key="k", verify_ssl=False)
         self.assertIs(client.config.verify_ssl, False)
 
-    # Case 11: http:// with default verify_ssl — no warning about "no effect"
+    # Case 11: http:// has no TLS, so there is nothing to warn about
     def test_http_default_verify_ssl_no_warning(self):
-        with self.assertLogs("cyborgdb.client.client", level=logging.WARNING) as log:
-            client = _make_client("http://localhost:8000", api_key="k")
-        # http:// with verify_ssl=None emits "SSL verification is disabled" (explicit-False
-        # branch), not the "no effect" warning which only fires for explicit verify_ssl=True.
-        no_effect_msgs = [m for m in log.output if "no effect" in m]
-        self.assertEqual(no_effect_msgs, [])
-        self.assertIs(client.config.verify_ssl, False)
+        for verify_ssl in (None, False):
+            with self.subTest(verify_ssl=verify_ssl):
+                with self.assertNoLogs("cyborgdb.client.client", level=logging.WARNING):
+                    client = _make_client(
+                        "http://api.example.com", api_key="k", verify_ssl=verify_ssl
+                    )
+                self.assertIs(client.config.verify_ssl, False)
 
-    # Case 12: http:// with explicit verify_ssl=True — warning emitted
+    # Case 12: http:// with explicit verify_ssl=True — only the "no effect" warning
     def test_http_explicit_verify_ssl_true_warns(self):
         with self.assertLogs("cyborgdb.client.client", level=logging.WARNING) as log:
             client = _make_client("http://localhost:8000", api_key="k", verify_ssl=True)
         self.assertIs(client.config.verify_ssl, False)
-        # Both "no effect" and "SSL verification is disabled" warnings fire for this URL;
-        # filter to the one under test.
-        matching = [m for m in log.output if "no effect" in m and "http://" in m]
-        self.assertTrue(
-            matching, f"Expected 'no effect'+'http://' warning; got: {log.output}"
-        )
+        self.assertEqual(len(log.output), 1, log.output)
+        self.assertIn("no effect", log.output[0])
 
     # Case 13: auto-detect emits logger.warning (not logger.info)
     def test_autodetect_uses_warning_level(self):

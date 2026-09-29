@@ -485,6 +485,7 @@ class TestAPIContract(unittest.TestCase):
                 "batch_size": {"position": 1, "default": None},
                 "max_iters": {"position": 2, "default": None},
                 "tolerance": {"position": 3, "default": None},
+                "max_memory": {"position": 4, "default": None},
             },
             "EncryptedIndex.train",
         )
@@ -1049,6 +1050,7 @@ class TestAPIContract(unittest.TestCase):
             batch_size=512,  # Different from default 2048
             max_iters=50,  # Different from default 100
             tolerance=1e-5,  # Different from default 1e-6
+            max_memory=0,
         )
         self.assertIsNone(result, "train must return None")
 
