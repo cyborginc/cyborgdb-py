@@ -531,11 +531,13 @@ class TestDataIntegrity(unittest.TestCase):
             wait_for_ids(idx, ["secret_data"])
             with self.assertRaises(cyborgdb.AuthenticationError) as caught:
                 self.client.load_index(name, self.client.generate_key())
+            err_str = str(caught.exception)
             # The message should name the index, not carry an unsubstituted
-            # placeholder. Asserting the placeholder is absent rather than that
-            # the name is present: the name also appears further down in the
-            # echoed HTTP body, which would mask the problem.
-            self.assertNotIn("{index_name}", str(caught.exception))
+            # placeholder. The absent placeholder is the load-bearing half: the
+            # name also appears further down in the echoed HTTP body, so
+            # asserting its presence alone would still pass with the bug.
+            self.assertIn(name, err_str)
+            self.assertNotIn("{index_name}", err_str)
         finally:
             idx.delete_index()
 
