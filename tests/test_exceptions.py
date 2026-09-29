@@ -15,6 +15,7 @@ from cyborgdb.exceptions import (
     ServiceError,
     TransportError,
     ValidationError,
+    _ArgumentTypeError,
     translate_api_error,
 )
 from cyborgdb.openapi_client.exceptions import ApiException
@@ -96,12 +97,20 @@ class TestTranslation(unittest.TestCase):
                 self.assertIsNone(result.status_code)
                 self.assertTrue(result.retryable)
 
-    def test_unnamed_status_stays_a_value_error(self):
-        # 418 is not in the taxonomy: the previous untyped behavior is preserved
-        # rather than inventing a type for it.
-        result = translate_api_error(_api_exception(418), "op failed")
-        self.assertIsInstance(result, ValueError)
-        self.assertNotIsInstance(result, CyborgDBError)
+    def test_unnamed_status_is_the_base_error(self):
+        for status in (405, 413, 418):
+            with self.subTest(status=status):
+                result = translate_api_error(_api_exception(status), "op failed")
+                self.assertIs(type(result), CyborgDBError)
+                self.assertEqual(result.status_code, status)
+                self.assertEqual(result.request_id, "req-abc123")
+                self.assertFalse(result.retryable)
+
+    def test_argument_type_errors_stay_type_errors(self):
+        exc = _ArgumentTypeError("bad arg")
+        self.assertIsInstance(exc, ValidationError)
+        self.assertIsInstance(exc, TypeError)
+        self.assertIsNone(exc.status_code)
 
     def test_non_api_exceptions_pass_through(self):
         original = KeyError("unrelated")

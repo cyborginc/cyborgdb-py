@@ -9,7 +9,7 @@ from typing import Dict, List, Literal, Optional
 from urllib.parse import urlparse
 import secrets
 import logging
-from pydantic import ValidationError
+from pydantic import ValidationError as PydanticValidationError
 
 # Import from the OpenAPI generated models
 from cyborgdb.openapi_client.models import (
@@ -31,7 +31,7 @@ import urllib3
 import urllib3.exceptions
 
 from cyborgdb.client.encrypted_index import EncryptedIndex
-from cyborgdb.exceptions import translate_api_error
+from cyborgdb.exceptions import CyborgDBError, ValidationError, translate_api_error
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +44,9 @@ CreateIndexRequest = _OpenAPICreateIndexRequest
 
 
 def _validate_index_key(index_key: bytes) -> None:
-    """Raise ValueError unless ``index_key`` is a 32-byte ``bytes`` object."""
+    """Raise ValidationError unless ``index_key`` is a 32-byte ``bytes`` object."""
     if not isinstance(index_key, bytes) or len(index_key) != 32:
-        raise ValueError("index_key must be a 32-byte bytes object")
+        raise ValidationError("index_key must be a 32-byte bytes object")
 
 
 class Client:
@@ -74,19 +74,18 @@ class Client:
     """
 
     def __init__(self, base_url, api_key: Optional[str] = None, verify_ssl=None):
-        if base_url.startswith("http://"):
-            if verify_ssl is True:
-                logger.warning(
-                    "verify_ssl=True has no effect on http:// URLs (no TLS to negotiate); ignored."
-                )
-            verify_ssl = False
-
         # Set up the OpenAPI client configuration
         self.config = Configuration()
         self.config.host = base_url
 
         # Configure SSL verification
-        if verify_ssl is None:
+        if base_url.startswith("http://"):
+            if verify_ssl is True:
+                logger.warning(
+                    "verify_ssl=True has no effect on http:// URLs (no TLS to negotiate); ignored."
+                )
+            self.config.verify_ssl = False
+        elif verify_ssl is None:
             parsed = urlparse(base_url)
             if parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
                 self.config.verify_ssl = False
@@ -122,7 +121,7 @@ class Client:
         except Exception as e:
             error_msg = f"Failed to initialize client: {e}"
             logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise CyborgDBError(error_msg) from e
 
     def _request_headers(self) -> Dict[str, str]:
         """Build the request headers for data-path calls. Only includes
@@ -178,7 +177,7 @@ class Client:
             A list of index names.
 
         Raises:
-            ValueError: If the list of indexes could not be retrieved.
+            CyborgDBError: If the list of indexes could not be retrieved.
         """
         try:
             response = self.api.list_indexes_v1_indexes_list_get()
@@ -259,7 +258,7 @@ class Client:
         config at all.
         """
         if index_key is None and kms_name is None:
-            raise ValueError("create_index requires index_key, kms_name, or both")
+            raise ValidationError("create_index requires index_key, kms_name, or both")
 
         if index_key is not None:
             _validate_index_key(index_key)
@@ -297,10 +296,10 @@ class Client:
 
         except (ApiException, urllib3.exceptions.HTTPError) as e:
             raise translate_api_error(e, "Failed to create index") from e
-        except ValidationError as ve:
+        except PydanticValidationError as ve:
             error_msg = f"Validation error while creating index: {ve}"
             logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise ValidationError(error_msg) from ve
 
     def load_index(
         self,
@@ -327,19 +326,17 @@ class Client:
 
             # Probe the describe endpoint so a missing/inaccessible index
             # raises here instead of silently returning a phantom handle.
-            # `dimension` fires the lazy describe and caches it for
-            # subsequent reads. ApiException propagates and is caught
-            # below.
-            _ = index.dimension
+            # The probe also primes the handle's metadata cache.
+            index._describe()
 
             return index
 
         except (ApiException, urllib3.exceptions.HTTPError) as e:
             raise translate_api_error(e, f"Failed to load index '{index_name}'") from e
-        except ValidationError as ve:
+        except PydanticValidationError as ve:
             error_msg = f"Validation error while loading index '{index_name}': {ve}"
             logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise ValidationError(error_msg) from ve
 
     def get_health(self) -> Dict[str, str]:
         """
@@ -349,7 +346,7 @@ class Client:
             A dictionary containing health status information.
 
         Raises:
-            ValueError: If the health status could not be retrieved.
+            CyborgDBError: If the health status could not be retrieved.
         """
         try:
             return self.api.health_check_v1_health_get()
