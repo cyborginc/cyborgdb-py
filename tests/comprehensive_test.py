@@ -114,13 +114,13 @@ class TestErrorHandling(unittest.TestCase):
         index_key = self.client.generate_key()
 
         # Test invalid dimension
-        with self.assertRaises(ValueError):
+        with self.assertRaises(cyborgdb.ValidationError):
             self.client.create_index(
                 index_name, index_key, dimension=-1, metric="euclidean"
             )
 
         # Test invalid metric
-        with self.assertRaises(ValueError):
+        with self.assertRaises(cyborgdb.ValidationError):
             self.client.create_index(
                 index_name, index_key, dimension=128, metric="invalid_metric"
             )
