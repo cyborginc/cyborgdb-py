@@ -535,7 +535,6 @@ class TestDataIntegrity(unittest.TestCase):
             # placeholder. Asserting the placeholder is absent rather than that
             # the name is present: the name also appears further down in the
             # echoed HTTP body, which would mask the problem.
-            # Currently failing; see cyborgdb-core#2406.
             self.assertNotIn("{index_name}", str(caught.exception))
         finally:
             idx.delete_index()

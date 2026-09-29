@@ -7,7 +7,7 @@ Python's two incidental mentions.
 an `http://` URL forces it off, an unset value is auto-detected from the host,
 and an explicit value otherwise wins. These pin each branch, and the boundary
 between "local development convenience" and "a host that merely looks local" —
-which is where the host check lives (cyborgdb-core#2399).
+which is where the host check lives.
 
 Offline: constructing a Client performs no I/O, so none of this needs a service.
 """
@@ -53,7 +53,7 @@ class TestSSLAutoDetection(unittest.TestCase):
 
     def test_lookalike_hosts_still_verify(self):
         # None of these is a local host, so certificate verification must stay
-        # on for all of them. Currently failing; see cyborgdb-core#2399.
+        # on for all of them.
         for url in LOOKALIKE_HOSTS:
             with self.subTest(url=url):
                 self.assertTrue(
@@ -85,8 +85,8 @@ class TestSSLExplicitConfiguration(unittest.TestCase):
 
     def test_http_overrides_an_explicit_true(self):
         # Current behaviour, pinned: there is no TLS on a plaintext URL, so the
-        # explicit request is discarded. cyborgdb-core#2399 asks whether this
-        # should warn rather than pass silently.
+        # explicit request is discarded. Whether this should warn rather than
+        # pass silently is an open question.
         self.assertFalse(verify_ssl_for("http://api.example.com", verify_ssl=True))
 
 
