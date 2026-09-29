@@ -52,11 +52,7 @@ KMS_NAME = os.getenv("CYBORGDB_KMS_NAME") or os.getenv("CYBORGDB_KMS_NAME_REAL")
 
 DIMENSION = 4
 
-# Denials surface as two types: query and the user-management calls 401
-# (AuthenticationError), while load_index on a revoked or foreign key 404s
-# (NotFoundError). Asserting both keeps a 500 or a validation error from
-# satisfying a denial assertion. Collapses to one type once
-# cyborgdb-core#2398 is fixed.
+# query 401s, load_index 404s — one type once cyborgdb-core#2398 is fixed.
 DENIED = (cyborgdb.AuthenticationError, cyborgdb.NotFoundError)
 
 

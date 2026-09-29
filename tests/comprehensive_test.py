@@ -520,22 +520,14 @@ class TestDataIntegrity(unittest.TestCase):
                     }
                 ]
             )
-            # A populated index with the wrong key is a 401 "Wrong encryption
-            # key". An *empty* index returns 404 instead, so the type depends on
-            # whether there is data to fail decrypting.
-            #
-            # That makes the wait load-bearing rather than cosmetic: a fixed
-            # sleep that expired before the upsert landed would query an empty
-            # index and get the 404, failing on timing rather than on the
-            # behaviour under test.
+            # An empty index 404s instead of 401ing, so the wait is
+            # load-bearing: it guarantees the populated path.
             wait_for_ids(idx, ["secret_data"])
             with self.assertRaises(cyborgdb.AuthenticationError) as caught:
                 self.client.load_index(name, self.client.generate_key())
             err_str = str(caught.exception)
-            # The message should name the index, not carry an unsubstituted
-            # placeholder. The absent placeholder is the load-bearing half: the
-            # name also appears further down in the echoed HTTP body, so
-            # asserting its presence alone would still pass with the bug.
+            # The name also appears in the echoed HTTP body, so the absent
+            # placeholder is the half that actually catches the bug.
             self.assertIn(name, err_str)
             self.assertNotIn("{index_name}", err_str)
         finally:
