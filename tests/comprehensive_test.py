@@ -14,6 +14,7 @@ from unittest.mock import patch
 import requests
 
 import cyborgdb as cyborgdb
+from cyborgdb.exceptions import CyborgDBError
 
 
 def create_client():
@@ -577,8 +578,11 @@ class TestDataIntegrity(unittest.TestCase):
                 ]
             )
             time.sleep(2)
-            with self.assertRaises(Exception):
+            with self.assertRaises(CyborgDBError) as ctx:
                 self.client.load_index(name, self.client.generate_key())
+            err_str = str(ctx.exception)
+            self.assertIn(name, err_str)
+            self.assertNotIn("{index_name}", err_str)
         finally:
             idx.delete_index()
 
