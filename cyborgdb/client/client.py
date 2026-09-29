@@ -77,6 +77,11 @@ class Client:
         # Set up the OpenAPI client configuration
         self.config = Configuration()
         self.config.host = base_url
+        # Replays a request once when a pooled keep-alive connection was closed
+        # by the server while idle; urllib3 won't retry POSTs on its own.
+        self.config.retries = urllib3.util.Retry(
+            total=1, allowed_methods=None, status=0
+        )
 
         # Configure SSL verification
         if base_url.startswith("http://"):
