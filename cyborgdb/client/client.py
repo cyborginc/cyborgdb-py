@@ -98,8 +98,14 @@ class Client:
         self.config.host = base_url
         # Replays a request once when a pooled keep-alive connection was closed
         # by the server while idle; urllib3 won't retry POSTs on its own.
+        # respect_retry_after_header=False: otherwise urllib3 treats a 413/429/503
+        # carrying Retry-After as retryable, exhausts status=0 and raises
+        # MaxRetryError, discarding the response the caller needs.
         self.config.retries = urllib3.util.Retry(
-            total=1, allowed_methods=None, status=0
+            total=1,
+            allowed_methods=None,
+            status=0,
+            respect_retry_after_header=False,
         )
 
         # Configure SSL verification
