@@ -15,7 +15,6 @@ import unittest
 import uuid
 
 import numpy as np
-import pytest
 from dotenv import load_dotenv
 
 import cyborgdb
@@ -646,12 +645,6 @@ class TestMetadataFieldPolicyDefaults(unittest.TestCase):
         except Exception:
             pass
 
-    @pytest.mark.xfail(
-        reason="metadata_schema={'f': {'full_text': True}} is rejected: "
-        "filterable defaults to True and is always sent "
-        "(cyborgdb-core#2393)",
-        strict=True,
-    )
     def test_full_text_alone_is_accepted(self):
         # The documented shorthand: declaring a field full_text alone should
         # be enough, without having to spell out the other flags.
