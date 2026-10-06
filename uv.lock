@@ -256,6 +256,7 @@ nvtx = [
 name = "cyborgdb"
 source = { editable = "." }
 dependencies = [
+    { name = "httpx" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pydantic" },
@@ -279,6 +280,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "cyborgdb", extras = ["langchain"], marker = "extra == 'test'" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "langchain-core", marker = "extra == 'langchain'", specifier = ">=0.1.0" },
     { name = "numpy", specifier = ">=1.21.0" },
     { name = "pydantic", specifier = ">=2" },
