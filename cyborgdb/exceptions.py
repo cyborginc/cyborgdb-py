@@ -196,11 +196,13 @@ def _retry_after(headers: Any) -> Optional[float]:
 
 
 def translate_api_error(exc: Exception, context: str) -> Exception:
-    """Map a generated-client or urllib3 exception onto the public taxonomy.
+    """Map a generated-client or transport exception onto the public taxonomy.
 
-    This is the single translation point for the SDK: the client modules call
-    it instead of each carrying its own cascade, so the mapping cannot drift
-    between methods.
+    This is the single translation point for the SDK: the sync and async
+    client modules call it instead of each carrying its own cascade, so the
+    mapping cannot drift between methods or between the two clients. It
+    accepts the ``ApiException`` of either generated package, plus urllib3
+    errors (sync transport) and ``httpx.RequestError`` (async transport).
 
     Returns the exception to raise — it never raises on its own. Statuses the
     taxonomy does not name (405, 413, ...) map to the base ``CyborgDBError``.
@@ -210,15 +212,19 @@ def translate_api_error(exc: Exception, context: str) -> Exception:
         context: Short description of the operation, used in the message.
     """
     # Imported here: cyborgdb.exceptions must stay importable even if the
-    # generated client is absent (it is regenerated, not vendored by hand).
+    # generated clients are absent (they are regenerated, not vendored by hand).
     from cyborgdb.openapi_client.exceptions import ApiException
+    from cyborgdb.openapi_client_async.exceptions import (
+        ApiException as AsyncApiException,
+    )
+    import httpx
     import urllib3.exceptions
 
-    if isinstance(exc, urllib3.exceptions.HTTPError):
+    if isinstance(exc, (urllib3.exceptions.HTTPError, httpx.RequestError)):
         logger.error("%s: %s", context, exc)
         return TransportError(f"{context}: {exc}", detail=str(exc))
 
-    if not isinstance(exc, ApiException):
+    if not isinstance(exc, (ApiException, AsyncApiException)):
         return exc
 
     status = getattr(exc, "status", None)
