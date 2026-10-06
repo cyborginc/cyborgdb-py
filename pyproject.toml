@@ -47,6 +47,7 @@ langchain = [
 ]
 test = [
     "cyborgdb[langchain]",
+    "pytest-asyncio",
 ]
 
 [project.urls]
