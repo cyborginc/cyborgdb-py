@@ -42,6 +42,10 @@ classifiers = [
 langchain = ["langchain-core >= 0.1.0", "sentence-transformers >= 2.2.0"]
 test = ["cyborgdb[langchain]", "pytest-asyncio"]
 
+[dependency-groups]
+# Pinned so local `uv run ruff` and the CI lint job use the same version.
+dev = ["ruff==0.16.10"]
+
 [project.urls]
 "Homepage" = "https://www.cyborg.co"
 "Documentation" = "https://docs.cyborg.co"

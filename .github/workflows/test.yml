@@ -21,15 +21,19 @@ jobs:
         with:
           python-version: '3.13'
           
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10
+
+      # Same ruff version as `uv run ruff` locally: the dev group in uv.lock.
       - name: Install ruff
-        run: pip install ruff
-        
+        run: uv sync --frozen --only-group dev
+
       - name: Run linting
         run: |
           echo "Running Ruff linter..."
-          ruff check . --output-format=github
+          uv run --no-sync ruff check . --output-format=github
           echo "Checking code formatting..."
-          ruff format --check .
+          uv run --no-sync ruff format --check .
 
   test:
     runs-on: ubuntu-latest
