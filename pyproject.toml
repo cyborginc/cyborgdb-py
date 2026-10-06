@@ -9,9 +9,7 @@ description = "Python Client SDK for CyborgDB: The Confidential Vector Database"
 readme = "README.md"
 requires-python = ">= 3.10"
 license = "MIT"
-authors = [
-    {name = "Cyborg Inc."}
-]
+authors = [{ name = "Cyborg Inc." }]
 keywords = ["OpenAPI", "OpenAPI-Generator", "CyborgDB Service"]
 dependencies = [
     "urllib3 >= 1.26.0, < 3.0.0",
@@ -41,14 +39,8 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-langchain = [
-    "langchain-core >= 0.1.0",
-    "sentence-transformers >= 2.2.0"
-]
-test = [
-    "cyborgdb[langchain]",
-    "pytest-asyncio",
-]
+langchain = ["langchain-core >= 0.1.0"]
+test = ["cyborgdb[langchain]", "pytest-asyncio"]
 
 [project.urls]
 "Homepage" = "https://www.cyborg.co"
