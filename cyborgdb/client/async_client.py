@@ -1,58 +1,61 @@
 """
-CyborgDB REST Client
+CyborgDB async REST Client
 
-This module provides a Python client for interacting with the CyborgDB REST API.
+Native asyncio counterpart of :class:`cyborgdb.Client`, backed by the httpx
+transport in ``cyborgdb.openapi_client_async``.
 """
 
-from pathlib import Path
+import logging
 from typing import Dict, List, Literal, Optional
 from urllib.parse import urlparse
-import secrets
-import logging
+
+import httpx
 from pydantic import ValidationError as PydanticValidationError
 
-# Import from the OpenAPI generated models
-from cyborgdb.openapi_client.models import (
-    CreateIndexRequest as _OpenAPICreateIndexRequest,
-)
-
-# Import the OpenAPI generated client
 try:
-    from cyborgdb.openapi_client.api_client import ApiClient, Configuration
-    from cyborgdb.openapi_client.api.default_api import DefaultApi
-
-    from cyborgdb.openapi_client.exceptions import ApiException
+    from cyborgdb.openapi_client_async.api_client import ApiClient, Configuration
+    from cyborgdb.openapi_client_async.api.default_api import DefaultApi
+    from cyborgdb.openapi_client_async.exceptions import ApiException
+    from cyborgdb.openapi_client_async.models import CreateIndexRequest
 except ImportError:
     raise ImportError(
-        "Failed to import openapi_client. Make sure the OpenAPI client library is properly installed."
+        "Failed to import openapi_client_async. Make sure the OpenAPI client library is properly installed."
     )
-
-import urllib3
-import urllib3.exceptions
 
 from cyborgdb.client._request_builders import (
     apply_full_text_implication,
     request_headers,
     validate_index_key,
 )
-from cyborgdb.client.encrypted_index import EncryptedIndex
+from cyborgdb.client.async_encrypted_index import AsyncEncryptedIndex
+from cyborgdb.client.client import Client
 from cyborgdb.exceptions import CyborgDBError, ValidationError, translate_api_error
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "Client",
-    "EncryptedIndex",
+    "AsyncClient",
+    "AsyncEncryptedIndex",
 ]
 
-CreateIndexRequest = _OpenAPICreateIndexRequest
+_TRANSPORT_ERRORS = (ApiException, httpx.RequestError)
 
 
-class Client:
+class AsyncClient:
     """
-    Client for interacting with CyborgDB via REST API.
+    Async client for interacting with CyborgDB via REST API.
 
-    This class provides methods for creating, loading, and managing encrypted indexes.
+    This class provides coroutine methods for creating, loading, and managing
+    encrypted indexes; it is the asyncio counterpart of :class:`cyborgdb.Client`
+    and accepts the same constructor arguments. Index handles it returns are
+    :class:`AsyncEncryptedIndex` instances.
+
+    The client owns an httpx connection pool. Close it with ``await
+    client.close()`` or use the client as an async context manager::
+
+        async with AsyncClient("http://localhost:8000", api_key=key) as client:
+            index = await client.load_index("my-index", index_key)
+            results = await index.query(query_vectors=vector, top_k=5)
 
     The ``api_key`` passed at construction is sent as the ``X-API-Key`` header
     on every request and may be any of three kinds, depending on how the
@@ -62,7 +65,7 @@ class Client:
       service was started with. Full access, no RBAC.
     - **Root key** — when the service runs with ``CYBORGDB_SERVICE_ROOT_KEY`` set,
       RBAC is on. A client using the root key has admin access and can mint
-      per-user keys via :meth:`EncryptedIndex.create_user`.
+      per-user keys via :meth:`AsyncEncryptedIndex.create_user`.
     - **User key** (``cdbk_...``) — minted by ``create_user`` and scoped to one
       index with ``read`` / ``write`` permissions enforced cryptographically.
       A user client calls ``load_index(name)`` with **no** ``index_key`` (the
@@ -73,20 +76,8 @@ class Client:
     """
 
     def __init__(self, base_url, api_key: Optional[str] = None, verify_ssl=None):
-        # Set up the OpenAPI client configuration
         self.config = Configuration()
         self.config.host = base_url
-        # Replays a request once when a pooled keep-alive connection was closed
-        # by the server while idle; urllib3 won't retry POSTs on its own.
-        # respect_retry_after_header=False: otherwise urllib3 treats a 413/429/503
-        # carrying Retry-After as retryable, exhausts status=0 and raises
-        # MaxRetryError, discarding the response the caller needs.
-        self.config.retries = urllib3.util.Retry(
-            total=1,
-            allowed_methods=None,
-            status=0,
-            respect_retry_after_header=False,
-        )
 
         # Configure SSL verification
         if base_url.startswith("http://"):
@@ -99,7 +90,6 @@ class Client:
             parsed = urlparse(base_url)
             if parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
                 self.config.verify_ssl = False
-                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
                 logger.warning(
                     "SSL verification auto-disabled for %r (loopback host detected; development mode). "
                     "Not recommended for production.",
@@ -110,21 +100,19 @@ class Client:
         else:
             self.config.verify_ssl = verify_ssl
             if not verify_ssl:
-                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
                 logger.warning(
                     "SSL verification is disabled. Not recommended for production."
                 )
 
-        # Add authentication if provided
         if api_key:
             self.config.api_key = {"X-API-Key": api_key}
 
-        # Create the API client
+        # Construction opens no connections: the generated client creates its
+        # httpx pool lazily on the first request, inside the running loop.
         try:
             self.api_client = ApiClient(self.config)
             self.api = DefaultApi(self.api_client)
 
-            # If API key was provided, also set it directly in default headers
             if api_key:
                 self.api_client.default_headers["X-API-Key"] = api_key
 
@@ -132,6 +120,20 @@ class Client:
             error_msg = f"Failed to initialize client: {e}"
             logger.error(error_msg)
             raise CyborgDBError(error_msg) from e
+
+    async def close(self) -> None:
+        """Close the underlying connection pool.
+
+        Indexes obtained from this client share the pool and stop working once
+        it is closed.
+        """
+        await self.api_client.close()
+
+    async def __aenter__(self) -> "AsyncClient":
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+        await self.close()
 
     def _request_headers(self) -> Dict[str, str]:
         """Build the request headers for data-path calls. Only includes
@@ -141,38 +143,9 @@ class Client:
         header (and must not crash indexing into an empty config dict)."""
         return request_headers(self.config.api_key.get("X-API-Key"))
 
-    @staticmethod
-    def generate_key(save: bool = False) -> bytes:
-        """
-        Generate a secure 32-byte key for use with CyborgDB indexes.
+    generate_key = staticmethod(Client.generate_key)
 
-        Args:
-            save (bool): If True, save the key to a file in the user's home directory
-                         for reuse. Not recommended for production use.
-        Returns:
-            bytes: A cryptographically secure 32-byte key.
-        """
-        if not save:
-            return secrets.token_bytes(32)
-
-        key_path = Path.home() / ".cyborgdb" / "index_key"
-        key_path.parent.mkdir(parents=True, exist_ok=True)
-
-        if key_path.exists():
-            if key_path.stat().st_size == 32:
-                logger.warning(
-                    f"Loading existing index key from '{key_path}'.\nSaving keys is not recommended for production use."
-                )
-                return key_path.read_bytes()
-
-        key = secrets.token_bytes(32)
-        key_path.write_bytes(key)
-        logger.warning(
-            f"Generated new index key and saved to '{key_path}'.\nSaving keys is not recommended for production use."
-        )
-        return key
-
-    def list_indexes(self) -> List[str]:
+    async def list_indexes(self) -> List[str]:
         """
         Get a list of all encrypted index names accessible via the client.
 
@@ -183,12 +156,12 @@ class Client:
             CyborgDBError: If the list of indexes could not be retrieved.
         """
         try:
-            response = self.api.list_indexes_v1_indexes_list_get()
+            response = await self.api.list_indexes_v1_indexes_list_get()
             return response.indexes
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to list indexes") from e
 
-    def create_index(
+    async def create_index(
         self,
         index_name: str,
         index_key: Optional[bytes] = None,
@@ -203,7 +176,7 @@ class Client:
         text_fields: Optional[List[str]] = None,
         bm25_k1: Optional[float] = None,
         bm25_b: Optional[float] = None,
-    ) -> EncryptedIndex:
+    ) -> AsyncEncryptedIndex:
         """
         Create and return a new encrypted DiskIVF index.
 
@@ -239,16 +212,16 @@ class Client:
 
         Fields left out are filterable (opt-out posture). ``filterable`` builds
         inverted-index postings; ``pattern`` additionally builds a regex
-        dictionary and requires ``filterable=True``. On :meth:`EncryptedIndex.query`
+        dictionary and requires ``filterable=True``. On :meth:`AsyncEncryptedIndex.query`
         this only decides how a filter is resolved — index vs. post-filter, same
-        rows either way. On :meth:`EncryptedIndex.query_metadata` it is enforced:
+        rows either way. On :meth:`AsyncEncryptedIndex.query_metadata` it is enforced:
         only ``pattern`` fields accept ``$regex``/``$contains``, and
         non-filterable fields cannot be filtered on at all.
 
         A third policy, ``full_text``, routes the field's string value through
         the BM25 analyzer instead of exact-match indexing, making it searchable
-        by :meth:`EncryptedIndex.query_metadata` (``text=...``) and hybrid
-        :meth:`EncryptedIndex.query` (``text=...``). ``full_text=True`` implies
+        by :meth:`AsyncEncryptedIndex.query_metadata` (``text=...``) and hybrid
+        :meth:`AsyncEncryptedIndex.query` (``text=...``). ``full_text=True`` implies
         ``filterable=False`` and is incompatible with ``pattern=True``::
 
             {"body": {"full_text": True}}
@@ -269,7 +242,7 @@ class Client:
         try:
             # Build the handle first (no network I/O); it owns the single
             # hex encoding of the key, which we reuse for the request below.
-            index = EncryptedIndex(
+            index = AsyncEncryptedIndex(
                 index_name=index_name,
                 index_key=index_key,
                 api=self.api,
@@ -290,25 +263,25 @@ class Client:
                 bm25_b=bm25_b,
             )
 
-            self.api.create_index_v1_indexes_create_post(
+            await self.api.create_index_v1_indexes_create_post(
                 create_index_request=request,
                 _headers=self._request_headers(),
             )
 
             return index
 
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to create index") from e
         except PydanticValidationError as ve:
             error_msg = f"Validation error while creating index: {ve}"
             logger.error(error_msg)
             raise ValidationError(error_msg) from ve
 
-    def load_index(
+    async def load_index(
         self,
         index_name: str,
         index_key: Optional[bytes] = None,
-    ) -> EncryptedIndex:
+    ) -> AsyncEncryptedIndex:
         """
         Load an existing encrypted index by name.
 
@@ -320,7 +293,7 @@ class Client:
             validate_index_key(index_key)
 
         try:
-            index = EncryptedIndex(
+            index = AsyncEncryptedIndex(
                 index_name=index_name,
                 index_key=index_key,
                 api=self.api,
@@ -330,18 +303,18 @@ class Client:
             # Probe the describe endpoint so a missing/inaccessible index
             # raises here instead of silently returning a phantom handle.
             # The probe also primes the handle's metadata cache.
-            index._describe()
+            await index._describe()
 
             return index
 
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, f"Failed to load index '{index_name}'") from e
         except PydanticValidationError as ve:
             error_msg = f"Validation error while loading index '{index_name}': {ve}"
             logger.error(error_msg)
             raise ValidationError(error_msg) from ve
 
-    def get_health(self) -> Dict[str, str]:
+    async def get_health(self) -> Dict[str, str]:
         """
         Get the health status of the CyborgDB instance.
 
@@ -352,6 +325,6 @@ class Client:
             CyborgDBError: If the health status could not be retrieved.
         """
         try:
-            return self.api.health_check_v1_health_get()
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            return await self.api.health_check_v1_health_get()
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to get health status") from e

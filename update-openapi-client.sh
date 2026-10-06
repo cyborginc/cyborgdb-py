@@ -39,4 +39,14 @@ echo "⚡🦾🤖🔄🛠️📝🧬✨🚀 Generating client with $GENERATOR...
     --package-name cyborgdb.openapi_client \
     --additional-properties=generateSourceCodeOnly=true
 
+# Async client: same API surface, httpx transport. Lives in its own package
+# (models included) so neither tree needs hand edits to share anything.
+echo "⚡🦾🤖🔄🛠️📝🧬✨🚀 Generating async (httpx) client with $GENERATOR... ⚡🦾🤖🔄🛠️📝🧬✨🚀"
+"$GENERATOR" generate \
+    -i openapi.json \
+    -g python \
+    -o . \
+    --package-name cyborgdb.openapi_client_async \
+    --additional-properties=generateSourceCodeOnly=true,library=httpx
+
 echo "✅🎉🚀🦾🤖✨🛠️📝🧬🌟 OpenAPI client updated successfully! ✅🎉🚀🦾🤖✨🛠️📝🧬🌟"

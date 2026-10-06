@@ -4,6 +4,7 @@
 
 # Re-export classes from client module
 from .client.client import Client
+from .client.async_client import AsyncClient
 
 # Re-export public exception hierarchy
 from .exceptions import (
@@ -21,6 +22,7 @@ from .exceptions import (
 # MetadataResult is re-exported so callers can annotate query_metadata rows,
 # mirroring cyborgdb_core's public surface.
 from .client.encrypted_index import EncryptedIndex, MetadataResult
+from .client.async_encrypted_index import AsyncEncryptedIndex
 
 # Re-export demo functionality
 from .demo import get_demo_api_key
@@ -62,6 +64,8 @@ except PackageNotFoundError:
 __all__ = [
     "Client",
     "EncryptedIndex",
+    "AsyncClient",
+    "AsyncEncryptedIndex",
     "MetadataResult",
     "CyborgVectorStore",
     "get_demo_api_key",

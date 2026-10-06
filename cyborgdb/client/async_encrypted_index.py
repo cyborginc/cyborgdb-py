@@ -1,16 +1,17 @@
 """
-EncryptedIndex class for CyborgDB
+AsyncEncryptedIndex class for CyborgDB
 
-This module provides the EncryptedIndex class for interacting with encrypted vector indexes in CyborgDB.
+Native asyncio counterpart of :class:`cyborgdb.EncryptedIndex`, backed by the
+httpx transport in ``cyborgdb.openapi_client_async``.
 """
 
 import binascii
 import json
 import logging
-from typing import Dict, List, Optional, TypedDict, Union, Any
+from typing import Any, Dict, List, Optional, Union
 
+import httpx
 import numpy as np
-import urllib3.exceptions
 
 from cyborgdb.client._request_builders import (
     build_binary_query_request,
@@ -18,7 +19,6 @@ from cyborgdb.client._request_builders import (
     build_query_metadata_request,
     build_query_request,
     build_upsert_request,
-    coerce_datetimes,
     hybrid_query_kwargs,
     parse_binary_query_response,
     parse_get_response,
@@ -26,64 +26,66 @@ from cyborgdb.client._request_builders import (
     parse_query_response,
     request_headers,
 )
+from cyborgdb.client.encrypted_index import MetadataResult
 from cyborgdb.exceptions import (
     ValidationError,
     _ArgumentTypeError,
     translate_api_error,
 )
 
-# Import the OpenAPI generated client
 try:
-    import cyborgdb.openapi_client.models as _models
-    from cyborgdb.openapi_client.api_client import ApiClient
-    from cyborgdb.openapi_client.api.default_api import DefaultApi
-    from cyborgdb.openapi_client.models.train_request import TrainRequest
-    from cyborgdb.openapi_client.models.delete_request import DeleteRequest
-    from cyborgdb.openapi_client.models.index_operation_request import (
+    import cyborgdb.openapi_client_async.models as _models
+    from cyborgdb.openapi_client_async.api_client import ApiClient
+    from cyborgdb.openapi_client_async.api.default_api import DefaultApi
+    from cyborgdb.openapi_client_async.exceptions import ApiException
+    from cyborgdb.openapi_client_async.models.create_user_request import (
+        CreateUserRequest,
+    )
+    from cyborgdb.openapi_client_async.models.delete_request import DeleteRequest
+    from cyborgdb.openapi_client_async.models.get_request import GetRequest
+    from cyborgdb.openapi_client_async.models.index_operation_request import (
         IndexOperationRequest,
     )
-    from cyborgdb.openapi_client.exceptions import ApiException
-    from cyborgdb.openapi_client.models.list_ids_request import ListIDsRequest
-    from cyborgdb.openapi_client.models.create_user_request import CreateUserRequest
+    from cyborgdb.openapi_client_async.models.list_ids_request import ListIDsRequest
+    from cyborgdb.openapi_client_async.models.train_request import TrainRequest
+    from cyborgdb.openapi_client_async.rest import RESTResponse
 except ImportError:
     raise ImportError(
-        "Failed to import openapi_client. Make sure the OpenAPI client library is properly installed."
+        "Failed to import openapi_client_async. Make sure the OpenAPI client library is properly installed."
     )
 
 logger = logging.getLogger(__name__)
 
-# Kept importable under its former private name.
-_coerce_datetimes = coerce_datetimes
+_TRANSPORT_ERRORS = (ApiException, httpx.RequestError)
 
 
-# Split into two TypedDicts so `id` stays required while `score` is optional
-# per-key: `typing.NotRequired` is 3.11+ and the package supports 3.10, so a
-# `total=False` subclass expresses the optional key with no union and no
-# `typing_extensions` dependency. This is an implementation detail — kept as a
-# comment, not a docstring, so it stays out of the public shape callers read.
-class _MetadataResultBase(TypedDict):
-    id: str
-
-
-class MetadataResult(_MetadataResultBase, total=False):
-    """One row of a ``query_metadata`` result: the item ``id``, plus a BM25
-    ``score`` when the query ranked by relevance.
-
-    A plain ``dict`` mirroring ``cyborgdb_core``'s ``MetadataResult``. ``score``
-    is present only on the text path (``query_metadata(text=...)``); a
-    filter-only query has nothing to score, so the key is absent rather than
-    ``None`` — the same convention ``query()`` uses for ``distance`` / ``score``.
+class AsyncEncryptedIndex:
     """
-
-    score: float
-
-
-class EncryptedIndex:
-    """
-    Provides access to an encrypted vector index via the REST API.
+    Provides async access to an encrypted vector index via the REST API.
 
     This class handles operations on an encrypted vector index, including
-    adding/updating vectors, searching, and managing index metadata.
+    adding/updating vectors, searching, and managing index metadata. Every
+    method that talks to the service is a coroutine and must be awaited.
+
+    Differences from :class:`cyborgdb.EncryptedIndex`:
+
+    - The describe-backed attributes ``dimension``, ``metric``, ``n_lists``,
+      ``metadata_schema`` and ``bm25`` are properties on the sync class but
+      **async methods** here, because a property cannot be awaited::
+
+          dim = index.dimension        # sync
+          dim = await index.dimension()  # async
+
+      They cache exactly as the sync properties do: ``dimension`` is cached
+      once non-zero and ``metric`` on first read, while ``n_lists``,
+      ``metadata_schema`` and ``bm25`` are fetched on every call.
+      ``index_name`` needs no request and stays a plain property.
+    - The index shares its connection pool with the :class:`AsyncClient` that
+      created it. ``close()`` (or leaving an ``async with`` block) closes that
+      shared pool, so afterwards neither the index nor the client can make
+      requests. Close the client once when you are done with all of its
+      indexes; close an index directly only when it is the last user of the
+      client.
     """
 
     def __init__(
@@ -121,12 +123,22 @@ class EncryptedIndex:
         self._dimension: Optional[int] = None
         self._metric: Optional[str] = None
 
-    def _describe(self):
+    async def close(self) -> None:
+        """Close the connection pool shared with the owning ``AsyncClient``."""
+        await self._api_client.close()
+
+    async def __aenter__(self) -> "AsyncEncryptedIndex":
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+        await self.close()
+
+    async def _describe(self):
         """Fire the describe endpoint with this index's key (None for
         KMS-backed indexes) and refresh the cached immutable fields.
-        Raises the raw ``ApiException`` so `Client.load_index` can
+        Raises the raw ``ApiException`` so `AsyncClient.load_index` can
         translate it with its own context."""
-        response = self._api.get_index_info_v1_indexes_describe_post(
+        response = await self._api.get_index_info_v1_indexes_describe_post(
             index_operation_request=self._ior()
         )
         if response.dimension:
@@ -134,10 +146,10 @@ class EncryptedIndex:
         self._metric = response.metric
         return response
 
-    def _describe_translated(self):
+    async def _describe_translated(self):
         try:
-            return self._describe()
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            return await self._describe()
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to describe index") from e
 
     def _request_headers(self) -> Dict[str, str]:
@@ -153,33 +165,29 @@ class EncryptedIndex:
         """Get the name of the index."""
         return self._index_name
 
-    @property
-    def dimension(self) -> int:
+    async def dimension(self) -> int:
         """Vector dimensionality. `0` if create_index was called
         without an explicit dimension and the first upsert hasn't
         happened yet; otherwise the real dimension. Cached once
         non-zero."""
         if self._dimension is None:
-            return self._describe_translated().dimension
+            return (await self._describe_translated()).dimension
         return self._dimension
 
-    @property
-    def metric(self) -> str:
+    async def metric(self) -> str:
         """Distance metric (`euclidean`, `cosine`, or
         `squared_euclidean`). Cached on first read."""
         if self._metric is None:
-            self._describe_translated()
+            await self._describe_translated()
         return self._metric
 
-    @property
-    def n_lists(self) -> int:
+    async def n_lists(self) -> int:
         """Number of inverted lists. `1` for untrained indexes; set to
         the trained cluster count after `train()`. Fetched fresh on
         every read so post-training callers see the new value."""
-        return self._describe_translated().n_lists
+        return (await self._describe_translated()).n_lists
 
-    @property
-    def metadata_schema(self) -> Dict[str, Dict[str, bool]]:
+    async def metadata_schema(self) -> Dict[str, Dict[str, bool]]:
         """Per-field metadata indexing policy recorded at create time, as
         `{field: {"filterable": bool, "pattern": bool, "full_text": bool}}`.
         Empty dict when the index uses the default index-everything posture.
@@ -199,12 +207,11 @@ class EncryptedIndex:
                 "full_text": policy.full_text,
             }
             for field, policy in (
-                self._describe_translated().metadata_schema or {}
+                (await self._describe_translated()).metadata_schema or {}
             ).items()
         }
 
-    @property
-    def bm25(self) -> Optional[Dict[str, Any]]:
+    async def bm25(self) -> Optional[Dict[str, Any]]:
         """BM25 scorer config the index reports back, as
         `{"k1": float, "b": float, "analyzer_version": str | None}`, or `None`
         when the index has no `full_text` field (BM25 is opt-in and derived,
@@ -214,7 +221,7 @@ class EncryptedIndex:
 
         Returned as a plain dict so generated openapi_client models never leak
         out of the wrapper."""
-        config = self._describe_translated().bm25
+        config = (await self._describe_translated()).bm25
         if config is None:
             return None
         return {
@@ -223,7 +230,7 @@ class EncryptedIndex:
             "analyzer_version": config.analyzer_version,
         }
 
-    def is_trained(self) -> bool:
+    async def is_trained(self) -> bool:
         """
         Check if the index has been trained.
 
@@ -233,9 +240,9 @@ class EncryptedIndex:
         Raises:
             CyborgDBError: If the training status could not be retrieved.
         """
-        return self._describe_translated().is_trained
+        return (await self._describe_translated()).is_trained
 
-    def delete_index(self) -> None:
+    async def delete_index(self) -> None:
         """
         Delete the current index and all its associated data.
 
@@ -246,13 +253,13 @@ class EncryptedIndex:
             CyborgDBError: If the index could not be deleted.
         """
         try:
-            self._api.delete_index_v1_indexes_delete_post(
+            await self._api.delete_index_v1_indexes_delete_post(
                 index_operation_request=self._ior()
             )
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to delete index") from e
 
-    def get(
+    async def get(
         self, ids: List[str], include: List[str] = ["vector", "contents", "metadata"]
     ) -> List[Dict[str, Any]]:
         """
@@ -271,28 +278,25 @@ class EncryptedIndex:
             CyborgDBError: If the items could not be retrieved or decrypted.
         """
         try:
-            from cyborgdb.openapi_client.models import GetRequest
-
-            # Create the proper request objects
             get_request = GetRequest(
                 index_key=self._key_to_hex(),
                 index_name=self._index_name,
                 ids=ids,
                 include=include,
             )
-            response = self._api.get_vectors_v1_vectors_get_post(
+            response = await self._api.get_vectors_v1_vectors_get_post(
                 get_request=get_request,
                 _headers=self._request_headers(),
             )
             return parse_get_response(response, include)
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to retrieve items") from e
         except Exception as e:
             error_msg = f"Get operation failed: {str(e)}"
             logger.error(error_msg)
             raise
 
-    def train(
+    async def train(
         self,
         n_lists: Optional[int] = None,
         batch_size: Optional[int] = None,
@@ -332,11 +336,11 @@ class EncryptedIndex:
                 max_memory=max_memory,
             )
 
-            self._api.train_index_v1_indexes_train_post(train_request=request)
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            await self._api.train_index_v1_indexes_train_post(train_request=request)
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to train index") from e
 
-    def upsert(
+    async def upsert(
         self,
         arg1: Union[List[Dict[str, Any]], List[str], np.ndarray],
         arg2: Optional[np.ndarray] = None,
@@ -367,28 +371,26 @@ class EncryptedIndex:
         if arg2 is not None and isinstance(arg2, np.ndarray):
             if not isinstance(arg1, list):
                 raise _ArgumentTypeError("arg1 must be a list of IDs")
-            # Convert IDs to strings if needed
             ids = [str(id_val) for id_val in arg1]
-            # Use binary upsert for efficiency
-            self.upsert_binary(ids, arg2)
+            await self.upsert_binary(ids, arg2)
             return
 
         try:
             request = build_upsert_request(
                 _models, self._index_name, self._key_to_hex(), arg1, arg2
             )
-            self._api.upsert_vectors_v1_vectors_upsert_post(
+            await self._api.upsert_vectors_v1_vectors_upsert_post(
                 upsert_request=request,
                 _headers=self._request_headers(),
             )
 
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to upsert items") from e
         except (TypeError, ValueError) as e:
             logger.error(str(e))
             raise
 
-    def upsert_binary(
+    async def upsert_binary(
         self,
         ids: List[str],
         vectors: np.ndarray,
@@ -424,14 +426,14 @@ class EncryptedIndex:
         )
 
         try:
-            self._api.upsert_vectors_binary_v1_vectors_upsert_binary_post(
+            await self._api.upsert_vectors_binary_v1_vectors_upsert_binary_post(
                 binary_upsert_request=request,
                 _headers=self._request_headers(),
             )
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to upsert items (binary)") from e
 
-    def delete(self, ids: List[str]) -> None:
+    async def delete(self, ids: List[str]) -> None:
         """
         Delete the specified encrypted items stored in the index.
 
@@ -450,13 +452,13 @@ class EncryptedIndex:
             delete_request = DeleteRequest(
                 index_key=self._key_to_hex(), index_name=self._index_name, ids=ids
             )
-            self._api.delete_vectors_v1_vectors_delete_post(
+            await self._api.delete_vectors_v1_vectors_delete_post(
                 delete_request=delete_request
             )
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to delete items") from e
 
-    def query(
+    async def query(
         self,
         query_vectors: Optional[
             Union[np.ndarray, List[List[float]], List[float]]
@@ -517,7 +519,7 @@ class EncryptedIndex:
             if isinstance(query_vectors, np.ndarray):
                 if query_vectors.ndim == 1 or query_vectors.ndim == 2:
                     # NumPy arrays (1D or 2D) -> use binary format for efficiency
-                    return self.query_binary(
+                    return await self.query_binary(
                         query_vectors=query_vectors,
                         top_k=top_k,
                         n_probes=n_probes,
@@ -546,24 +548,23 @@ class EncryptedIndex:
                 hybrid_kwargs,
             )
 
-            # Execute query via REST
             try:
-                # Get raw response instead of deserialized object
-                raw_response = self._api.query_vectors_v1_vectors_query_post_without_preload_content(
+                raw_response = await self._api.query_vectors_v1_vectors_query_post_without_preload_content(
                     request=request,
                     _headers=self._request_headers(),
                 )
+                body = await raw_response.aread()
 
                 # _without_preload_content skips status validation, so surface
                 # 4xx/5xx (e.g. an RBAC 403) instead of parsing the error body.
-                if not 200 <= raw_response.status <= 299:
+                if not 200 <= raw_response.status_code <= 299:
                     raise ApiException.from_response(
-                        http_resp=raw_response,
-                        body=raw_response.data.decode("utf-8"),
+                        http_resp=RESTResponse(raw_response),
+                        body=body.decode("utf-8"),
                         data=None,
                     )
 
-                response_json = json.loads(raw_response.data.decode("utf-8"))
+                response_json = json.loads(body.decode("utf-8"))
                 return parse_query_response(response_json, include)
             except Exception as e:
                 error_msg = f"Unexpected error in query: {str(e)}"
@@ -572,7 +573,7 @@ class EncryptedIndex:
 
                 logger.error(traceback.format_exc())
                 raise
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Query failed") from e
         except Exception as e:
             error_msg = f"Unexpected error in query: {str(e)}"
@@ -582,7 +583,7 @@ class EncryptedIndex:
             logger.error(traceback.format_exc())
             raise
 
-    def query_binary(
+    async def query_binary(
         self,
         query_vectors: np.ndarray,
         top_k: Optional[int] = None,
@@ -655,16 +656,18 @@ class EncryptedIndex:
         )
 
         try:
-            response = self._api.query_vectors_binary_v1_vectors_query_binary_post(
-                binary_query_request=request,
-                _headers=self._request_headers(),
+            response = (
+                await self._api.query_vectors_binary_v1_vectors_query_binary_post(
+                    binary_query_request=request,
+                    _headers=self._request_headers(),
+                )
             )
             return parse_binary_query_response(response, is_single_query)
 
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to query (binary)") from e
 
-    def query_metadata(
+    async def query_metadata(
         self,
         filters: Optional[Dict[str, Any]] = None,
         top_k: Optional[int] = None,
@@ -736,14 +739,14 @@ class EncryptedIndex:
         )
 
         try:
-            response = self._api.query_metadata_v1_vectors_query_metadata_post(
+            response = await self._api.query_metadata_v1_vectors_query_metadata_post(
                 query_metadata_request=request
             )
             return parse_query_metadata_response(response, text)
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to query metadata") from e
 
-    def list_ids(self) -> List[str]:
+    async def list_ids(self) -> List[str]:
         """
         List all document IDs in the index.
 
@@ -754,15 +757,15 @@ class EncryptedIndex:
             list_ids_request = ListIDsRequest(
                 index_key=self._key_to_hex(), index_name=self._index_name
             )
-            response = self._api.list_ids_v1_vectors_list_ids_post(
+            response = await self._api.list_ids_v1_vectors_list_ids_post(
                 list_ids_request=list_ids_request
             )
 
             return response.ids
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to list document IDs") from e
 
-    def is_training(self) -> bool:
+    async def is_training(self) -> bool:
         """
         Get the current training status of the index.
 
@@ -770,29 +773,23 @@ class EncryptedIndex:
             A dictionary containing training status information.
         """
         try:
-            response = self._api.get_training_status_v1_indexes_training_status_get()
+            response = (
+                await self._api.get_training_status_v1_indexes_training_status_get()
+            )
 
             if self._index_name in response.training_indexes:
                 return True
 
             return False
 
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to get index training status") from e
 
-    # ------------------------------------------------------------------
-    # RBAC — user management (root API key required)
-    #
-    # A user is scoped to this one index with a permission set drawn from
-    # {"read", "write"}, enforced cryptographically by the service: the
-    # wrapped data-encryption keys that exist for a user *are* their
-    # permission set, so there is no policy blob to keep in sync and
-    # revoking a user erases their keys. These routes are only accepted
-    # when the service runs with CYBORGDB_SERVICE_ROOT_KEY set and this client
-    # was constructed with that root key.
-    # ------------------------------------------------------------------
+    # RBAC — user management (root API key required). See EncryptedIndex for
+    # the model: a user is scoped to this index, and the wrapped keys that
+    # exist for them *are* their permission set.
 
-    def create_user(self, permissions: List[str]) -> Dict[str, str]:
+    async def create_user(self, permissions: List[str]) -> Dict[str, str]:
         """Mint a user API key scoped to this index.
 
         Args:
@@ -805,7 +802,7 @@ class EncryptedIndex:
             is returned **exactly once** and is never stored by the
             service — capture it now, it cannot be recovered. Hand it to
             the user; they authenticate by passing it as ``api_key`` to
-            ``Client`` and need no index key of their own.
+            ``AsyncClient`` and need no index key of their own.
 
         Raises:
             AuthenticationError: If the client is not using the root key.
@@ -818,14 +815,14 @@ class EncryptedIndex:
             permissions=permissions, index_key=self._index_key_hex
         )
         try:
-            response = self._api.create_user_v1_indexes_index_name_users_post(
+            response = await self._api.create_user_v1_indexes_index_name_users_post(
                 index_name=self._index_name, create_user_request=request
             )
             return {"user_id": response.user_id, "api_key": response.api_key}
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to create user") from e
 
-    def list_users(self) -> List[Dict[str, Any]]:
+    async def list_users(self) -> List[Dict[str, Any]]:
         """List the users provisioned for this index.
 
         Returns:
@@ -838,17 +835,17 @@ class EncryptedIndex:
             CyborgDBError: If the users could not be listed for another reason.
         """
         try:
-            response = self._api.list_users_v1_indexes_index_name_users_get(
+            response = await self._api.list_users_v1_indexes_index_name_users_get(
                 index_name=self._index_name, x_index_key=self._index_key_hex
             )
             return [
                 {"user_id": u.user_id, "permissions": u.permissions}
                 for u in response.users
             ]
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to list users") from e
 
-    def delete_user(self, user_id: str) -> None:
+    async def delete_user(self, user_id: str) -> None:
         """Revoke a user, erasing their wrapped keys for this index.
 
         After this returns, the user's API key is rejected on the next
@@ -862,12 +859,12 @@ class EncryptedIndex:
             CyborgDBError: If the user could not be deleted.
         """
         try:
-            self._api.delete_user_v1_indexes_index_name_users_user_id_delete(
+            await self._api.delete_user_v1_indexes_index_name_users_user_id_delete(
                 index_name=self._index_name,
                 user_id=user_id,
                 x_index_key=self._index_key_hex,
             )
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
+        except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to delete user") from e
 
     def _key_to_hex(self) -> Optional[str]:
