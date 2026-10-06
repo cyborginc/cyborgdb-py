@@ -30,6 +30,11 @@ except ImportError:
 import urllib3
 import urllib3.exceptions
 
+from cyborgdb.client._request_builders import (
+    apply_full_text_implication,
+    request_headers,
+    validate_index_key,
+)
 from cyborgdb.client.encrypted_index import EncryptedIndex
 from cyborgdb.exceptions import CyborgDBError, ValidationError, translate_api_error
 
@@ -41,31 +46,6 @@ __all__ = [
 ]
 
 CreateIndexRequest = _OpenAPICreateIndexRequest
-
-
-def _validate_index_key(index_key: bytes) -> None:
-    """Raise ValidationError unless ``index_key`` is a 32-byte ``bytes`` object."""
-    if not isinstance(index_key, bytes) or len(index_key) != 32:
-        raise ValidationError("index_key must be a 32-byte bytes object")
-
-
-def _apply_full_text_implication(
-    metadata_schema: Optional[Dict[str, Dict[str, bool]]],
-) -> Optional[Dict[str, Dict[str, bool]]]:
-    """Make ``full_text=True`` imply ``filterable=False`` unless set explicitly.
-
-    The generated ``MetadataFieldPolicy`` fills ``filterable=True`` by default,
-    which the service reads as an explicit conflict with ``full_text``.
-    Stopgap until the service schema drops that default (cyborgdb-core#2393).
-    """
-    if not metadata_schema:
-        return metadata_schema
-    return {
-        field: {"filterable": False, **policy}
-        if isinstance(policy, dict) and policy.get("full_text")
-        else policy
-        for field, policy in metadata_schema.items()
-    }
 
 
 class Client:
@@ -159,14 +139,7 @@ class Client:
         disabled (no ``CYBORGDB_SERVICE_ROOT_KEY`` set) the SDK can be
         constructed with no api_key and we must not send an empty
         header (and must not crash indexing into an empty config dict)."""
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-        api_key = self.config.api_key.get("X-API-Key")
-        if api_key:
-            headers["X-API-Key"] = api_key
-        return headers
+        return request_headers(self.config.api_key.get("X-API-Key"))
 
     @staticmethod
     def generate_key(save: bool = False) -> bytes:
@@ -291,7 +264,7 @@ class Client:
             raise ValidationError("create_index requires index_key, kms_name, or both")
 
         if index_key is not None:
-            _validate_index_key(index_key)
+            validate_index_key(index_key)
 
         try:
             # Build the handle first (no network I/O); it owns the single
@@ -311,7 +284,7 @@ class Client:
                 embedding_model=embedding_model,
                 metric=metric,
                 storage_precision=storage_precision,
-                metadata_schema=_apply_full_text_implication(metadata_schema),
+                metadata_schema=apply_full_text_implication(metadata_schema),
                 text_fields=text_fields,
                 bm25_k1=bm25_k1,
                 bm25_b=bm25_b,
@@ -344,7 +317,7 @@ class Client:
         stored ``KMSBlob``, so ``index_key`` can be omitted.
         """
         if index_key is not None:
-            _validate_index_key(index_key)
+            validate_index_key(index_key)
 
         try:
             index = EncryptedIndex(
