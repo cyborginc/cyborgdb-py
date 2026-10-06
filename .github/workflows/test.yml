@@ -22,7 +22,7 @@ jobs:
           python-version: '3.13'
           
       - name: Install uv
-        uses: astral-sh/setup-uv@v10
+        uses: astral-sh/setup-uv@v10.2.0
 
       # Same ruff version as `uv run ruff` locally: the dev group in uv.lock.
       - name: Install ruff
