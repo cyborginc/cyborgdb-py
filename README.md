@@ -213,6 +213,52 @@ idx.upsert(items)  # raises ValueError for read-only users
 > server-side key for the service to resolve on a user's behalf. See the
 > service's `rbac.md` for the full design.
 
+### Async usage
+
+`AsyncClient` and `AsyncEncryptedIndex` are native asyncio counterparts of
+`Client` and `EncryptedIndex`, backed by `httpx`. Every method that talks to the
+service has the same name, parameters and return value as the sync version and
+is awaited:
+
+```python
+import asyncio
+import numpy as np
+from cyborgdb import AsyncClient
+
+async def main():
+    # The client owns a connection pool; `async with` closes it on exit
+    # (or call `await client.close()` yourself).
+    async with AsyncClient(base_url, api_key=api_key) as client:
+        index = await client.load_index(index_name="my-index", index_key=index_key)
+
+        results = await index.query(query_vectors=np.random.rand(128), top_k=5)
+        for r in results:
+            print(f"ID: {r['id']}, Distance: {r['distance']:.4f}")
+
+        # Independent calls run concurrently on one connection pool.
+        batches = await asyncio.gather(
+            index.query(query_vectors=np.random.rand(128), top_k=5),
+            index.query(query_vectors=np.random.rand(128), top_k=5),
+        )
+
+asyncio.run(main())
+```
+
+One difference: the describe-backed attributes that are properties on
+`EncryptedIndex` are **async methods** on `AsyncEncryptedIndex`, because a
+property cannot be awaited. `index_name` needs no request and stays a property.
+
+```python
+index.dimension          # sync: property
+await index.dimension()  # async: method; same for metric, n_lists,
+                         # metadata_schema and bm25
+index.index_name         # plain property on both
+```
+
+Index handles share the client's connection pool, so close the client once
+when you are done with all of its indexes. See `examples/fastapi_example.py`
+for opening a client and index in a FastAPI lifespan.
+
 ## Documentation
 
 For more information on CyborgDB, see the [Cyborg Docs](https://docs.cyborg.co).
