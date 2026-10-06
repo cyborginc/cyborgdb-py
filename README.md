@@ -225,6 +225,7 @@ import asyncio
 import numpy as np
 from cyborgdb import AsyncClient
 
+
 async def main():
     # The client owns a connection pool; `async with` closes it on exit
     # (or call `await client.close()` yourself).
@@ -241,6 +242,7 @@ async def main():
             index.query(query_vectors=np.random.rand(128), top_k=5),
         )
 
+
 asyncio.run(main())
 ```
 
@@ -249,10 +251,10 @@ One difference: the describe-backed attributes that are properties on
 property cannot be awaited. `index_name` needs no request and stays a property.
 
 ```python
-index.dimension          # sync: property
+index.dimension  # sync: property
 await index.dimension()  # async: method; same for metric, n_lists,
-                         # metadata_schema and bm25
-index.index_name         # plain property on both
+# metadata_schema and bm25
+index.index_name  # plain property on both
 ```
 
 Index handles share the client's connection pool, so close the client once
