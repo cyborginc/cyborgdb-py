@@ -177,12 +177,20 @@ class ClientIntegrationTest(unittest.TestCase):
             self.assertEqual(result_list[0]["id"], f"qbin_{i}")
 
 
-@unittest.skipUnless(os.getenv("CYBORGDB_SERVICE_URL"), "CYBORGDB_SERVICE_URL not set")
+@unittest.skipUnless(
+    os.getenv("CYBORGDB_SERVICE_ROOT_KEY"),
+    "auth disabled (no CYBORGDB_SERVICE_ROOT_KEY) — the service accepts any key",
+)
 class AuthenticationErrorIntegrationTest(unittest.TestCase):
-    """Integration test: wrong API key raises AuthenticationError."""
+    """Integration test: wrong API key raises AuthenticationError.
+
+    Gated on the root key rather than a URL: the assertion needs the service to
+    have authentication enabled. It previously keyed off CYBORGDB_SERVICE_URL,
+    a name nothing else uses and CI never sets, so it never ran anywhere.
+    """
 
     def test_wrong_api_key_raises_authentication_error(self):
-        service_url = os.getenv("CYBORGDB_SERVICE_URL")
+        service_url = os.getenv("CYBORGDB_BASE_URL", "http://localhost:8000")
         client = Client(base_url=service_url, api_key="WRONG_KEY")
         with self.assertRaises(AuthenticationError) as ctx:
             client.list_indexes()

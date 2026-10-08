@@ -67,6 +67,14 @@ class ValidationError(CyborgDBError):
     retryable = False
 
 
+class _ArgumentTypeError(ValidationError, TypeError):
+    """A pre-flight ``ValidationError`` for an argument of the wrong type.
+
+    Also a ``TypeError`` so callers that caught the SDK's former ``TypeError``
+    keep working.
+    """
+
+
 class AuthenticationError(CyborgDBError):
     """HTTP 401 and 403. Check the API key and its permissions.
 
@@ -94,7 +102,7 @@ class ConflictError(CyborgDBError):
 class RateLimitError(CyborgDBError):
     """HTTP 429. Honor ``retry_after`` when it is set.
 
-    The service does not rate-limit yet (cyborgdb-core#2386); this type exists
+    The service does not rate-limit yet; this type exists
     so callers can write the handler once.
     """
 
@@ -195,8 +203,7 @@ def translate_api_error(exc: Exception, context: str) -> Exception:
     between methods.
 
     Returns the exception to raise — it never raises on its own. Statuses the
-    taxonomy does not name keep the previous ``ValueError``, so those paths are
-    unchanged for callers.
+    taxonomy does not name (405, 413, ...) map to the base ``CyborgDBError``.
 
     Args:
         exc: The originating exception.
@@ -229,9 +236,7 @@ def translate_api_error(exc: Exception, context: str) -> Exception:
     if error_cls is None and isinstance(status, int) and status >= 500:
         error_cls = ServiceError
     if error_cls is None:
-        # Not named by the taxonomy — preserve the existing behavior.
-        logger.error(message)
-        return ValueError(message)
+        error_cls = CyborgDBError
 
     logger.error(message)
     return error_cls(message, **kwargs)
