@@ -11,7 +11,6 @@ import unittest
 import uuid
 
 import numpy as np
-import pytest
 from dotenv import load_dotenv
 
 import cyborgdb
@@ -205,26 +204,20 @@ class TestIncludeProjection(unittest.TestCase):
         self.assertEqual(rows[0]["metadata"], {"n": 1})
 
     def test_get_honours_vector_and_contents(self):
-        # The asymmetry in cyborgdb-core#2404: these work on get() and are
-        # discarded on query(). Asserted here only for get(), where the
-        # contract is documented.
+        # Valid on get() but rejected by query() (cyborgdb-core#2404).
         row = self.index.get(["only"], include=["vector", "contents"])[0]
         self.assertIn("vector", row)
         self.assertEqual(row["contents"], "hello")
 
-    @pytest.mark.xfail(
-        reason="unknown include values are silently dropped rather than "
-        "rejected (cyborgdb-core#2404)",
-        strict=True,
-    )
     def test_unknown_include_values_are_rejected(self):
-        # An unrecognised include value should be rejected rather than
-        # silently dropped: a typo such as "metdata" otherwise costs the caller
-        # the field with no error.
-        with self.assertRaises(ValueError):
+        # A typo such as "metdata" must fail loudly rather than silently cost
+        # the caller the field (cyborgdb-core#2404).
+        with self.assertRaises(cyborgdb.ValidationError) as ctx:
             self.index.query(query_vectors=self.vector, top_k=1, include=["bogus"])
-        with self.assertRaises(ValueError):
+        self.assertIn("bogus", ctx.exception.detail)
+        with self.assertRaises(cyborgdb.ValidationError) as ctx:
             self.index.get(["only"], include=["bogus"])
+        self.assertIn("bogus", ctx.exception.detail)
 
 
 class TestLargeBatch(unittest.TestCase):
