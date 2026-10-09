@@ -204,14 +204,14 @@ class TestIncludeProjection(unittest.TestCase):
         self.assertEqual(rows[0]["metadata"], {"n": 1})
 
     def test_get_honours_vector_and_contents(self):
-        # Valid on get() but rejected by query() (cyborgdb-core#2404).
+        """Valid on get() but rejected by query() (cyborgdb-core#2404)."""
         row = self.index.get(["only"], include=["vector", "contents"])[0]
         self.assertIn("vector", row)
         self.assertEqual(row["contents"], "hello")
 
     def test_unknown_include_values_are_rejected(self):
-        # A typo such as "metdata" must fail loudly rather than silently cost
-        # the caller the field (cyborgdb-core#2404).
+        """A typo such as "metdata" must fail loudly rather than silently cost
+        the caller the field (cyborgdb-core#2404)."""
         with self.assertRaises(cyborgdb.ValidationError) as ctx:
             self.index.query(query_vectors=self.vector, top_k=1, include=["bogus"])
         self.assertIn("bogus", ctx.exception.detail)
