@@ -209,5 +209,47 @@ class TestQueryInclude(unittest.TestCase):
         self.assertEqual(self._query(results, []), [{"id": "a", "score": 0.7}])
 
 
+class TestIncludeValidation(unittest.TestCase):
+    """A bad ``include`` raises ``ValidationError`` with the service's wording
+    before any request is sent."""
+
+    def test_query_rejects_unsupported_values(self):
+        api = MagicMock()
+        index = _index(api)
+        for include in (["contents"], ["vector"], ["score"], ["distance", "bananas"]):
+            for call in (
+                lambda: index.query(query_vectors=[0.0, 1.0], include=include),
+                lambda: index.query(query_vectors=[[0.0, 1.0]], include=include),
+                lambda: index.query_binary(np.zeros(2, np.float32), include=include),
+            ):
+                with self.subTest(include=include):
+                    with self.assertRaisesRegex(
+                        ValidationError,
+                        r"Valid values: 'distance', 'metadata'\. .*index\.get\(",
+                    ):
+                        call()
+        self.assertEqual(api.method_calls, [])
+
+    def test_get_rejects_unsupported_values(self):
+        api = MagicMock()
+        index = _index(api)
+        for include in (["distance"], ["score"], ["Contents"]):
+            with self.subTest(include=include):
+                with self.assertRaisesRegex(
+                    ValidationError, r"Valid values: 'vector', 'contents', 'metadata'"
+                ):
+                    index.get(["a"], include=include)
+        self.assertEqual(api.method_calls, [])
+
+    def test_bare_string_rejected(self):
+        api = MagicMock()
+        index = _index(api)
+        with self.assertRaisesRegex(ValidationError, "not a single string"):
+            index.get(["a"], include="metadata")
+        with self.assertRaisesRegex(ValidationError, "not a single string"):
+            index.query(query_vectors=[0.0, 1.0], include="distance")
+        self.assertEqual(api.method_calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()

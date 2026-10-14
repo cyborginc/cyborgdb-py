@@ -25,6 +25,7 @@ from cyborgdb.client._request_builders import (
     parse_query_metadata_response,
     parse_query_response,
     request_headers,
+    validate_get_include,
 )
 from cyborgdb.client.encrypted_index import MetadataResult
 from cyborgdb.exceptions import (
@@ -279,6 +280,7 @@ class AsyncEncryptedIndex:
             ValidationError: If ``include`` contains an unsupported value.
             CyborgDBError: If the items could not be retrieved or decrypted.
         """
+        validate_get_include(include)
         try:
             get_request = GetRequest(
                 index_key=self._key_to_hex(),
@@ -530,8 +532,9 @@ class AsyncEncryptedIndex:
             per query vector.
 
         Raises:
-            ValidationError: If ``query_vectors`` is malformed, or the service
-                rejects a parameter (e.g. an unsupported ``include`` value).
+            ValidationError: If ``query_vectors`` is malformed, ``include``
+                contains an unsupported value, or the service rejects a
+                parameter.
             CyborgDBError: If the service rejects the query.
         """
         hybrid_kwargs = hybrid_query_kwargs(
@@ -661,8 +664,8 @@ class AsyncEncryptedIndex:
 
         Raises:
             ValidationError: If ``query_vectors`` is not a 1D or 2D numpy array
-                (a wrong type is also a ``TypeError``), or the service rejects
-                a parameter (e.g. an unsupported ``include`` value).
+                (a wrong type is also a ``TypeError``), ``include`` contains an
+                unsupported value, or the service rejects a parameter.
             CyborgDBError: If the service rejects the query.
         """
         request, is_single_query = build_binary_query_request(

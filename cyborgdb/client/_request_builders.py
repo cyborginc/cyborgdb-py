@@ -260,6 +260,43 @@ def build_binary_upsert_request(
     )
 
 
+_QUERY_INCLUDE = ("distance", "metadata")
+_GET_INCLUDE = ("vector", "contents", "metadata")
+
+
+def _check_include(include, allowed, method: str, hint: str = "") -> None:
+    """Reject an ``include`` the service would 422, with the service's wording,
+    before the request is sent. The generated request models would otherwise
+    reject it with a bare pydantic error that isn't a ``CyborgDBError``."""
+    if isinstance(include, str):
+        raise ValidationError(
+            "include must be a list of field names, not a single string "
+            f"(got {include!r}; use [{include!r}])"
+        )
+    for field in include:
+        if field not in allowed:
+            valid = ", ".join(repr(f) for f in allowed)
+            raise ValidationError(
+                f"{field!r} is not a valid include field for {method}(). "
+                f"Valid values: {valid}.{hint}"
+            )
+
+
+def validate_query_include(include: Optional[List[str]]) -> None:
+    if include is not None:
+        _check_include(
+            include,
+            _QUERY_INCLUDE,
+            "query",
+            ' To retrieve contents, call index.get(ids, include=["contents"])'
+            " after querying.",
+        )
+
+
+def validate_get_include(include: List[str]) -> None:
+    _check_include(include, _GET_INCLUDE, "get")
+
+
 def _query_options(
     top_k: Optional[int],
     n_probes: Optional[int],
@@ -269,6 +306,7 @@ def _query_options(
     rerank_mult: Optional[int],
 ) -> Dict[str, Any]:
     """The optional query knobs that were set, so None is never serialized."""
+    validate_query_include(include)
     kwargs: Dict[str, Any] = {}
     if top_k is not None:
         kwargs["top_k"] = top_k
