@@ -269,17 +269,20 @@ def _check_include(include, allowed, method: str, hint: str = "") -> None:
     before the request is sent. The generated request models would otherwise
     reject it with a bare pydantic error that isn't a ``CyborgDBError``."""
     if isinstance(include, str):
-        raise ValidationError(
+        message = (
             "include must be a list of field names, not a single string "
             f"(got {include!r}; use [{include!r}])"
         )
+        raise ValidationError(message, detail=message)
     for field in include:
         if field not in allowed:
             valid = ", ".join(repr(f) for f in allowed)
-            raise ValidationError(
+            message = (
                 f"{field!r} is not a valid include field for {method}(). "
                 f"Valid values: {valid}.{hint}"
             )
+            # detail mirrors the service's 422 so callers see one error shape.
+            raise ValidationError(message, detail=message)
 
 
 def validate_query_include(include: Optional[List[str]]) -> None:
