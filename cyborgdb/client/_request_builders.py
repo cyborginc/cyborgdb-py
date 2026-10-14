@@ -260,6 +260,46 @@ def build_binary_upsert_request(
     )
 
 
+_QUERY_INCLUDE = ("distance", "metadata")
+_GET_INCLUDE = ("vector", "contents", "metadata")
+
+
+def _check_include(include, allowed, method: str, hint: str = "") -> None:
+    """Reject an ``include`` the service would 422, with the service's wording,
+    before the request is sent. The generated request models would otherwise
+    reject it with a bare pydantic error that isn't a ``CyborgDBError``."""
+    if isinstance(include, str):
+        message = (
+            "include must be a list of field names, not a single string "
+            f"(got {include!r}; use [{include!r}])"
+        )
+        raise ValidationError(message, detail=message)
+    for field in include:
+        if field not in allowed:
+            valid = ", ".join(repr(f) for f in allowed)
+            message = (
+                f"{field!r} is not a valid include field for {method}(). "
+                f"Valid values: {valid}.{hint}"
+            )
+            # detail mirrors the service's 422 so callers see one error shape.
+            raise ValidationError(message, detail=message)
+
+
+def validate_query_include(include: Optional[List[str]]) -> None:
+    if include is not None:
+        _check_include(
+            include,
+            _QUERY_INCLUDE,
+            "query",
+            ' To retrieve contents, call index.get(ids, include=["contents"])'
+            " after querying.",
+        )
+
+
+def validate_get_include(include: List[str]) -> None:
+    _check_include(include, _GET_INCLUDE, "get")
+
+
 def _query_options(
     top_k: Optional[int],
     n_probes: Optional[int],
@@ -269,6 +309,7 @@ def _query_options(
     rerank_mult: Optional[int],
 ) -> Dict[str, Any]:
     """The optional query knobs that were set, so None is never serialized."""
+    validate_query_include(include)
     kwargs: Dict[str, Any] = {}
     if top_k is not None:
         kwargs["top_k"] = top_k
@@ -343,11 +384,14 @@ def build_query_request(
     return models.Request(query_request)
 
 
-def _parse_query_item(item: Dict[str, Any], include_metadata: bool) -> Dict[str, Any]:
+def _parse_query_item(
+    item: Dict[str, Any], include_distance: bool, include_metadata: bool
+) -> Dict[str, Any]:
     result_item = {"id": item["id"]}
-    if item.get("distance") is not None:
+    if include_distance and item.get("distance") is not None:
         result_item["distance"] = item["distance"]
-    # Hybrid (text=...) results carry a fused score instead of a distance.
+    # Hybrid (text=...) results carry a fused score instead of a distance, and
+    # it is returned regardless of include.
     if item.get("score") is not None:
         result_item["score"] = item["score"]
     if "metadata" in item and include_metadata:
@@ -360,20 +404,26 @@ def parse_query_response(
 ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
     """Turn the raw JSON body of the query endpoint into plain result dicts.
 
-    ``include=None`` keeps everything the server returned; otherwise metadata
-    is only kept when it was asked for.
+    ``include=None`` keeps everything the server returned; otherwise distance
+    and metadata are only kept when they were asked for.
     """
-    include_metadata = include is None or "metadata" in set(include)
+    include_distance = include is None or "distance" in include
+    include_metadata = include is None or "metadata" in include
 
     if "results" not in response_json:
         return []
     results = response_json["results"]
     if results and isinstance(results[0], list):
         return [
-            [_parse_query_item(item, include_metadata) for item in query_result]
+            [
+                _parse_query_item(item, include_distance, include_metadata)
+                for item in query_result
+            ]
             for query_result in results
         ]
-    return [_parse_query_item(item, include_metadata) for item in results]
+    return [
+        _parse_query_item(item, include_distance, include_metadata) for item in results
+    ]
 
 
 def build_binary_query_request(

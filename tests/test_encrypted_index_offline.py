@@ -182,5 +182,74 @@ class TestArgumentErrorsAreTyped(unittest.TestCase):
             index.query_metadata(order_by={"a": 1, "b": -1})
 
 
+class TestQueryInclude(unittest.TestCase):
+    def _query(self, results, include):
+        api = MagicMock()
+        raw = api.query_vectors_v1_vectors_query_post_without_preload_content
+        raw.return_value = SimpleNamespace(
+            status=200, data=json.dumps({"results": results}).encode("utf-8")
+        )
+        return _index(api).query(query_vectors=[0.0, 1.0], top_k=1, include=include)
+
+    def test_distance_dropped_when_not_included(self):
+        results = [{"id": "a", "distance": 0.1, "metadata": {"k": 1}}]
+        self.assertEqual(self._query(results, []), [{"id": "a"}])
+        self.assertEqual(
+            self._query(results, ["metadata"]), [{"id": "a", "metadata": {"k": 1}}]
+        )
+
+    def test_distance_kept_when_included_or_include_omitted(self):
+        results = [{"id": "a", "distance": 0.1}]
+        expected = [{"id": "a", "distance": 0.1}]
+        self.assertEqual(self._query(results, ["distance"]), expected)
+        self.assertEqual(self._query(results, None), expected)
+
+    def test_hybrid_score_ignores_include(self):
+        results = [{"id": "a", "score": 0.7}]
+        self.assertEqual(self._query(results, []), [{"id": "a", "score": 0.7}])
+
+
+class TestIncludeValidation(unittest.TestCase):
+    """A bad ``include`` raises ``ValidationError`` with the service's wording
+    before any request is sent."""
+
+    def test_query_rejects_unsupported_values(self):
+        api = MagicMock()
+        index = _index(api)
+        for include in (["contents"], ["vector"], ["score"], ["distance", "bananas"]):
+            for call in (
+                lambda: index.query(query_vectors=[0.0, 1.0], include=include),
+                lambda: index.query(query_vectors=[[0.0, 1.0]], include=include),
+                lambda: index.query_binary(np.zeros(2, np.float32), include=include),
+            ):
+                with self.subTest(include=include):
+                    with self.assertRaisesRegex(
+                        ValidationError,
+                        r"Valid values: 'distance', 'metadata'\. .*index\.get\(",
+                    ):
+                        call()
+        self.assertEqual(api.method_calls, [])
+
+    def test_get_rejects_unsupported_values(self):
+        api = MagicMock()
+        index = _index(api)
+        for include in (["distance"], ["score"], ["Contents"]):
+            with self.subTest(include=include):
+                with self.assertRaisesRegex(
+                    ValidationError, r"Valid values: 'vector', 'contents', 'metadata'"
+                ):
+                    index.get(["a"], include=include)
+        self.assertEqual(api.method_calls, [])
+
+    def test_bare_string_rejected(self):
+        api = MagicMock()
+        index = _index(api)
+        with self.assertRaisesRegex(ValidationError, "not a single string"):
+            index.get(["a"], include="metadata")
+        with self.assertRaisesRegex(ValidationError, "not a single string"):
+            index.query(query_vectors=[0.0, 1.0], include="distance")
+        self.assertEqual(api.method_calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()
