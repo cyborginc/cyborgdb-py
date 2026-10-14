@@ -182,5 +182,32 @@ class TestArgumentErrorsAreTyped(unittest.TestCase):
             index.query_metadata(order_by={"a": 1, "b": -1})
 
 
+class TestQueryInclude(unittest.TestCase):
+    def _query(self, results, include):
+        api = MagicMock()
+        raw = api.query_vectors_v1_vectors_query_post_without_preload_content
+        raw.return_value = SimpleNamespace(
+            status=200, data=json.dumps({"results": results}).encode("utf-8")
+        )
+        return _index(api).query(query_vectors=[0.0, 1.0], top_k=1, include=include)
+
+    def test_distance_dropped_when_not_included(self):
+        results = [{"id": "a", "distance": 0.1, "metadata": {"k": 1}}]
+        self.assertEqual(self._query(results, []), [{"id": "a"}])
+        self.assertEqual(
+            self._query(results, ["metadata"]), [{"id": "a", "metadata": {"k": 1}}]
+        )
+
+    def test_distance_kept_when_included_or_include_omitted(self):
+        results = [{"id": "a", "distance": 0.1}]
+        expected = [{"id": "a", "distance": 0.1}]
+        self.assertEqual(self._query(results, ["distance"]), expected)
+        self.assertEqual(self._query(results, None), expected)
+
+    def test_hybrid_score_ignores_include(self):
+        results = [{"id": "a", "score": 0.7}]
+        self.assertEqual(self._query(results, []), [{"id": "a", "score": 0.7}])
+
+
 if __name__ == "__main__":
     unittest.main()

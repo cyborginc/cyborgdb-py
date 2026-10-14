@@ -343,11 +343,14 @@ def build_query_request(
     return models.Request(query_request)
 
 
-def _parse_query_item(item: Dict[str, Any], include_metadata: bool) -> Dict[str, Any]:
+def _parse_query_item(
+    item: Dict[str, Any], include_distance: bool, include_metadata: bool
+) -> Dict[str, Any]:
     result_item = {"id": item["id"]}
-    if item.get("distance") is not None:
+    if include_distance and item.get("distance") is not None:
         result_item["distance"] = item["distance"]
-    # Hybrid (text=...) results carry a fused score instead of a distance.
+    # Hybrid (text=...) results carry a fused score instead of a distance, and
+    # it is returned regardless of include.
     if item.get("score") is not None:
         result_item["score"] = item["score"]
     if "metadata" in item and include_metadata:
@@ -360,20 +363,26 @@ def parse_query_response(
 ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
     """Turn the raw JSON body of the query endpoint into plain result dicts.
 
-    ``include=None`` keeps everything the server returned; otherwise metadata
-    is only kept when it was asked for.
+    ``include=None`` keeps everything the server returned; otherwise distance
+    and metadata are only kept when they were asked for.
     """
-    include_metadata = include is None or "metadata" in set(include)
+    include_distance = include is None or "distance" in include
+    include_metadata = include is None or "metadata" in include
 
     if "results" not in response_json:
         return []
     results = response_json["results"]
     if results and isinstance(results[0], list):
         return [
-            [_parse_query_item(item, include_metadata) for item in query_result]
+            [
+                _parse_query_item(item, include_distance, include_metadata)
+                for item in query_result
+            ]
             for query_result in results
         ]
-    return [_parse_query_item(item, include_metadata) for item in results]
+    return [
+        _parse_query_item(item, include_distance, include_metadata) for item in results
+    ]
 
 
 def build_binary_query_request(

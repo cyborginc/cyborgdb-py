@@ -267,14 +267,16 @@ class AsyncEncryptedIndex:
 
         Args:
             ids: IDs to retrieve.
-            include: Item fields to return. Can include 'vector', 'contents', and 'metadata'.
-                Default is ['vector', 'contents', 'metadata'].
+            include: Item fields to return besides ``id``. Allowed values are
+                ``"vector"``, ``"contents"`` and ``"metadata"``; any other value
+                is rejected with a ``ValidationError``. Default is all three.
 
         Returns:
             A list of dictionaries representing the items with the requested fields.
             IDs will always be included in the returned items.
 
         Raises:
+            ValidationError: If ``include`` contains an unsupported value.
             CyborgDBError: If the items could not be retrieved or decrypted.
         """
         try:
@@ -488,10 +490,26 @@ class AsyncEncryptedIndex:
         Passing ``text`` turns this into a hybrid (BM25 + vector) query against
         an index with at least one ``full_text`` field; a query vector is still
         required. Hybrid results carry a fused ``score`` (larger = more
-        relevant) instead of ``distance``. The remaining knobs tune the text
-        leg and its fusion with the vector leg:
+        relevant) instead of ``distance``. The ``text_*``, ``require_all_terms``,
+        ``alpha``, ``rrf_k`` and ``window_mult`` arguments tune the text leg and
+        its fusion with the vector leg.
 
         Args:
+            query_vectors: A single query vector (1D list or array) or a batch
+                (2D list or array). NumPy input is sent in binary format via
+                :meth:`query_binary`. May be omitted when ``query_contents`` is
+                given.
+            query_contents: Text to embed with the index's embedding model and
+                query with, instead of ``query_vectors``.
+            top_k: Number of nearest neighbors to return for each query.
+            n_probes: Number of lists to probe during the query.
+            filters: Dictionary specifying metadata filters.
+            include: Result fields to return besides ``id``. Allowed values are
+                ``"distance"`` and ``"metadata"``; any other value is rejected
+                with a ``ValidationError``. Omitted means every field the
+                service returns. Hybrid ``score`` is always returned.
+            greedy: Whether to use greedy search.
+            rerank_mult: Multiplier for stage 1 retrieval in reranking indexes.
             text: Query text for the BM25 leg. Omitted/empty leaves the query
                 text-free (pure vector search).
             text_fields: ``full_text`` fields the text leg searches; omitted
@@ -505,6 +523,16 @@ class AsyncEncryptedIndex:
             rrf_k: RRF rank-smoothing constant (> 0; omitted means 60).
             window_mult: Per-leg candidate depth as a multiple of ``top_k``
                 (>= 1; omitted means 3).
+
+        Returns:
+            For a single query: List of result dictionaries.
+            For a batch query: List of lists of result dictionaries, one list
+            per query vector.
+
+        Raises:
+            ValidationError: If ``query_vectors`` is malformed, or the service
+                rejects a parameter (e.g. an unsupported ``include`` value).
+            CyborgDBError: If the service rejects the query.
         """
         hybrid_kwargs = hybrid_query_kwargs(
             text,
@@ -612,7 +640,10 @@ class AsyncEncryptedIndex:
             top_k: Number of nearest neighbors to return for each query.
             n_probes: Number of lists to probe during the query.
             filters: Dictionary specifying metadata filters.
-            include: List of fields to include in the response.
+            include: Result fields to return besides ``id``. Allowed values are
+                ``"distance"`` and ``"metadata"``; any other value is rejected
+                with a ``ValidationError``. Omitted means every field the
+                service returns. Hybrid ``score`` is always returned.
             greedy: Whether to use greedy search.
             rerank_mult: Multiplier for stage 1 retrieval in reranking indexes.
             text: Query text for a BM25 leg (hybrid search). See
@@ -630,7 +661,8 @@ class AsyncEncryptedIndex:
 
         Raises:
             ValidationError: If ``query_vectors`` is not a 1D or 2D numpy array
-                (a wrong type is also a ``TypeError``).
+                (a wrong type is also a ``TypeError``), or the service rejects
+                a parameter (e.g. an unsupported ``include`` value).
             CyborgDBError: If the service rejects the query.
         """
         request, is_single_query = build_binary_query_request(
