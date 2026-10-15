@@ -1,4 +1,5 @@
-"""cyborgdb-tests adapter for the cyborgdb Python SDK.
+"""@file adapter.py
+@brief cyborgdb-tests adapter for the cyborgdb Python SDK.
 
 Reads JSON-RPC requests on fd 3 and writes responses on fd 4 (see cyborgdb-tests
 ADAPTERS.md and ADAPTER-PY-SDK.md). Maps each op to one call on the installed
@@ -40,7 +41,7 @@ CODE_PARSE = -32700
 VARIANTS = ("json", "binary", "async")
 VARIANT = os.environ.get("CYBORGDB_TESTS_VARIANT") or "json"
 
-TYPED = {
+TYPED_TAGS = {
     "$f32",
     "$bytes",
     "$i64",
@@ -51,166 +52,246 @@ TYPED = {
     "$literal",
 }
 
+TENSOR_DTYPES = {
+    "f32": np.float32,
+    "f16": np.float16,
+    "i32": np.int32,
+    "i64": np.int64,
+    "u8": np.uint8,
+}
+
 
 class Unsupported(Exception):
-    pass
+    """@brief The SDK can't express the request; reported as -32601."""
 
 
 class BadParams(Exception):
-    pass
+    """@brief The request itself is malformed; reported as -32602."""
 
 
 class SdkError(Exception):
-    """An exception raised by a cyborgdb call: the only failure that gets a kind."""
+    """@brief An exception raised by a cyborgdb call.
 
-    def __init__(self, native):
-        super().__init__(str(native))
-        self.native = native
-
-
-_loop = None
-
-
-def sdk(f, *args, **kwargs):
-    """Calls into cyborgdb, awaiting the result on the async client.
-
-    Anything raised here is the product's answer; everything else is the adapter's.
+    The only failure that gets an error kind.
     """
-    global _loop
+
+    def __init__(self, native_error):
+        """@brief Wraps the SDK's exception.
+
+        @param native_error The exception the SDK raised.
+        """
+        super().__init__(str(native_error))
+        self.native_error = native_error
+
+
+_event_loop = None
+
+
+def sdk(sdk_function, *args, **kwargs):
+    """@brief Calls into cyborgdb, awaiting the result on the async client.
+
+    Anything raised here is the product's answer; everything else is the
+    adapter's.
+
+    @param sdk_function The SDK method or constructor to call.
+    @param args Positional arguments forwarded unchanged.
+    @param kwargs Keyword arguments forwarded unchanged.
+    @return The SDK's result, awaited if it is awaitable.
+    @throws SdkError Whatever the SDK raised, wrapped.
+    """
+    global _event_loop
     try:
-        result = f(*args, **kwargs)
+        result = sdk_function(*args, **kwargs)
         if inspect.isawaitable(result):
-            if _loop is None:
+            if _event_loop is None:
                 # One loop for the whole run: the async client's HTTP session
                 # is bound to the loop it was first used on.
-                _loop = asyncio.new_event_loop()
-            result = _loop.run_until_complete(result)
+                _event_loop = asyncio.new_event_loop()
+            result = _event_loop.run_until_complete(result)
         return result
-    except Exception as e:  # noqa: BLE001
-        raise SdkError(e) from e
+    except Exception as native_error:  # noqa: BLE001
+        raise SdkError(native_error) from native_error
 
 
 # ---------- typed values ----------
 
 
-def decode(v):
-    """Wire value -> native Python. Only known single-key tags are typed."""
-    if isinstance(v, list):
-        return [decode(x) for x in v]
-    if isinstance(v, dict):
-        if len(v) == 1:
-            ((k, x),) = v.items()
-            if k in TYPED:
-                return decode_typed(k, x)
-        return {k: decode(x) for k, x in v.items()}
-    return v
+def decode(wire_value):
+    """@brief Converts a wire value to native Python.
+
+    Only a single-key object whose key is a known tag is typed; any other `$`
+    key is data.
+
+    @param wire_value A JSON-decoded param value.
+    @return The native value.
+    """
+    if isinstance(wire_value, list):
+        return [decode(element) for element in wire_value]
+    if isinstance(wire_value, dict):
+        if len(wire_value) == 1:
+            ((tag, payload),) = wire_value.items()
+            if tag in TYPED_TAGS:
+                return decode_typed(tag, payload)
+        return {key: decode(value) for key, value in wire_value.items()}
+    return wire_value
 
 
-def decode_typed(tag, x):
+def decode_typed(tag, payload):
+    """@brief Decodes one typed value.
+
+    @param tag The type tag, e.g. `$f32`.
+    @param payload The value under the tag.
+    @return The native value.
+    @throws BadParams The tag is unknown.
+    """
     if tag == "$literal":
-        return x
+        return payload
     if tag == "$bytes":
-        return base64.b64decode(x, validate=True)
+        return base64.b64decode(payload, validate=True)
     if tag == "$f32":
         # Plain lists, not numpy: the SDK sends a numpy array down the binary
         # path, so the ops pick the array type per variant.
-        if len(x) > 0 and isinstance(x[0], list):
-            return [[num(e) for e in row] for row in x]
-        return [num(e) for e in x]
+        if len(payload) > 0 and isinstance(payload[0], list):
+            return [[decode_number(number) for number in row] for row in payload]
+        return [decode_number(number) for number in payload]
     if tag == "$float":
-        return {"nan": math.nan, "inf": math.inf, "-inf": -math.inf}[x]
+        return {"nan": math.nan, "inf": math.inf, "-inf": -math.inf}[payload]
     if tag == "$i64":
-        return int(x)
+        return int(payload)
     if tag == "$datetime":
-        return dt.datetime.fromisoformat(x.replace("Z", "+00:00"))
+        return dt.datetime.fromisoformat(payload.replace("Z", "+00:00"))
     if tag == "$range":
-        return [str(i) for i in range(int(x[0]), int(x[1]))]
+        start, stop = int(payload[0]), int(payload[1])
+        return [str(i) for i in range(start, stop)]
     if tag == "$tensor":
-        shape = tuple(int(s) for s in x["shape"])
-        dtype = {
-            "f32": np.float32,
-            "f16": np.float16,
-            "i32": np.int32,
-            "i64": np.int64,
-            "u8": np.uint8,
-        }[x["dtype"]]
+        shape = tuple(int(size) for size in payload["shape"])
+        dtype = TENSOR_DTYPES[payload["dtype"]]
         if 0 in shape:  # mmap can't map zero bytes
             return np.zeros(shape, dtype=dtype)
         return np.memmap(
-            x["path"], dtype=dtype, mode="r", offset=int(x["offset"]), shape=shape
+            payload["path"],
+            dtype=dtype,
+            mode="r",
+            offset=int(payload["offset"]),
+            shape=shape,
         )
     raise BadParams(f"unknown typed value {tag}")
 
 
-def num(e):
-    if isinstance(e, dict) and "$float" in e:
-        return decode_typed("$float", e["$float"])
-    return e
+def decode_number(number):
+    """@brief Decodes one vector element, which may be a `$float` tag.
+
+    @param number A JSON number or a `{"$float": ...}` object.
+    @return The number.
+    """
+    if isinstance(number, dict) and "$float" in number:
+        return decode_typed("$float", number["$float"])
+    return number
 
 
-def encode(v):
-    """Native result -> wire value."""
-    if isinstance(v, (bytes, bytearray, memoryview)):
-        return {"$bytes": base64.b64encode(bytes(v)).decode()}
-    if isinstance(v, np.ndarray):
-        if v.ndim == 1:
-            return {"$f32": [encode_float(float(f)) for f in v]}
-        return {"$f32": [[encode_float(float(f)) for f in r] for r in v]}
-    if isinstance(v, dict):
-        return {k: encode(x) for k, x in v.items()}
-    if isinstance(v, (list, tuple)):
-        return [encode(x) for x in v]
-    if isinstance(v, bool) or v is None or isinstance(v, str):
-        return v
-    if isinstance(v, (int, np.integer)):
-        i = int(v)
-        return i if abs(i) <= 2**53 else {"$i64": str(i)}
-    if isinstance(v, (float, np.floating)):
-        return encode_float(float(v))
-    return v
+def encode(native_value):
+    """@brief Converts a native result to a wire value.
+
+    @param native_value A value returned by the SDK.
+    @return The JSON-encodable wire value.
+    """
+    if isinstance(native_value, (bytes, bytearray, memoryview)):
+        return {"$bytes": base64.b64encode(bytes(native_value)).decode()}
+    if isinstance(native_value, np.ndarray):
+        if native_value.ndim == 1:
+            return encode_f32(native_value)
+        return {"$f32": [[encode_float(float(f)) for f in row] for row in native_value]}
+    if isinstance(native_value, dict):
+        return {key: encode(value) for key, value in native_value.items()}
+    if isinstance(native_value, (list, tuple)):
+        return [encode(element) for element in native_value]
+    if native_value is None or isinstance(native_value, (bool, str)):
+        return native_value
+    if isinstance(native_value, (int, np.integer)):
+        integer = int(native_value)
+        return integer if abs(integer) <= 2**53 else {"$i64": str(integer)}
+    if isinstance(native_value, (float, np.floating)):
+        return encode_float(float(native_value))
+    return native_value
 
 
-def encode_float(f):
-    if math.isnan(f):
+def encode_float(number):
+    """@brief Encodes a float, tagging the values JSON can't carry.
+
+    @param number A float.
+    @return The float, or a `$float` object for nan and infinities.
+    """
+    if math.isnan(number):
         return {"$float": "nan"}
-    if math.isinf(f):
-        return {"$float": "inf" if f > 0 else "-inf"}
-    return f
+    if math.isinf(number):
+        return {"$float": "inf" if number > 0 else "-inf"}
+    return number
 
 
-def f32(v):
-    return {"$f32": [encode_float(float(x)) for x in v]}
+def encode_f32(vector):
+    """@brief Encodes a vector as `$f32`.
+
+    @param vector A sequence of floats.
+    @return A `{"$f32": [...]}` object.
+    """
+    return {"$f32": [encode_float(float(element)) for element in vector]}
 
 
 # ---------- handles ----------
 
-clients = {}  # name -> Client or AsyncClient
-indexes = {}  # name -> EncryptedIndex or AsyncEncryptedIndex
+client_handles = {}  # handle name -> Client or AsyncClient
+index_handles = {}  # handle name -> EncryptedIndex or AsyncEncryptedIndex
 
 
-def need(p, k):
-    if k not in p:
-        raise BadParams(f"missing {k}")
-    return p[k]
+def require_param(params, name):
+    """@brief Returns a param the protocol requires.
+
+    @param params The decoded request params.
+    @param name The param name.
+    @return The param's value.
+    @throws BadParams The param is missing.
+    """
+    if name not in params:
+        raise BadParams(f"missing {name}")
+    return params[name]
 
 
-def client_of(p):
-    name = need(p, "client")
-    if name not in clients:
-        raise BadParams(f"unknown client handle {name!r}")
-    return clients[name]
+def lookup_client(params):
+    """@brief Returns the client named by the `client` param.
+
+    @param params The decoded request params.
+    @return The bound client.
+    @throws BadParams No client is bound to that name.
+    """
+    handle_name = require_param(params, "client")
+    if handle_name not in client_handles:
+        raise BadParams(f"unknown client handle {handle_name!r}")
+    return client_handles[handle_name]
 
 
-def index_of(p):
-    name = need(p, "index")
-    if name not in indexes:
-        raise BadParams(f"unknown index handle {name!r}")
-    return indexes[name]
+def lookup_index(params):
+    """@brief Returns the index named by the `index` param.
+
+    @param params The decoded request params.
+    @return The bound index.
+    @throws BadParams No index is bound to that name.
+    """
+    handle_name = require_param(params, "index")
+    if handle_name not in index_handles:
+        raise BadParams(f"unknown index handle {handle_name!r}")
+    return index_handles[handle_name]
 
 
-def pick(p, *names, rename=None):
+def pick_params(params, *names, rename=None):
+    """@brief Selects the params a spec set, leaving omitted ones out.
+
+    @param params The decoded request params.
+    @param names The param names to forward, if present.
+    @param rename Optional map from spec name to SDK keyword name.
+    @return Keyword arguments for the SDK call.
+    """
     rename = rename or {}
-    return {rename.get(n, n): p[n] for n in names if n in p}
+    return {rename.get(name, name): params[name] for name in names if name in params}
 
 
 # ---------- ops ----------
@@ -219,6 +300,10 @@ OPS = {}
 
 
 def capabilities():
+    """@brief Lists the capabilities this adapter implements.
+
+    @return Capability names from ops.yaml.
+    """
     return []
 
 
@@ -242,33 +327,54 @@ STATUS_KINDS = {
 }
 
 
-def kind_of(e):
-    if isinstance(e, TransportError):
+def kind_of(native_error):
+    """@brief Maps an SDK exception to an error kind from errors.yaml.
+
+    Uses only the exception type and status code, never the message.
+
+    @param native_error The exception the SDK raised.
+    @return The error kind.
+    """
+    if isinstance(native_error, TransportError):
         return "transport"
-    status = getattr(e, "status_code", None)
-    if status is None and isinstance(e, ValidationError):
+    status_code = getattr(native_error, "status_code", None)
+    if status_code is None and isinstance(native_error, ValidationError):
         return "invalid_argument"
-    return STATUS_KINDS.get(status, "internal")
+    return STATUS_KINDS.get(status_code, "internal")
 
 
-def native_of(e):
-    status = getattr(e, "status_code", None)
-    name = type(e).__name__
-    return name if status is None else f"{name} {status}"
+def native_description(native_error):
+    """@brief Describes an SDK exception for `data.native`.
+
+    @param native_error The exception the SDK raised.
+    @return The class name, followed by the status code when there is one.
+    """
+    status_code = getattr(native_error, "status_code", None)
+    class_name = type(native_error).__name__
+    return class_name if status_code is None else f"{class_name} {status_code}"
 
 
 # ---------- dispatch ----------
 
 
 def sdk_version():
+    """@brief Returns the installed cyborgdb version.
+
+    @return The package version.
+    """
     try:
         return version("cyborgdb")
     except PackageNotFoundError:
         return getattr(cyborgdb, "__version__", "unknown")
 
 
-def handle(req):
-    method = req.get("method")
+def handle_request(request):
+    """@brief Runs one request and builds its response body.
+
+    @param request The decoded JSON-RPC request.
+    @return A dict with either `result` or `error`.
+    """
+    method = request.get("method")
     if method == "hello":
         return {
             "result": {
@@ -278,8 +384,8 @@ def handle(req):
                 "capabilities": capabilities(),
             }
         }
-    fn = OPS.get(method)
-    if fn is None:
+    op_function = OPS.get(method)
+    if op_function is None:
         return {
             "error": {
                 "code": CODE_UNSUPPORTED,
@@ -288,28 +394,31 @@ def handle(req):
         }
     # A decoding failure never reached the SDK, so it is never a product error.
     try:
-        params = decode(req.get("params") or {})
-    except Unsupported as e:
-        return {"error": {"code": CODE_UNSUPPORTED, "message": str(e)}}
-    except Exception as e:  # noqa: BLE001
+        params = decode(request.get("params") or {})
+    except Unsupported as error:
+        return {"error": {"code": CODE_UNSUPPORTED, "message": str(error)}}
+    except Exception as error:  # noqa: BLE001
         return {
             "error": {
                 "code": CODE_INVALID_PARAMS,
-                "message": f"could not decode params: {e}",
+                "message": f"could not decode params: {error}",
             }
         }
     try:
-        return {"result": fn(params)}
-    except Unsupported as e:
-        return {"error": {"code": CODE_UNSUPPORTED, "message": str(e)}}
-    except BadParams as e:
-        return {"error": {"code": CODE_INVALID_PARAMS, "message": str(e)}}
-    except SdkError as e:
+        return {"result": op_function(params)}
+    except Unsupported as error:
+        return {"error": {"code": CODE_UNSUPPORTED, "message": str(error)}}
+    except BadParams as error:
+        return {"error": {"code": CODE_INVALID_PARAMS, "message": str(error)}}
+    except SdkError as error:
         return {
             "error": {
                 "code": CODE_OP_FAILED,
-                "message": str(e.native),
-                "data": {"kind": kind_of(e.native), "native": native_of(e.native)},
+                "message": str(error.native_error),
+                "data": {
+                    "kind": kind_of(error.native_error),
+                    "native": native_description(error.native_error),
+                },
             }
         }
     except Exception:  # noqa: BLE001 - the adapter's own bug, never a product error
@@ -317,6 +426,12 @@ def handle(req):
 
 
 def adapter_error():
+    """@brief Builds the response for a bug in the adapter itself.
+
+    Must be called from an `except` block.
+
+    @return A -32603 error carrying the traceback.
+    """
     return {
         "error": {
             "code": CODE_ADAPTER,
@@ -326,32 +441,33 @@ def adapter_error():
 
 
 def main():
+    """@brief Serves requests from fd 3 until the driver closes it."""
     if VARIANT not in VARIANTS:
         sys.exit(f"adapter: CYBORGDB_TESTS_VARIANT={VARIANT!r}, want one of {VARIANTS}")
     try:
-        rin = os.fdopen(3, "rb", buffering=0)
-        wout = os.fdopen(4, "wb", buffering=0)
+        requests_in = os.fdopen(3, "rb", buffering=0)
+        responses_out = os.fdopen(4, "wb", buffering=0)
     except OSError:
         sys.exit("adapter: fd 3/4 not open; run under the cyborgdb-tests driver")
-    for line in rin:
+    for line in requests_in:
         line = line.strip()
         if not line:
             continue
         try:
-            req = json.loads(line)
-        except ValueError as e:
-            resp = {
+            request = json.loads(line)
+        except ValueError as error:
+            response = {
                 "jsonrpc": "2.0",
                 "id": None,
-                "error": {"code": CODE_PARSE, "message": str(e)},
+                "error": {"code": CODE_PARSE, "message": str(error)},
             }
         else:
-            resp = {"jsonrpc": "2.0", "id": req.get("id")}
+            response = {"jsonrpc": "2.0", "id": request.get("id")}
             try:
-                resp.update(handle(req))
+                response.update(handle_request(request))
             except Exception:  # noqa: BLE001 - adapter bug; report it, keep serving
-                resp.update(adapter_error())
-        wout.write(json.dumps(resp, allow_nan=False).encode() + b"\n")
+                response.update(adapter_error())
+        responses_out.write(json.dumps(response, allow_nan=False).encode() + b"\n")
 
 
 if __name__ == "__main__":
