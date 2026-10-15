@@ -840,11 +840,17 @@ STATUS_KINDS = {
 def kind_of(native_error):
     """@brief Maps an SDK exception to an error kind from errors.yaml.
 
-    Uses only the exception type and status code, never the message.
+    Uses the SDK's own `kind` once it exposes one (decided 2026-10-13, SDK.md
+    area 14); until then, the exception type and status code. Never the
+    message. An exception that isn't a typed SDK error is `internal`, so it
+    always fails the step.
 
     @param native_error The exception the SDK raised.
     @return The error kind.
     """
+    native_kind = getattr(native_error, "kind", None)
+    if isinstance(native_kind, str) and native_kind:
+        return native_kind
     if isinstance(native_error, TransportError):
         return "transport"
     status_code = getattr(native_error, "status_code", None)
