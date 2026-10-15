@@ -72,3 +72,5 @@ datasets
 venv
 
 .env.local
+
+PLAN.md
