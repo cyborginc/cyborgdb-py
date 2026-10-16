@@ -1,0 +1,263 @@
+name: Conformance (shared test suite)
+permissions:
+  contents: read
+
+# Runs the shared CyborgDB test suite (cyborginc/cyborgdb-tests) through the SDK,
+# via tests/conformance/adapter.py, once per SDK code path. Nightly and alert-only:
+# not a required check. Promote to pull requests after 14 consecutive green nights
+# (cyborgdb-core#2139). Plan: tests/conformance/PLAN.md.
+#
+# THIS REPO IS PUBLIC, and so are its Actions logs and artifacts. cyborgdb-tests is
+# internal: its case ids, inputs, expected values and failure messages must never
+# reach the log. Every step that can print them writes to $PRIVATE_DIR instead, the
+# log shows only counts, and $PRIVATE_DIR is uploaded encrypted to the keys in
+# .github/conformance-recipients.txt. When editing: no echo/cat of those files, no
+# `set -x`, no plain artifacts, and don't re-run with debug logging.
+#
+# Reading a run's results (needs the team key from 1Password):
+#   gh run download <run-id> -n conformance-<variant>
+#   age -d -i <key file> conformance-<variant>.tar.gz.age | tar xz
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: conformance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  conformance:
+    name: conformance (${{ matrix.variant }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [json, binary, async]
+    env:
+      # Cases left out of every run, space-separated. Remove each once its bug is fixed.
+      # query.exact.top_k_zero_rejected: a query with top_k=0 segfaults the service,
+      # which fails every case after it (tests/conformance/FINDINGS.md, section 1).
+      SKIP_CASES: query.exact.top_k_zero_rejected
+      PRIVATE_DIR: ${{ github.workspace }}/../conformance-private
+
+    steps:
+      - name: Checkout SDK code
+        uses: actions/checkout@v7
+
+      - name: Check encryption keys
+        run: |
+          mkdir -p "$PRIVATE_DIR"
+          if ! grep -q '^age1' .github/conformance-recipients.txt; then
+            echo "::error::.github/conformance-recipients.txt has no age public key; results could not be kept private"
+            exit 1
+          fi
+          sudo apt-get install -y -qq age > /dev/null
+
+      - name: cyborgdb-tests ref
+        id: tests-ref
+        run: echo "ref=$(tr -d '[:space:]' < .cyborgdb-tests-ref)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout cyborgdb-tests
+        uses: actions/checkout@v7
+        with:
+          repository: cyborginc/cyborgdb-tests
+          ref: ${{ steps.tests-ref.outputs.ref }}
+          token: ${{ secrets.CYBORG_GITHUB_TOKEN_CI }}
+          path: cyborgdb-tests
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: cyborgdb-tests/go.mod
+          cache-dependency-path: cyborgdb-tests/go.sum
+
+      # Compiler errors name cyborgdb-tests files, so they go to the private log.
+      - name: Build the test runner
+        working-directory: cyborgdb-tests
+        run: |
+          go build -o "${RUNNER_TEMP}/cyborgdb-tests" ./cmd/cyborgdb-tests > "$PRIVATE_DIR/build.log" 2>&1 \
+            || { echo "::error::building the test runner failed; see build.log in the encrypted artifact"; exit 1; }
+
+      - name: Cache datasets
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/cyborgdb-tests/datasets
+          key: cyborgdb-tests-datasets-v1
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      # Service setup below matches test.yml's RBAC pass: authentication on,
+      # with the KMS registry slots for the kms_provider cases.
+      - name: Load secrets from 1Password
+        uses: 1password/load-secrets-action@v5
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_TOKEN }}
+          CYBORGDB_API_KEY: "op://CyborgDB/CyborgDB Dev/CYBORGDB_API_KEY"
+          CA_AWS_ACCOUNT_ID: "op://CyborgDB/CyborgDB Dev/CA_AWS_ACCOUNT_ID"
+
+      - name: Load BYOK secrets from 1Password
+        id: byok
+        uses: 1password/load-secrets-action@v5
+        with:
+          export-env: false
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_TOKEN }}
+          BYOK_AWS_ACCESS_KEY_ID: "op://CyborgDB/CyborgDB Dev/BYOK_AWS_ACCESS_KEY_ID"
+          BYOK_AWS_SECRET_ACCESS_KEY: "op://CyborgDB/CyborgDB Dev/BYOK_AWS_SECRET_ACCESS_KEY"
+          CYBORGDB_BYOK_ROLE_ARN: "op://CyborgDB/CyborgDB Dev/CYBORGDB_BYOK_ROLE_ARN"
+          CYBORGDB_BYOK_EXTERNAL_ID: "op://CyborgDB/CyborgDB Dev/CYBORGDB_BYOK_EXTERNAL_ID"
+
+      - name: Get CodeArtifact pip index URL
+        id: ca-url
+        uses: ./.github/workflows/actions/codeartifact-pip-url
+        with:
+          aws-account-id: ${{ env.CA_AWS_ACCOUNT_ID }}
+          role-to-assume: arn:aws:iam::${{ env.CA_AWS_ACCOUNT_ID }}:role/CyborgGitHubActionsS3Role
+          codeartifact-repository: cyborg-dev
+
+      - name: Export PIP_INDEX_URL
+        run: echo "PIP_INDEX_URL=${{ steps.ca-url.outputs.pip-index-url }}" >> "$GITHUB_ENV"
+
+      # Same registry as test.yml's "Write KMS registry config"; every sensitive
+      # value is a ${VAR} placeholder the service expands at startup.
+      - name: Write KMS registry config
+        run: |
+          set -euo pipefail
+          cat > "${{ runner.temp }}/cyborgdb.yaml" <<'YAML'
+          kms:
+            registry:
+              aws-secrets-self-test:
+                provider:    aws
+                key_id:      ${CYBORGDB_SECRETS_KEY_ID:-CYBORGDB_SERVICE_KEY1}
+                region:      ${CYBORGDB_AWS_REGION:-us-east-1}
+                role_arn:    ${CYBORGDB_BYOK_ROLE_ARN}
+                external_id: ${CYBORGDB_BYOK_EXTERNAL_ID}
+                role_session_name: cyborgdb-secrets-self-test
+              aws-kms-self-test:
+                provider:    aws-kms
+                key_id:      ${CYBORGDB_KMS_KEY_ID:-alias/CYBORGDB_SERVICE_KEY}
+                region:      ${CYBORGDB_AWS_REGION:-us-east-1}
+                role_arn:    ${CYBORGDB_BYOK_ROLE_ARN}
+                external_id: ${CYBORGDB_BYOK_EXTERNAL_ID}
+                role_session_name: cyborgdb-kms-self-test
+          YAML
+
+      - name: Install the service and the SDK
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install "cyborgdb-service[embeddings,kms-aws]" --pre
+          # Not editable: the adapter must test what users install.
+          pip install '.[langchain]' pyyaml
+
+      # The service log records index names and request errors from the suite, so it
+      # stays in the private directory, even when startup fails.
+      - name: Start the service
+        env:
+          CYBORGDB_SERVICE_ROOT_KEY: ${{ env.CYBORGDB_API_KEY }}
+          CYBORGDB_CONFIG_FILE: ${{ runner.temp }}/cyborgdb.yaml
+          AWS_ACCESS_KEY_ID: ${{ steps.byok.outputs.BYOK_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.byok.outputs.BYOK_AWS_SECRET_ACCESS_KEY }}
+          CYBORGDB_BYOK_ROLE_ARN: ${{ steps.byok.outputs.CYBORGDB_BYOK_ROLE_ARN }}
+          CYBORGDB_BYOK_EXTERNAL_ID: ${{ steps.byok.outputs.CYBORGDB_BYOK_EXTERNAL_ID }}
+        run: |
+          set -euo pipefail
+          # The static BYOK key must not be combined with the OIDC session token
+          # left in the env by the CodeArtifact step.
+          unset AWS_SESSION_TOKEN
+          export CYBORGDB_DB_TYPE=disk
+          export CYBORGDB_DISK_PATH="${RUNNER_TEMP}/cyborgdb-disk"
+          nohup cyborgdb-service > "$PRIVATE_DIR/service.log" 2>&1 &
+          echo $! > "${RUNNER_TEMP}/service.pid"
+          for _ in {1..60}; do
+            curl -fs http://localhost:8000/v1/health > /dev/null && break
+            sleep 1
+          done
+          curl -fs http://localhost:8000/v1/health > /dev/null \
+            || { echo "::error::the service did not start; see service.log in the encrypted artifact"; exit 1; }
+
+      # Everything the runner prints (case ids, failures, replay lines, adapter and SDK
+      # stderr) goes to run.log; the log gets only the counts from the report.
+      - name: Run the suite
+        working-directory: cyborgdb-tests
+        env:
+          CYBORG_TEST_SDK_BASE_URL: http://localhost:8000
+          CYBORGDB_SERVICE_ROOT_KEY: ${{ env.CYBORGDB_API_KEY }}
+          CYBORGDB_KMS_NAME_REAL: aws-kms-self-test
+          CYBORGDB_KMS_NAME_SM: aws-secrets-self-test
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          status=0
+          {
+            # The runner has no exclude flag, so --run lists every case except SKIP_CASES.
+            # That marks the run partial, which is fine while it is alert-only.
+            filter=$(python - <<'PY'
+          import glob, os, re, yaml
+          skip = set(os.environ["SKIP_CASES"].split())
+          ids = []
+          for path in sorted(glob.glob("specs/**/*.yaml", recursive=True)):
+              spec = yaml.safe_load(open(path))
+              if isinstance(spec, dict):
+                  ids += [test["id"] for test in spec.get("tests", [])]
+          print("^(" + "|".join(re.escape(i) for i in ids if i not in skip) + ")$")
+          PY
+            ) && test -n "$filter" &&
+            # Two workers: four overloaded the service and timed out training
+            # cases (FINDINGS.md, "Timeouts rechecked").
+            "${RUNNER_TEMP}/cyborgdb-tests" run \
+              --adapter "python ${GITHUB_WORKSPACE}/tests/conformance/adapter.py" \
+              --env sdk --variant "$VARIANT" --jobs 2 \
+              --run "$filter" \
+              --report "$PRIVATE_DIR/report.json" \
+              --write-expected-failures "$PRIVATE_DIR/expected-failures-draft.yaml" \
+              --progress "$PRIVATE_DIR/progress.log"
+          } > "$PRIVATE_DIR/run.log" 2>&1 || status=$?
+          python - <<'PY'
+          import json, os
+          path = os.path.join(os.environ["PRIVATE_DIR"], "report.json")
+          try:
+              counts = json.load(open(path))["counts"]
+          except Exception:
+              print("::error::the run produced no report; see run.log in the encrypted artifact")
+          else:
+              keys = ("passed", "failed", "known", "unsupported", "errors")
+              line = ", ".join(f"{counts.get(k, 0)} {k}" for k in keys)
+              print(f"{os.environ['VARIANT']}: {line}")
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+                  summary.write(f"**{os.environ['VARIANT']}:** {line}\n")
+          PY
+          curl -fs http://localhost:8000/v1/health > /dev/null \
+            || echo "::error::the service died during the run; see service.log in the encrypted artifact"
+          exit "$status"
+
+      - name: Stop the service
+        if: always()
+        run: kill "$(cat "${RUNNER_TEMP}/service.pid")" 2>/dev/null || true
+
+      # Only the encrypted bundle leaves the runner. Without a key the step fails and
+      # nothing is uploaded.
+      - name: Encrypt results
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          tar -czf - -C "$PRIVATE_DIR" . \
+            | age -R .github/conformance-recipients.txt \
+            > "${RUNNER_TEMP}/conformance-${{ matrix.variant }}.tar.gz.age"
+
+      - name: Upload encrypted results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: conformance-${{ matrix.variant }}
+          path: ${{ runner.temp }}/conformance-${{ matrix.variant }}.tar.gz.age
+          if-no-files-found: error
+          retention-days: 30

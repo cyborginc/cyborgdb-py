@@ -1,0 +1,6 @@
+# age public keys that can read the conformance workflow's encrypted results
+# (.github/workflows/conformance.yml). One key per line; the matching private keys
+# live in 1Password, never in this repo.
+#
+# To add a key: `age-keygen -o key.txt`, store key.txt in 1Password, and paste the
+# "public key: age1..." value below.
