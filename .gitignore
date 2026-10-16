@@ -74,3 +74,4 @@ venv
 .env.local
 
 PLAN.md
+FINDINGS.md
