@@ -67,7 +67,7 @@ jobs:
         with:
           repository: cyborginc/cyborgdb-tests
           ref: ${{ steps.tests-ref.outputs.ref }}
-          token: ${{ secrets.CYBORG_GITHUB_TOKEN_CI }}
+          token: ${{ secrets.CYBORGDB_TESTS_TOKEN }}
           path: cyborgdb-tests
 
       - name: Set up Go
