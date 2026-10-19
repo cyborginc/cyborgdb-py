@@ -36,6 +36,7 @@ from cyborgdb.openapi_client_async.models.index_training_status_response_model i
 from cyborgdb.openapi_client_async.models.list_ids_request import ListIDsRequest
 from cyborgdb.openapi_client_async.models.list_ids_response import ListIDsResponse
 from cyborgdb.openapi_client_async.models.list_users_response import ListUsersResponse
+from cyborgdb.openapi_client_async.models.num_vectors_response_model import NumVectorsResponseModel
 from cyborgdb.openapi_client_async.models.query_metadata_request import QueryMetadataRequest
 from cyborgdb.openapi_client_async.models.query_metadata_response import QueryMetadataResponse
 from cyborgdb.openapi_client_async.models.query_response import QueryResponse
@@ -1819,7 +1820,7 @@ class DefaultApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> CyborgdbServiceApiSchemasVectorsSuccessResponseModel:
+    ) -> NumVectorsResponseModel:
         """Get the number of vectors in an index
 
         Get the number of vectors stored in an index
@@ -1857,7 +1858,7 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "CyborgdbServiceApiSchemasVectorsSuccessResponseModel",
+            '200': "NumVectorsResponseModel",
             '401': "ErrorResponseModel",
             '500': "ErrorResponseModel",
             '422': "HTTPValidationError",
@@ -1889,7 +1890,7 @@ class DefaultApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[CyborgdbServiceApiSchemasVectorsSuccessResponseModel]:
+    ) -> ApiResponse[NumVectorsResponseModel]:
         """Get the number of vectors in an index
 
         Get the number of vectors stored in an index
@@ -1927,7 +1928,7 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "CyborgdbServiceApiSchemasVectorsSuccessResponseModel",
+            '200': "NumVectorsResponseModel",
             '401': "ErrorResponseModel",
             '500': "ErrorResponseModel",
             '422': "HTTPValidationError",
@@ -1997,7 +1998,7 @@ class DefaultApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "CyborgdbServiceApiSchemasVectorsSuccessResponseModel",
+            '200': "NumVectorsResponseModel",
             '401': "ErrorResponseModel",
             '500': "ErrorResponseModel",
             '422': "HTTPValidationError",

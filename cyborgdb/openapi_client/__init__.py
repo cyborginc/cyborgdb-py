@@ -59,6 +59,7 @@ __all__ = [
     "LocationInner",
     "MetadataFieldPolicy",
     "MetadataResult",
+    "NumVectorsResponseModel",
     "OrderBy",
     "QueryMetadataRequest",
     "QueryMetadataResponse",
@@ -120,6 +121,7 @@ from cyborgdb.openapi_client.models.list_users_response import ListUsersResponse
 from cyborgdb.openapi_client.models.location_inner import LocationInner as LocationInner
 from cyborgdb.openapi_client.models.metadata_field_policy import MetadataFieldPolicy as MetadataFieldPolicy
 from cyborgdb.openapi_client.models.metadata_result import MetadataResult as MetadataResult
+from cyborgdb.openapi_client.models.num_vectors_response_model import NumVectorsResponseModel as NumVectorsResponseModel
 from cyborgdb.openapi_client.models.order_by import OrderBy as OrderBy
 from cyborgdb.openapi_client.models.query_metadata_request import QueryMetadataRequest as QueryMetadataRequest
 from cyborgdb.openapi_client.models.query_metadata_response import QueryMetadataResponse as QueryMetadataResponse
