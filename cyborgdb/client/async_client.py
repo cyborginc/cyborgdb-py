@@ -6,7 +6,7 @@ transport in ``cyborgdb.openapi_client_async``.
 """
 
 import logging
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -24,6 +24,7 @@ except ImportError:
 
 from cyborgdb.client._request_builders import (
     apply_full_text_implication,
+    parse_training_status,
     request_headers,
     validate_index_key,
 )
@@ -328,3 +329,23 @@ class AsyncClient:
             return await self.api.health_check_v1_health_get()
         except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to get health status") from e
+
+    async def get_training_status(self) -> Dict[str, Any]:
+        """
+        Get the service's training queue.
+
+        Returns:
+            ``{"training_indexes": [...], "retrain_threshold": int}``: the
+            indexes being trained or queued for training, and the vector count
+            past which an untrained index is trained automatically.
+
+        Raises:
+            CyborgDBError: If the training status could not be retrieved.
+        """
+        try:
+            response = (
+                await self.api.get_training_status_v1_indexes_training_status_get()
+            )
+            return parse_training_status(response)
+        except _TRANSPORT_ERRORS as e:
+            raise translate_api_error(e, "Failed to get training status") from e

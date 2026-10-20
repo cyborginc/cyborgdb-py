@@ -462,6 +462,15 @@ def op_health(params):
     return encode(sdk(lookup_client(params).get_health))
 
 
+def op_training_status(params):
+    """@brief client.training_status.
+
+    @param params `client`.
+    @return `{training_indexes, retrain_threshold}`.
+    """
+    return encode(sdk(lookup_client(params).get_training_status))
+
+
 def op_create_index(params):
     """@brief client.create_index.
 
@@ -787,12 +796,12 @@ def op_delete_user(params):
     return None
 
 
-# client.training_status has no SDK method, and the client.kms_* blob ops are
-# core only; they stay out of OPS so they reply -32601.
+# The client.kms_* blob ops are core only; they stay out of OPS so they reply -32601.
 OPS = {
     "client.new": op_client_new,
     "client.list_indexes": op_list_indexes,
     "client.health": op_health,
+    "client.training_status": op_training_status,
     "client.create_index": op_create_index,
     "client.load_index": op_load_index,
     "index.delete_index": op_delete_index,
@@ -836,6 +845,7 @@ def capabilities():
         "rbac",
         "embedding",
         "health",
+        "training_status",
         "service_auth",
         "durable_storage",
     ]

@@ -5,7 +5,7 @@ This module provides a Python client for interacting with the CyborgDB REST API.
 """
 
 from pathlib import Path
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import urlparse
 import secrets
 import logging
@@ -32,6 +32,7 @@ import urllib3.exceptions
 
 from cyborgdb.client._request_builders import (
     apply_full_text_implication,
+    parse_training_status,
     request_headers,
     validate_index_key,
 )
@@ -355,3 +356,21 @@ class Client:
             return self.api.health_check_v1_health_get()
         except (ApiException, urllib3.exceptions.HTTPError) as e:
             raise translate_api_error(e, "Failed to get health status") from e
+
+    def get_training_status(self) -> Dict[str, Any]:
+        """
+        Get the service's training queue.
+
+        Returns:
+            ``{"training_indexes": [...], "retrain_threshold": int}``: the
+            indexes being trained or queued for training, and the vector count
+            past which an untrained index is trained automatically.
+
+        Raises:
+            CyborgDBError: If the training status could not be retrieved.
+        """
+        try:
+            response = self.api.get_training_status_v1_indexes_training_status_get()
+            return parse_training_status(response)
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Failed to get training status") from e

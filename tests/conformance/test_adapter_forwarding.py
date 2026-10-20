@@ -108,6 +108,10 @@ def fake_cyborgdb(log, index):
                 "load_index": index,
                 "list_indexes": [],
                 "get_health": {"status": "healthy"},
+                "get_training_status": {
+                    "training_indexes": [],
+                    "retrain_threshold": 65536,
+                },
             }
             return Recorder(log, "client", returns, is_async)
 
@@ -193,6 +197,7 @@ FORWARDING_CASES = [
     ),
     ("client.list_indexes", {"client": "c0"}, "client.list_indexes", (), {}),
     ("client.health", {"client": "c0"}, "client.get_health", (), {}),
+    ("client.training_status", {"client": "c0"}, "client.get_training_status", (), {}),
     (
         "client.create_index",
         {"client": "c0", "as": "i1", "name": "n"},
@@ -582,7 +587,6 @@ UNSUPPORTED_CASES = [
     ("index.list_users", {"index": "i0", "key": KEY}),
     ("index.delete_user", {"index": "i0", "user_id": "u", "key": KEY}),
     ("index.num_vectors", {"index": "i0", "key": KEY}),
-    ("client.training_status", {"client": "c0"}),
     ("client.kms_get", {"client": "c0", "name": "n"}),
 ]
 
@@ -787,9 +791,9 @@ def test_hello_reports_variant_capabilities(monkeypatch):
     assert json_names["impl"] == "cyborgdb-py"
     assert "ragged_batches" in json_names["capabilities"]
     assert "ragged_batches" not in binary_names["capabilities"]
-    for absent in ("kms_blob", "gpu", "training_status", "error_fields", "free_tier"):
+    for absent in ("kms_blob", "gpu", "error_fields", "free_tier"):
         assert absent not in json_names["capabilities"]
-    for present in ("service_auth", "durable_storage"):
+    for present in ("service_auth", "durable_storage", "training_status"):
         assert present in json_names["capabilities"]
         assert present in binary_names["capabilities"]
 
@@ -815,7 +819,7 @@ def test_framing_over_fds_3_and_4():
     """Runs the real adapter process with the installed SDK; no service needed."""
     requests = [
         {"jsonrpc": "2.0", "id": 1, "method": "hello", "params": {"protocol": 1}},
-        {"jsonrpc": "2.0", "id": 2, "method": "client.training_status", "params": {}},
+        {"jsonrpc": "2.0", "id": 2, "method": "client.kms_get", "params": {}},
     ]
     request_read, request_write = os.pipe()
     response_read, response_write = os.pipe()
@@ -844,3 +848,8 @@ def test_framing_over_fds_3_and_4():
     assert responses[0]["result"]["impl"] == "cyborgdb-py"
     assert responses[1]["error"]["code"] == CODE_UNSUPPORTED
     assert responses[2]["error"]["code"] == -32700
+
+
+def test_training_status_returns_the_sdk_result(harness):
+    response = harness.call("client.training_status", {"client": "c0"})
+    assert response == {"result": {"training_indexes": [], "retrain_threshold": 65536}}

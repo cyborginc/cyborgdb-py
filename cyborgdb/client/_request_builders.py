@@ -619,3 +619,12 @@ def parse_describe_response(response) -> Dict[str, Any]:
     if response.embedding_model:
         described["embedding_model"] = response.embedding_model
     return described
+
+
+def parse_training_status(response) -> Dict[str, Any]:
+    """The training-status response as the two documented fields; the worker
+    and queue internals the service also reports stay out of the public API."""
+    return {
+        "training_indexes": list(response.training_indexes),
+        "retrain_threshold": response.retrain_threshold,
+    }
