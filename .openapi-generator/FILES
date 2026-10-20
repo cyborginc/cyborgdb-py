@@ -37,6 +37,7 @@ cyborgdb/openapi_client_async/models/list_users_response.py
 cyborgdb/openapi_client_async/models/location_inner.py
 cyborgdb/openapi_client_async/models/metadata_field_policy.py
 cyborgdb/openapi_client_async/models/metadata_result.py
+cyborgdb/openapi_client_async/models/num_vectors_response_model.py
 cyborgdb/openapi_client_async/models/order_by.py
 cyborgdb/openapi_client_async/models/query_metadata_request.py
 cyborgdb/openapi_client_async/models/query_metadata_response.py
