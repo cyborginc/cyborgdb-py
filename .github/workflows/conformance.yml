@@ -137,10 +137,23 @@ jobs:
 
       # The runner starts and stops the service itself (--service); the service inherits
       # this step's env, so the KMS registry and BYOK credentials reach it.
+      # Each child gets only the secrets it needs (the runner splits these commands on
+      # spaces): the adapter and the SDK under test get none, since the runner hands
+      # them the service URL and key as params; the service keeps the license key and
+      # BYOK credentials, and the runner sets its root key itself. Nothing but the
+      # script needs the log key, GH_TOKEN, or PIP_INDEX_URL (it embeds a CodeArtifact
+      # token).
       - name: Run the suite
         env:
-          ADAPTER: python ${{ github.workspace }}/tests/conformance/adapter.py
-          SERVICE: cyborgdb-service
+          ADAPTER: >-
+            env -u CONFORMANCE_LOG_KEY -u GH_TOKEN -u CYBORGDB_TESTS_SERVICE_API_KEY
+            -u CYBORGDB_API_KEY -u PIP_INDEX_URL -u AWS_ACCESS_KEY_ID
+            -u AWS_SECRET_ACCESS_KEY -u CYBORGDB_BYOK_ROLE_ARN -u CYBORGDB_BYOK_EXTERNAL_ID
+            python ${{ github.workspace }}/tests/conformance/adapter.py
+          SERVICE: >-
+            env -u CONFORMANCE_LOG_KEY -u GH_TOKEN -u CYBORGDB_TESTS_SERVICE_API_KEY
+            -u PIP_INDEX_URL
+            cyborgdb-service
           VARIANTS: ${{ matrix.variant }}
           IMPL: cyborgdb-py
           OUT_DIR: ${{ runner.temp }}/conformance-out
