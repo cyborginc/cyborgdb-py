@@ -53,17 +53,13 @@ jobs:
           path: cyborgdb-tests
 
       # Only used when no prebuilt driver matches the checked-out suite commit.
+      # No caches here or for the datasets: this repo's Actions caches are readable
+      # by fork PR workflows, and both would hold internal cyborgdb-tests content.
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version-file: cyborgdb-tests/go.mod
-          cache-dependency-path: cyborgdb-tests/go.sum
-
-      - name: Cache datasets
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/cyborgdb-tests/datasets
-          key: cyborgdb-tests-datasets-v1
+          cache: false
 
       - name: Set up Python
         uses: actions/setup-python@v7
