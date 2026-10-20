@@ -44,6 +44,7 @@ from cyborgdb.openapi_client_async.models.list_users_response import ListUsersRe
 from cyborgdb.openapi_client_async.models.location_inner import LocationInner
 from cyborgdb.openapi_client_async.models.metadata_field_policy import MetadataFieldPolicy
 from cyborgdb.openapi_client_async.models.metadata_result import MetadataResult
+from cyborgdb.openapi_client_async.models.num_vectors_response_model import NumVectorsResponseModel
 from cyborgdb.openapi_client_async.models.order_by import OrderBy
 from cyborgdb.openapi_client_async.models.query_metadata_request import QueryMetadataRequest
 from cyborgdb.openapi_client_async.models.query_metadata_response import QueryMetadataResponse

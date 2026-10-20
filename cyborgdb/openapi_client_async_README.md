@@ -131,6 +131,7 @@ Class | Method | HTTP request | Description
  - [LocationInner](cyborgdb/openapi_client_async/docs/LocationInner.md)
  - [MetadataFieldPolicy](cyborgdb/openapi_client_async/docs/MetadataFieldPolicy.md)
  - [MetadataResult](cyborgdb/openapi_client_async/docs/MetadataResult.md)
+ - [NumVectorsResponseModel](cyborgdb/openapi_client_async/docs/NumVectorsResponseModel.md)
  - [OrderBy](cyborgdb/openapi_client_async/docs/OrderBy.md)
  - [QueryMetadataRequest](cyborgdb/openapi_client_async/docs/QueryMetadataRequest.md)
  - [QueryMetadataResponse](cyborgdb/openapi_client_async/docs/QueryMetadataResponse.md)

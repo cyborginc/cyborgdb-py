@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from cyborgdb.openapi_client_async.models.bm25_config import BM25Config
 from cyborgdb.openapi_client_async.models.metadata_field_policy import MetadataFieldPolicy
@@ -27,16 +27,34 @@ from pydantic_core import to_jsonable_python
 
 class IndexInfoResponseModel(BaseModel):
     """
-    Response model for retrieving information about an index.  Attributes:     index_name (str): The name of the index.     is_trained (bool): Indicates whether the index has been trained.     dimension (int): Dimensionality of the vectors. `0` before the         first upsert when create_index was called without an explicit         dimension (auto-detect).     metric (str): Distance metric (`euclidean`, `cosine`, or         `squared_euclidean`).     n_lists (int): Number of inverted lists in the IVF index. `1`         for untrained indexes.     metadata_schema (Dict[str, MetadataFieldPolicy]): Per-field metadata         indexing overrides recorded at create time. Empty when the         index uses the default index-everything posture.     bm25 (Optional[BM25Config]): BM25 scoring config when the index has         at least one full_text field; `None` otherwise.
+    Response model for retrieving information about an index.  Attributes:     index_name (str): The name of the index.     is_trained (bool): Indicates whether the index has been trained.     dimension (int): Dimensionality of the vectors. `0` before the         first upsert when create_index was called without an explicit         dimension (auto-detect).     metric (str): Distance metric (`euclidean`, `cosine`, or         `squared_euclidean`).     n_lists (int): Number of inverted lists in the IVF index. `1`         for untrained indexes.     metadata_schema (Dict[str, MetadataFieldPolicy]): Per-field metadata         indexing overrides recorded at create time. Empty when the         index uses the default index-everything posture.     bm25 (Optional[BM25Config]): BM25 scoring config when the index has         at least one full_text field; `None` otherwise.     index_type (str): Index type, for example `disk_ivf`.     training_state (Literal[\"untrained\", \"training\", \"trained\"]): Index         lifecycle state as reported by the core. `training` means a train         is running now; an index waiting in the service's training queue         still reports its current state (`untrained` or `trained`).     embedding_model (Optional[str]): Name of the embedding model the         index was created with; `None` when it has none.     storage_precision (StoragePrecision): On-disk rerank-vector format         the index was created with (`float32` when create_index didn't         set one).
     """ # noqa: E501
     index_name: StrictStr
     is_trained: StrictBool
+    index_type: StrictStr
+    training_state: StrictStr
+    embedding_model: Optional[StrictStr] = None
+    storage_precision: StrictStr
     dimension: StrictInt
     metric: StrictStr
     n_lists: StrictInt
     metadata_schema: Optional[Dict[str, MetadataFieldPolicy]] = None
     bm25: Optional[BM25Config] = None
-    __properties: ClassVar[List[str]] = ["index_name", "is_trained", "dimension", "metric", "n_lists", "metadata_schema", "bm25"]
+    __properties: ClassVar[List[str]] = ["index_name", "is_trained", "index_type", "training_state", "embedding_model", "storage_precision", "dimension", "metric", "n_lists", "metadata_schema", "bm25"]
+
+    @field_validator('training_state')
+    def training_state_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['untrained', 'training', 'trained']):
+            raise ValueError("must be one of enum values ('untrained', 'training', 'trained')")
+        return value
+
+    @field_validator('storage_precision')
+    def storage_precision_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['float32', 'float16', 'tq12', 'tq8', 'tq6', 'tq4']):
+            raise ValueError("must be one of enum values ('float32', 'float16', 'tq12', 'tq8', 'tq6', 'tq4')")
+        return value
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -87,6 +105,11 @@ class IndexInfoResponseModel(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of bm25
         if self.bm25:
             _dict['bm25'] = self.bm25.to_dict()
+        # set to None if embedding_model (nullable) is None
+        # and model_fields_set contains the field
+        if self.embedding_model is None and "embedding_model" in self.model_fields_set:
+            _dict['embedding_model'] = None
+
         # set to None if bm25 (nullable) is None
         # and model_fields_set contains the field
         if self.bm25 is None and "bm25" in self.model_fields_set:
@@ -106,6 +129,10 @@ class IndexInfoResponseModel(BaseModel):
         _obj = cls.model_validate({
             "index_name": obj.get("index_name"),
             "is_trained": obj.get("is_trained"),
+            "index_type": obj.get("index_type"),
+            "training_state": obj.get("training_state"),
+            "embedding_model": obj.get("embedding_model"),
+            "storage_precision": obj.get("storage_precision"),
             "dimension": obj.get("dimension"),
             "metric": obj.get("metric"),
             "n_lists": obj.get("n_lists"),
