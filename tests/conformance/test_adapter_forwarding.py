@@ -43,6 +43,8 @@ CODE_ADAPTER = -32603
 INDEX_RETURNS = {
     "get": [],
     "list_ids": [],
+    "describe": {"index_name": "r", "dimension": 0},
+    "get_num_vectors": 0,
     "query": [[]],
     "query_binary": [[]],
     "query_metadata": [],
@@ -248,6 +250,8 @@ FORWARDING_CASES = [
     ("index.get", {"ids": [], "include": []}, "index.get", ([],), {"include": []}),
     ("index.delete", {"ids": []}, "index.delete", ([],), {}),
     ("index.list_ids", {}, "index.list_ids", (), {}),
+    ("index.describe", {}, "index.describe", (), {}),
+    ("index.num_vectors", {}, "index.get_num_vectors", (), {}),
     ("index.train", {}, "index.train", (), {}),
     (
         "index.train",
@@ -577,8 +581,7 @@ UNSUPPORTED_CASES = [
     ("index.create_user", {"index": "i0", "permissions": ["read"], "user_kek": KEY}),
     ("index.list_users", {"index": "i0", "key": KEY}),
     ("index.delete_user", {"index": "i0", "user_id": "u", "key": KEY}),
-    ("index.describe", {"index": "i0"}),
-    ("index.num_vectors", {"index": "i0"}),
+    ("index.num_vectors", {"index": "i0", "key": KEY}),
     ("client.training_status", {"client": "c0"}),
     ("client.kms_get", {"client": "c0", "name": "n"}),
 ]
@@ -642,6 +645,32 @@ def test_get_encodes_vector_contents_and_metadata(json_harness):
             {"id": "c", "vector": None, "contents": None, "metadata": None},
         ]
     }
+
+
+def test_describe_renames_index_name_and_keeps_every_other_field(harness):
+    harness.index._returns["describe"] = {
+        "index_name": "r",
+        "index_type": "disk_ivf",
+        "training_state": "untrained",
+        "is_trained": False,
+        "bm25": None,
+    }
+    response = harness.call("index.describe", {"index": "i0"})
+    assert response == {
+        "result": {
+            "name": "r",
+            "index_type": "disk_ivf",
+            "training_state": "untrained",
+            "is_trained": False,
+            "bm25": None,
+        }
+    }
+
+
+def test_num_vectors_returns_the_count(harness):
+    harness.index._returns["get_num_vectors"] = 1000002
+    response = harness.call("index.num_vectors", {"index": "i0"})
+    assert response == {"result": 1000002}
 
 
 def test_create_user_returns_the_sdk_result(harness):
@@ -783,7 +812,7 @@ def test_framing_over_fds_3_and_4():
     """Runs the real adapter process with the installed SDK; no service needed."""
     requests = [
         {"jsonrpc": "2.0", "id": 1, "method": "hello", "params": {"protocol": 1}},
-        {"jsonrpc": "2.0", "id": 2, "method": "index.describe", "params": {}},
+        {"jsonrpc": "2.0", "id": 2, "method": "client.training_status", "params": {}},
     ]
     request_read, request_write = os.pipe()
     response_read, response_write = os.pipe()

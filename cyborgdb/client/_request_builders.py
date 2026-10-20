@@ -574,3 +574,48 @@ def parse_get_response(response, include: List[str]) -> List[Dict[str, Any]]:
             items.append(item_dict)
 
     return items
+
+
+def parse_metadata_schema(schema) -> Dict[str, Dict[str, bool]]:
+    """Describe's per-field policies as plain dicts, the shape
+    ``create_index`` accepts. An older service omits the field; that is ``{}``."""
+    return {
+        field: {
+            "filterable": policy.filterable,
+            "pattern": policy.pattern,
+            "full_text": policy.full_text,
+        }
+        for field, policy in (schema or {}).items()
+    }
+
+
+def parse_bm25(config) -> Optional[Dict[str, Any]]:
+    """Describe's BM25 config as a plain dict, or ``None`` without a
+    ``full_text`` field."""
+    if config is None:
+        return None
+    return {
+        "k1": config.k1,
+        "b": config.b,
+        "analyzer_version": config.analyzer_version,
+    }
+
+
+def parse_describe_response(response) -> Dict[str, Any]:
+    """The describe endpoint's response as a plain dict, so generated models
+    never leak out of the wrapper. ``embedding_model`` is present only when
+    the index has one."""
+    described = {
+        "index_name": response.index_name,
+        "index_type": response.index_type,
+        "dimension": response.dimension,
+        "metric": response.metric,
+        "storage_precision": response.storage_precision,
+        "n_lists": response.n_lists,
+        "training_state": response.training_state,
+        "metadata_schema": parse_metadata_schema(response.metadata_schema),
+        "bm25": parse_bm25(response.bm25),
+    }
+    if response.embedding_model:
+        described["embedding_model"] = response.embedding_model
+    return described

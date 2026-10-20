@@ -644,6 +644,33 @@ def op_list_ids(params):
     return encode(sdk(index.list_ids))
 
 
+def op_describe(params):
+    """@brief index.describe.
+
+    @param params `index`.
+    @return The SDK's describe dict, with `index_name` renamed to the contract's
+        `name`.
+    """
+    index = index_for_op(params)
+    described = sdk(index.describe)
+    return encode(
+        {
+            ("name" if field == "index_name" else field): value
+            for field, value in described.items()
+        }
+    )
+
+
+def op_num_vectors(params):
+    """@brief index.num_vectors.
+
+    @param params `index`.
+    @return The item count.
+    """
+    index = index_for_op(params, "key", "user_id")
+    return encode(sdk(index.get_num_vectors))
+
+
 def op_train(params):
     """@brief index.train.
 
@@ -760,9 +787,8 @@ def op_delete_user(params):
     return None
 
 
-# index.describe, index.num_vectors and client.training_status have no SDK
-# method, and the client.kms_* blob ops are core only; they stay out of OPS so
-# they reply -32601.
+# client.training_status has no SDK method, and the client.kms_* blob ops are
+# core only; they stay out of OPS so they reply -32601.
 OPS = {
     "client.new": op_client_new,
     "client.list_indexes": op_list_indexes,
@@ -774,6 +800,8 @@ OPS = {
     "index.get": op_get,
     "index.delete": op_delete,
     "index.list_ids": op_list_ids,
+    "index.describe": op_describe,
+    "index.num_vectors": op_num_vectors,
     "index.train": op_train,
     "index.query": op_query,
     "index.query_metadata": op_query_metadata,

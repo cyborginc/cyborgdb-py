@@ -21,7 +21,10 @@ from cyborgdb.client._request_builders import (
     coerce_datetimes,
     hybrid_query_kwargs,
     parse_binary_query_response,
+    parse_bm25,
+    parse_describe_response,
     parse_get_response,
+    parse_metadata_schema,
     parse_query_metadata_response,
     parse_query_response,
     request_headers,
@@ -193,16 +196,7 @@ class EncryptedIndex:
 
         Returned as plain dicts — the same shape `create_index` accepts — so
         generated openapi_client models never leak out of the wrapper."""
-        return {
-            field: {
-                "filterable": policy.filterable,
-                "pattern": policy.pattern,
-                "full_text": policy.full_text,
-            }
-            for field, policy in (
-                self._describe_translated().metadata_schema or {}
-            ).items()
-        }
+        return parse_metadata_schema(self._describe_translated().metadata_schema)
 
     @property
     def bm25(self) -> Optional[Dict[str, Any]]:
@@ -215,14 +209,26 @@ class EncryptedIndex:
 
         Returned as a plain dict so generated openapi_client models never leak
         out of the wrapper."""
-        config = self._describe_translated().bm25
-        if config is None:
-            return None
-        return {
-            "k1": config.k1,
-            "b": config.b,
-            "analyzer_version": config.analyzer_version,
-        }
+        return parse_bm25(self._describe_translated().bm25)
+
+    def describe(self) -> Dict[str, Any]:
+        """
+        Get the index's configuration and training state in one call.
+
+        Returns:
+            A dict with ``index_name``, ``index_type`` (e.g. ``"disk_ivf"``),
+            ``dimension`` (``0`` until the first upsert on an auto-dimension
+            index), ``metric``, ``storage_precision``, ``n_lists`` (``1`` until
+            trained), ``training_state`` (``"untrained"``, ``"training"`` or
+            ``"trained"``), ``metadata_schema`` (as
+            :attr:`metadata_schema` returns it) and ``bm25`` (as :attr:`bm25`
+            returns it). ``embedding_model`` is present only when the index has
+            one.
+
+        Raises:
+            CyborgDBError: If the index could not be described.
+        """
+        return parse_describe_response(self._describe_translated())
 
     def is_trained(self) -> bool:
         """
@@ -796,6 +802,24 @@ class EncryptedIndex:
             return response.ids
         except (ApiException, urllib3.exceptions.HTTPError) as e:
             raise translate_api_error(e, "Failed to list document IDs") from e
+
+    def get_num_vectors(self) -> int:
+        """
+        Get the number of items stored in the index.
+
+        Returns:
+            The item count. Overwriting an existing ID doesn't change it.
+
+        Raises:
+            CyborgDBError: If the count could not be retrieved.
+        """
+        try:
+            response = self._api.get_index_size_v1_vectors_num_vectors_post(
+                index_operation_request=self._ior()
+            )
+            return response.result
+        except (ApiException, urllib3.exceptions.HTTPError) as e:
+            raise translate_api_error(e, "Failed to get the number of vectors") from e
 
     def is_training(self) -> bool:
         """
