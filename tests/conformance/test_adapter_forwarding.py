@@ -787,8 +787,11 @@ def test_hello_reports_variant_capabilities(monkeypatch):
     assert json_names["impl"] == "cyborgdb-py"
     assert "ragged_batches" in json_names["capabilities"]
     assert "ragged_batches" not in binary_names["capabilities"]
-    for absent in ("kms_blob", "gpu", "training_status", "error_fields"):
+    for absent in ("kms_blob", "gpu", "training_status", "error_fields", "free_tier"):
         assert absent not in json_names["capabilities"]
+    for present in ("service_auth", "durable_storage"):
+        assert present in json_names["capabilities"]
+        assert present in binary_names["capabilities"]
 
 
 @pytest.mark.parametrize(

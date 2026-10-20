@@ -836,6 +836,8 @@ def capabilities():
         "rbac",
         "embedding",
         "health",
+        "service_auth",
+        "durable_storage",
     ]
     if VARIANT != "binary":
         names.append("ragged_batches")  # JSON items carry each vector on its own
