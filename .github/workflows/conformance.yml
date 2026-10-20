@@ -18,9 +18,6 @@ on:
   schedule:
     - cron: '0 7 * * *'
   workflow_dispatch:
-  # TEMP: test run from this branch before merging; revert this commit before merge.
-  push:
-    branches: [python-adapter]
 
 concurrency:
   group: conformance-${{ github.ref }}
@@ -37,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [json]  # TEMP: was [json, binary, async]
+        variant: [json, binary, async]
 
     steps:
       - name: Checkout SDK code
@@ -141,7 +138,6 @@ jobs:
           ADAPTER: python ${{ github.workspace }}/tests/conformance/adapter.py
           SERVICE: cyborgdb-service
           VARIANTS: ${{ matrix.variant }}
-          SPECS: ${{ github.workspace }}/cyborgdb-tests/specs/crud.yaml  # TEMP: one small spec file for the test run
           IMPL: cyborgdb-py
           OUT_DIR: ${{ runner.temp }}/conformance-out
           GH_TOKEN: ${{ secrets.CYBORGDB_TESTS_TOKEN }}
