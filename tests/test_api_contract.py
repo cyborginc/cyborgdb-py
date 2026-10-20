@@ -413,6 +413,18 @@ class TestAPIContract(unittest.TestCase):
         )
 
         validate_function_signature(
+            self.index.describe,
+            {},  # No parameters
+            "EncryptedIndex.describe",
+        )
+
+        validate_function_signature(
+            self.index.get_num_vectors,
+            {},  # No parameters
+            "EncryptedIndex.get_num_vectors",
+        )
+
+        validate_function_signature(
             self.index.query_metadata,
             {
                 "filters": {"position": 0, "default": None},
@@ -501,6 +513,43 @@ class TestAPIContract(unittest.TestCase):
         self.assertIsInstance(self.index.dimension, int)
         self.assertIsInstance(self.index.metric, str)
         self.assertIsInstance(self.index.n_lists, int)
+
+    def test_09a_encrypted_index_describe(self):
+        """Test EncryptedIndex.describe() exact response format."""
+        described = self.index.describe()
+
+        # embedding_model is present because test_08 kept the embedding-model
+        # index; it is left out for an index without one.
+        validate_exact_keys(
+            described,
+            {
+                "index_name",
+                "index_type",
+                "dimension",
+                "metric",
+                "storage_precision",
+                "n_lists",
+                "training_state",
+                "metadata_schema",
+                "bm25",
+                "embedding_model",
+            },
+            "EncryptedIndex.describe",
+        )
+        self.assertEqual(described["index_name"], self.index_name)
+        self.assertIsInstance(described["index_type"], str)
+        self.assertEqual(described["dimension"], 384)
+        self.assertEqual(described["metric"], "euclidean")
+        self.assertEqual(described["storage_precision"], "float32")
+        self.assertIsInstance(described["n_lists"], int)
+        self.assertIn(described["training_state"], ["untrained", "training", "trained"])
+        self.assertIsInstance(described["metadata_schema"], dict)
+        self.assertIsNone(described["bm25"])
+        self.assertIsInstance(described["embedding_model"], str)
+
+        # Should accept no arguments
+        with self.assertRaises(TypeError):
+            self.index.describe("unexpected")
 
     def test_10_encrypted_index_is_trained(self):
         """Test EncryptedIndex.is_trained() exact behavior."""
@@ -599,6 +648,18 @@ class TestAPIContract(unittest.TestCase):
         # Should accept no arguments
         with self.assertRaises(TypeError):
             self.index.list_ids("unexpected")
+
+    def test_13a_encrypted_index_get_num_vectors(self):
+        """Test EncryptedIndex.get_num_vectors() exact response format."""
+        count = self.index.get_num_vectors()
+
+        # Must be exactly an int (not a bool), counting the 15 ids test_12 upserted
+        self.assertIs(type(count), int)
+        self.assertEqual(count, 15)
+
+        # Should accept no arguments
+        with self.assertRaises(TypeError):
+            self.index.get_num_vectors("unexpected")
 
     def test_14_encrypted_index_get(self):
         """Test EncryptedIndex.get() with exact response validation."""
