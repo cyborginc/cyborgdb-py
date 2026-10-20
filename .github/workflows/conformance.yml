@@ -37,8 +37,12 @@ jobs:
         variant: [json, binary, async]
 
     steps:
+      # Full history: setuptools-scm needs the tags to give the installed SDK its
+      # real version (a shallow clone reports 0.1.dev1).
       - name: Checkout SDK code
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: cyborgdb-tests ref
         id: tests-ref
