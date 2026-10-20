@@ -8,11 +8,11 @@ set -e  # Exit on any error
 # The spec's source of truth is cyborgdb-tests; pass a path to override.
 SPEC="${1:-../cyborgdb-tests/openapi.json}"
 
-echo "🚀✨🦾🤖🔄🛠️📝🧬🦾✨🚀 Updating OpenAPI Client from $SPEC... 🚀✨🦾🤖🔄🛠️📝🧬🦾✨🚀"
+echo "Updating OpenAPI Client from $SPEC..."
 
 if [ ! -f "$SPEC" ]; then
-    echo "❌😱📄🔍🚫🦾🤖❗❗ Error: $SPEC not found ❌😱📄🔍🚫🦾🤖❗❗"
-    echo "📂🏠🧐🔎🦾🤖⚠️ Usage: $0 [path/to/openapi.json], run from the project root 📂🏠🧐🔎🦾🤖⚠️"
+    echo "Error: $SPEC not found"
+    echo "Usage: $0 [path/to/openapi.json], run from the project root"
     exit 1
 fi
 
@@ -25,15 +25,15 @@ if command -v openapi-generator-cli &> /dev/null; then
 elif command -v openapi-generator &> /dev/null; then
     GENERATOR=openapi-generator
 else
-    echo "❌😱🛠️🔍🚫🦾🤖❗❗ Error: no OpenAPI generator found ❌😱🛠️🔍🚫🦾🤖❗❗"
-    echo "🍺💻🔧🦾🤖⚡ Install one of:"
+    echo "Error: no OpenAPI generator found"
+    echo "Install one of:"
     echo "    npm install -g @openapitools/openapi-generator-cli   (recommended)"
     echo "    brew install openapi-generator"
     exit 1
 fi
 
 # Generate the client (will overwrite existing files)
-echo "⚡🦾🤖🔄🛠️📝🧬✨🚀 Generating client with $GENERATOR... ⚡🦾🤖🔄🛠️📝🧬✨🚀"
+echo "Generating client with $GENERATOR..."
 "$GENERATOR" generate \
     -i "$SPEC" \
     -g python \
@@ -43,7 +43,7 @@ echo "⚡🦾🤖🔄🛠️📝🧬✨🚀 Generating client with $GENERATOR...
 
 # Async client: same API surface, httpx transport. Lives in its own package
 # (models included) so neither tree needs hand edits to share anything.
-echo "⚡🦾🤖🔄🛠️📝🧬✨🚀 Generating async (httpx) client with $GENERATOR... ⚡🦾🤖🔄🛠️📝🧬✨🚀"
+echo "Generating async (httpx) client with $GENERATOR..."
 "$GENERATOR" generate \
     -i "$SPEC" \
     -g python \
@@ -51,4 +51,4 @@ echo "⚡🦾🤖🔄🛠️📝🧬✨🚀 Generating async (httpx) client with
     --package-name cyborgdb.openapi_client_async \
     --additional-properties=generateSourceCodeOnly=true,library=httpx
 
-echo "✅🎉🚀🦾🤖✨🛠️📝🧬🌟 OpenAPI client updated successfully! ✅🎉🚀🦾🤖✨🛠️📝🧬🌟"
+echo "OpenAPI client updated successfully!"
