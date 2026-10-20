@@ -628,3 +628,9 @@ def parse_training_status(response) -> Dict[str, Any]:
         "training_indexes": list(response.training_indexes),
         "retrain_threshold": response.retrain_threshold,
     }
+
+
+def parse_embedding_models(response) -> List[Dict[str, Any]]:
+    """One plain dict per model, with every field the service reports (today
+    ``name``, ``dimension`` and ``max_seq_length``)."""
+    return [model.to_dict() for model in response.models or []]

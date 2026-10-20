@@ -471,6 +471,16 @@ def op_training_status(params):
     return encode(sdk(lookup_client(params).get_training_status))
 
 
+def op_embedding_models(params):
+    """@brief client.embedding_models.
+
+    @param params `client`.
+    @return One `{name, dimension, max_seq_length, ...}` per model, as the SDK
+        returns them.
+    """
+    return encode(sdk(lookup_client(params).list_embedding_models))
+
+
 def op_create_index(params):
     """@brief client.create_index.
 
@@ -802,6 +812,7 @@ OPS = {
     "client.list_indexes": op_list_indexes,
     "client.health": op_health,
     "client.training_status": op_training_status,
+    "client.embedding_models": op_embedding_models,
     "client.create_index": op_create_index,
     "client.load_index": op_load_index,
     "index.delete_index": op_delete_index,

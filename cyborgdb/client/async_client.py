@@ -24,6 +24,7 @@ except ImportError:
 
 from cyborgdb.client._request_builders import (
     apply_full_text_implication,
+    parse_embedding_models,
     parse_training_status,
     request_headers,
     validate_index_key,
@@ -349,3 +350,24 @@ class AsyncClient:
             return parse_training_status(response)
         except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to get training status") from e
+
+    async def list_embedding_models(self) -> List[Dict[str, Any]]:
+        """
+        List the embedding models ``create_index(embedding_model=...)`` accepts.
+
+        Nothing is downloaded; this reads the service's model table.
+
+        Returns:
+            One dict per model, with ``name`` (the canonical id; the bare name
+            without the organization prefix is accepted too, in any case),
+            ``dimension`` (the index dimension the model produces) and
+            ``max_seq_length`` (longer inputs are truncated).
+
+        Raises:
+            CyborgDBError: If the model list could not be retrieved.
+        """
+        try:
+            response = await self.api.list_embedding_models_v1_embedding_models_get()
+            return parse_embedding_models(response)
+        except _TRANSPORT_ERRORS as e:
+            raise translate_api_error(e, "Failed to list embedding models") from e

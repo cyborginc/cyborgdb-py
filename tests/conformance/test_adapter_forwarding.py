@@ -112,6 +112,9 @@ def fake_cyborgdb(log, index):
                     "training_indexes": [],
                     "retrain_threshold": 65536,
                 },
+                "list_embedding_models": [
+                    {"name": "m", "dimension": 384, "max_seq_length": 256}
+                ],
             }
             return Recorder(log, "client", returns, is_async)
 
@@ -198,6 +201,13 @@ FORWARDING_CASES = [
     ("client.list_indexes", {"client": "c0"}, "client.list_indexes", (), {}),
     ("client.health", {"client": "c0"}, "client.get_health", (), {}),
     ("client.training_status", {"client": "c0"}, "client.get_training_status", (), {}),
+    (
+        "client.embedding_models",
+        {"client": "c0"},
+        "client.list_embedding_models",
+        (),
+        {},
+    ),
     (
         "client.create_index",
         {"client": "c0", "as": "i1", "name": "n"},
@@ -853,3 +863,10 @@ def test_framing_over_fds_3_and_4():
 def test_training_status_returns_the_sdk_result(harness):
     response = harness.call("client.training_status", {"client": "c0"})
     assert response == {"result": {"training_indexes": [], "retrain_threshold": 65536}}
+
+
+def test_embedding_models_returns_the_sdk_result(harness):
+    response = harness.call("client.embedding_models", {"client": "c0"})
+    assert response == {
+        "result": [{"name": "m", "dimension": 384, "max_seq_length": 256}]
+    }
