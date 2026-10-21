@@ -78,5 +78,5 @@ FINDINGS.md
 pr.md
 pr-review.md
 
-# OpenAPI spec lives in cyborgdb-tests
+# OpenAPI spec lives in cyborgdb-service
 openapi.json
