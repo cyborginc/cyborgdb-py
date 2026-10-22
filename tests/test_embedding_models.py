@@ -18,21 +18,35 @@ MODELS = EmbeddingModelListResponseModel(
     models=[
         EmbeddingModelInfo(
             name="sentence-transformers/all-MiniLM-L6-v2",
+            revision="c9745ed1",
             dimension=384,
             max_seq_length=256,
+            normalize=True,
         ),
         EmbeddingModelInfo(
-            name="BAAI/bge-base-en-v1.5", dimension=768, max_seq_length=512
+            name="BAAI/bge-base-en-v1.5",
+            revision="a5beb1e3",
+            dimension=768,
+            max_seq_length=512,
+            normalize=False,
         ),
     ]
 )
 EXPECTED = [
     {
         "name": "sentence-transformers/all-MiniLM-L6-v2",
+        "revision": "c9745ed1",
         "dimension": 384,
         "max_seq_length": 256,
+        "normalize": True,
     },
-    {"name": "BAAI/bge-base-en-v1.5", "dimension": 768, "max_seq_length": 512},
+    {
+        "name": "BAAI/bge-base-en-v1.5",
+        "revision": "a5beb1e3",
+        "dimension": 768,
+        "max_seq_length": 512,
+        "normalize": False,
+    },
 ]
 
 

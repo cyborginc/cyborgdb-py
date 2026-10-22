@@ -360,8 +360,10 @@ class AsyncClient:
         Returns:
             One dict per model, with ``name`` (the canonical id; the bare name
             without the organization prefix is accepted too, in any case),
-            ``dimension`` (the index dimension the model produces) and
-            ``max_seq_length`` (longer inputs are truncated).
+            ``revision`` (the pinned upstream revision of its weights),
+            ``dimension`` (the index dimension the model produces),
+            ``max_seq_length`` (longer inputs are truncated) and ``normalize``
+            (whether its vectors are unit length).
 
         Raises:
             CyborgDBError: If the model list could not be retrieved.
