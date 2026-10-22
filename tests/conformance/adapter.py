@@ -869,9 +869,8 @@ def capabilities():
 
 # ---------- errors ----------
 
-# HTTP status -> kind, from errors.yaml. 401 and 403 each name two kinds; the SDK
-# can't tell them apart, so each gets one fixed kind and the wrong guesses are
-# declared in expected-failures/cyborgdb-py.yaml.
+# HTTP status -> kind, from errors.yaml, for an SDK error without a `kind`. The
+# SDK sets one on every error it raises, so this is a backstop.
 STATUS_KINDS = {
     400: "invalid_argument",
     401: "unauthenticated",
@@ -890,9 +889,8 @@ STATUS_KINDS = {
 def kind_of(native_error):
     """@brief Maps an SDK exception to an error kind from errors.yaml.
 
-    Uses the SDK's own `kind` once it exposes one (decided 2026-10-13, SDK.md
-    area 14); until then, the exception type and status code. Never the
-    message. An exception that isn't a typed SDK error is `internal`, so it
+    Uses the SDK's own `kind` (decided 2026-10-13, SDK.md area 14), falling
+    back to the exception type and status code. Never the message. An exception that isn't a typed SDK error is `internal`, so it
     always fails the step.
 
     @param native_error The exception the SDK raised.
