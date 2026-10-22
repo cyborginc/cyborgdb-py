@@ -2,18 +2,12 @@ name: Conformance (shared test suite)
 permissions:
   contents: read
 
-# Runs the shared CyborgDB test suite (cyborginc/cyborgdb-tests) through the SDK,
-# via tests/conformance/adapter.py, once per SDK code path. Nightly and alert-only:
-# not a required check. Promote to pull requests after 14 consecutive green nights
-# (cyborgdb-core#2139). Plan: tests/conformance/PLAN.md.
+# Nightly run of the shared CyborgDB test suite against the SDK, once per SDK
+# code path (json, binary, async). Alert-only, not a required check.
 #
-# THIS REPO IS PUBLIC, and so are its Actions logs and artifacts. cyborgdb-tests is
-# internal, so the run goes through its tools/ci/sdk-conformance.sh: the log gets one
-# line of counts per variant, and the reports, runner output and service logs are
-# encrypted with CONFORMANCE_LOG_KEY (1Password) into the uploaded artifact. When
-# editing: don't print anything from cyborgdb-tests, no `set -x`, no plain artifacts,
-# and don't re-run with debug logging. Decrypting a run's logs: cyborgdb-tests
-# tools/ci/README.md, "SDK conformance (public repos)".
+# This repo's logs are public and the suite is internal, so the log shows only
+# pass/fail counts and everything else is uploaded encrypted. Don't add steps
+# that print suite output.
 on:
   schedule:
     - cron: '0 7 * * *'
