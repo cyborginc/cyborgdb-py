@@ -12,6 +12,9 @@ on:
   schedule:
     - cron: '0 7 * * *'
   workflow_dispatch:
+  # TEMP: test run from this branch; revert this commit before merge.
+  push:
+    branches: [python-adapter]
 
 concurrency:
   group: conformance-${{ github.ref }}
