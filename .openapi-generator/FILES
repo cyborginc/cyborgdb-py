@@ -23,10 +23,10 @@ cyborgdb/openapi_client_async/models/delete_request.py
 cyborgdb/openapi_client_async/models/embedding_model_info.py
 cyborgdb/openapi_client_async/models/embedding_model_list_response_model.py
 cyborgdb/openapi_client_async/models/error_response_model.py
+cyborgdb/openapi_client_async/models/field_error.py
 cyborgdb/openapi_client_async/models/get_request.py
 cyborgdb/openapi_client_async/models/get_response_model.py
 cyborgdb/openapi_client_async/models/get_result_item_model.py
-cyborgdb/openapi_client_async/models/http_validation_error.py
 cyborgdb/openapi_client_async/models/index_info_response_model.py
 cyborgdb/openapi_client_async/models/index_list_response_model.py
 cyborgdb/openapi_client_async/models/index_operation_request.py
@@ -34,7 +34,6 @@ cyborgdb/openapi_client_async/models/index_training_status_response_model.py
 cyborgdb/openapi_client_async/models/list_ids_request.py
 cyborgdb/openapi_client_async/models/list_ids_response.py
 cyborgdb/openapi_client_async/models/list_users_response.py
-cyborgdb/openapi_client_async/models/location_inner.py
 cyborgdb/openapi_client_async/models/metadata_field_policy.py
 cyborgdb/openapi_client_async/models/metadata_result.py
 cyborgdb/openapi_client_async/models/num_vectors_response_model.py
@@ -48,8 +47,8 @@ cyborgdb/openapi_client_async/models/request.py
 cyborgdb/openapi_client_async/models/results.py
 cyborgdb/openapi_client_async/models/train_request.py
 cyborgdb/openapi_client_async/models/upsert_request.py
+cyborgdb/openapi_client_async/models/upsert_response.py
 cyborgdb/openapi_client_async/models/user_info.py
-cyborgdb/openapi_client_async/models/validation_error.py
 cyborgdb/openapi_client_async/models/vector_item.py
 cyborgdb/openapi_client_async/rest.py
 cyborgdb/openapi_client_async_README.md
