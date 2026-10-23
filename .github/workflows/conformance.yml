@@ -128,7 +128,9 @@ jobs:
       - name: Install the service and the SDK
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install "cyborgdb-service[embeddings,kms-aws]" --pre
+          # TEMP: newer core dev builds drop create_index_kms, which the current
+          # service dev build still imports; revert once they're compatible again.
+          pip install "cyborgdb-service[embeddings,kms-aws]" "cyborgdb-core==0.18.1.dev1792691084" --pre
           # Not editable: the adapter must test what users install.
           pip install '.[langchain]'
 
