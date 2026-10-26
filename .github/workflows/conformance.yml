@@ -8,6 +8,11 @@ permissions:
 # This repo's logs are public and the suite is internal, so the log shows only
 # pass/fail counts and everything else is uploaded encrypted. Don't add steps
 # that print suite output.
+#
+# Each variant runs in 3 shards (a third of the spec files each, balanced by the
+# suite's durations/ files), then a merge job per variant puts the shards' reports
+# back together and applies the checks only a whole run can make. The merge jobs,
+# "conformance (json)" and so on, are the result to watch.
 on:
   schedule:
     - cron: '0 7 * * *'
@@ -22,7 +27,7 @@ concurrency:
 
 jobs:
   conformance:
-    name: conformance (${{ matrix.variant }})
+    name: conformance (${{ matrix.variant }} ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     timeout-minutes: 150
     permissions:
@@ -32,6 +37,7 @@ jobs:
       fail-fast: false
       matrix:
         variant: [json, binary, async]
+        shard: [1, 2, 3]
 
     steps:
       # Full history: setuptools-scm needs the tags to give the installed SDK its
@@ -152,6 +158,7 @@ jobs:
             -u PIP_INDEX_URL
             cyborgdb-service
           VARIANTS: ${{ matrix.variant }}
+          SHARD: ${{ matrix.shard }}/3
           IMPL: cyborgdb-py
           OUT_DIR: ${{ runner.temp }}/conformance-out
           GH_TOKEN: ${{ secrets.CYBORGDB_TESTS_TOKEN }}
@@ -172,6 +179,78 @@ jobs:
 
       # Only the encrypted bundle (conformance-logs.tar.gz.enc) is in OUT_DIR.
       - name: Upload encrypted logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: conformance-${{ matrix.variant }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/conformance-out
+          if-no-files-found: warn
+          retention-days: 30
+
+  # One per variant, after all its shards: decrypts their reports, merges them, and
+  # prints the variant's one summary line. No service, SDK or AWS needed.
+  merge:
+    name: conformance (${{ matrix.variant }})
+    needs: conformance
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [json, binary, async]
+
+    steps:
+      - name: Checkout SDK code
+        uses: actions/checkout@v7
+
+      - name: cyborgdb-tests ref
+        id: tests-ref
+        run: echo "ref=$(tr -d '[:space:]' < .cyborgdb-tests-ref)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout cyborgdb-tests
+        uses: actions/checkout@v7
+        with:
+          repository: cyborginc/cyborgdb-tests
+          ref: ${{ steps.tests-ref.outputs.ref }}
+          token: ${{ secrets.CYBORGDB_TESTS_TOKEN }}
+          path: cyborgdb-tests
+
+      # Only used when no prebuilt driver matches the checked-out suite commit.
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: cyborgdb-tests/go.mod
+          cache: false
+
+      - name: Load the log key from 1Password
+        id: run-secrets
+        uses: 1password/load-secrets-action@v5
+        with:
+          export-env: false
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_TOKEN }}
+          CONFORMANCE_LOG_KEY: "op://CyborgDB/CyborgDB Dev/CONFORMANCE_LOG_KEY"
+
+      - name: Download the shards' encrypted logs
+        uses: actions/download-artifact@v7
+        with:
+          pattern: conformance-${{ matrix.variant }}-*
+          path: ${{ runner.temp }}/shards
+
+      - name: Merge the shards
+        env:
+          VARIANTS: ${{ matrix.variant }}
+          IMPL: cyborgdb-py
+          MERGE_FROM: ${{ runner.temp }}/shards
+          OUT_DIR: ${{ runner.temp }}/conformance-out
+          GH_TOKEN: ${{ secrets.CYBORGDB_TESTS_TOKEN }}
+          CONFORMANCE_LOG_KEY: ${{ steps.run-secrets.outputs.CONFORMANCE_LOG_KEY }}
+        run: cyborgdb-tests/tools/ci/sdk-conformance.sh
+
+      - name: Upload the merged encrypted logs
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
