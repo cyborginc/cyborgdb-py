@@ -36,19 +36,31 @@ jobs:
           uv run --no-sync ruff format --check .
 
   test:
+    name: test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13', '3.14', '3.15']
 
     steps:
       - name: Checkout SDK code
         uses: actions/checkout@v7
-        
-      - name: Set up Python
+
+      # The service runs on its own pinned interpreter
+      - name: Set up Python for cyborgdb-service
+        id: service-python
         uses: actions/setup-python@v7
         with:
           python-version: '3.13'
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Load secrets from 1Password
         uses: 1password/load-secrets-action@v5
@@ -128,22 +140,23 @@ jobs:
           echo "--- generated registry (placeholders unexpanded) ---"
           cat "${{ runner.temp }}/cyborgdb.yaml"
 
-      - name: Install service dependencies
-        run: |
-          # Install CPU-only torch so the [embeddings] extra below does not pull
-          # the much larger CUDA build.
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
-          
       - name: Install cyborgdb-service
         run: |
+          "${{ steps.service-python.outputs.python-path }}" -m venv "$RUNNER_TEMP/service-venv"
+          # Install CPU-only torch so the [embeddings] extra below does not pull
+          # the much larger CUDA build.
+          "$RUNNER_TEMP/service-venv/bin/pip" install torch --index-url https://download.pytorch.org/whl/cpu
           # PIP_INDEX_URL points at CodeArtifact (PyPI upstream), so the private
           # pre-release resolves from there. Matches the cyborgdb-js and
           # cyborgdb-go SDK workflows.
-          pip install "cyborgdb-service[embeddings,kms-aws]" --pre
-          
+          "$RUNNER_TEMP/service-venv/bin/pip" install "cyborgdb-service[embeddings,kms-aws]" --pre
+
       - name: Install SDK and test dependencies
         id: install-sdk
         run: |
+          # CPU-only torch here too: the [langchain] extra pulls
+          # sentence-transformers, which would otherwise bring the CUDA build.
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install '.[langchain]'
           pip install pytest pytest-cov pytest-asyncio
 
@@ -171,7 +184,7 @@ jobs:
           export CYBORGDB_SERVICE_LOG_LEVEL=DEBUG
 
           # Start the service
-          nohup cyborgdb-service > server-standard.log 2>&1 &
+          nohup "$RUNNER_TEMP/service-venv/bin/cyborgdb-service" > server-standard.log 2>&1 &
           echo $! > server-standard.pid
           
           # Wait for service to be ready
@@ -255,7 +268,7 @@ jobs:
           # created while authentication was disabled.
           export CYBORGDB_DISK_PATH="${RUNNER_TEMP}/cyborgdb-rbac-disk"
 
-          nohup cyborgdb-service > server-rbac.log 2>&1 &
+          nohup "$RUNNER_TEMP/service-venv/bin/cyborgdb-service" > server-rbac.log 2>&1 &
           echo $! > server-rbac.pid
 
           # /v1/health is unauthenticated, so it stays a valid readiness probe.

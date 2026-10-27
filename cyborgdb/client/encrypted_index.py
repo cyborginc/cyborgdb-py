@@ -7,7 +7,7 @@ This module provides the EncryptedIndex class for interacting with encrypted vec
 import binascii
 import json
 import logging
-from typing import Dict, List, Optional, TypedDict, Union, Any
+from typing import Dict, List, NotRequired, Optional, TypedDict, Union, Any
 
 import numpy as np
 import urllib3.exceptions
@@ -57,16 +57,7 @@ logger = logging.getLogger(__name__)
 _coerce_datetimes = coerce_datetimes
 
 
-# Split into two TypedDicts so `id` stays required while `score` is optional
-# per-key: `typing.NotRequired` is 3.11+ and the package supports 3.10, so a
-# `total=False` subclass expresses the optional key with no union and no
-# `typing_extensions` dependency. This is an implementation detail — kept as a
-# comment, not a docstring, so it stays out of the public shape callers read.
-class _MetadataResultBase(TypedDict):
-    id: str
-
-
-class MetadataResult(_MetadataResultBase, total=False):
+class MetadataResult(TypedDict):
     """One row of a ``query_metadata`` result: the item ``id``, plus a BM25
     ``score`` when the query ranked by relevance.
 
@@ -76,7 +67,8 @@ class MetadataResult(_MetadataResultBase, total=False):
     ``None`` — the same convention ``query()`` uses for ``distance`` / ``score``.
     """
 
-    score: float
+    id: str
+    score: NotRequired[float]
 
 
 class EncryptedIndex:

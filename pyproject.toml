@@ -7,7 +7,7 @@ name = "cyborgdb"
 dynamic = ["version"]
 description = "Python Client SDK for CyborgDB: The Confidential Vector Database"
 readme = "README.md"
-requires-python = ">= 3.10"
+requires-python = ">= 3.11"
 license = "MIT"
 authors = [{ name = "Cyborg Inc." }]
 keywords = ["OpenAPI", "OpenAPI-Generator", "CyborgDB Service"]
@@ -26,11 +26,11 @@ classifiers = [
     "Intended Audience :: Information Technology",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Programming Language :: C++",
     "Topic :: Database",
     "Topic :: Database :: Database Engines/Servers",
@@ -91,8 +91,8 @@ extend-exclude = [
 line-length = 88
 indent-width = 4
 
-# Assume Python 3.8+
-target-version = "py38"
+# Assume Python 3.11+
+target-version = "py311"
 
 [tool.ruff.lint]
 # Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`) codes by default.

@@ -36,7 +36,7 @@ body:
       description: Provide step-by-step instructions for reproducing the issue.
       placeholder: |
         Example:
-        1. Initialize the `cyborgdb_py` service using Python 3.10.
+        1. Initialize the `cyborgdb_py` service using Python 3.11.
         2. Call the `POST /vector` API with the following payload.
         3. ...
     validations:
