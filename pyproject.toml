@@ -44,7 +44,7 @@ test = ["cyborgdb[langchain]", "pytest-asyncio"]
 
 [dependency-groups]
 # Pinned so local `uv run ruff` and the CI lint job use the same version.
-dev = ["ruff==0.17.0"]
+dev = ["ruff==0.17.1"]
 
 [project.urls]
 "Homepage" = "https://www.cyborg.co"
