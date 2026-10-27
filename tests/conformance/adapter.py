@@ -1012,6 +1012,19 @@ def adapter_error():
     }
 
 
+def encode_response(response):
+    """@brief Serializes a response; one that can't be serialized becomes an adapter error.
+
+    @param response A JSON-RPC response object.
+    @return The response as JSON bytes.
+    """
+    try:
+        return json.dumps(response, allow_nan=False).encode()
+    except (TypeError, ValueError):
+        fallback = {"jsonrpc": "2.0", "id": response.get("id"), **adapter_error()}
+        return json.dumps(fallback).encode()
+
+
 def main():
     """@brief Serves requests from fd 3 until the driver closes it."""
     if VARIANT not in VARIANTS:
@@ -1034,12 +1047,13 @@ def main():
                 "error": {"code": CODE_PARSE, "message": str(error)},
             }
         else:
-            response = {"jsonrpc": "2.0", "id": request.get("id")}
+            request_id = request.get("id") if isinstance(request, dict) else None
+            response = {"jsonrpc": "2.0", "id": request_id}
             try:
                 response.update(handle_request(request))
             except Exception:  # noqa: BLE001 - adapter bug; report it, keep serving
                 response.update(adapter_error())
-        responses_out.write(json.dumps(response, allow_nan=False).encode() + b"\n")
+        responses_out.write(encode_response(response) + b"\n")
 
 
 if __name__ == "__main__":
