@@ -859,9 +859,17 @@ def capabilities():
         "training_status",
         "service_auth",
         "durable_storage",
+        # Python lets a caller pass values the SDK's types forbid (a numeric id,
+        # a bare string for a list); the adapter passes them through unchanged.
+        "loose_types",
     ]
     if VARIANT != "binary":
         names.append("ragged_batches")  # JSON items carry each vector on its own
+    else:
+        # upsert_binary takes ids, vectors and a separate metadata list, so a
+        # metadata list of another length is expressible; JSON upsert carries
+        # metadata inside each item and has no such list.
+        names.append("parallel_metadata")
     if any(os.environ.get(variable) for variable in KMS_SLOT_VARIABLES):
         names.append("kms_provider")
     return names
