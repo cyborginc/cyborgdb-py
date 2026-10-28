@@ -2,8 +2,10 @@ name: Conformance (shared test suite)
 permissions:
   contents: read
 
-# Nightly run of the shared CyborgDB test suite against the SDK, once per SDK
-# code path (json, binary, async). Alert-only, not a required check.
+# Runs the shared CyborgDB test suite against the SDK, once per SDK code path
+# (json, binary, async): on pull requests, nightly and on demand. Not a required
+# check. A pull request from a fork gets no secrets, so it skips the suite rather
+# than fail.
 #
 # This repo's logs are public and the suite is internal, so the log shows only
 # pass/fail counts and everything else is uploaded encrypted. Don't add steps
@@ -17,16 +19,15 @@ on:
   schedule:
     - cron: '0 7 * * *'
   workflow_dispatch:
-  # TEMP: test run from this branch; revert this commit before merge.
-  push:
-    branches: [python-adapter]
+  pull_request:
 
 concurrency:
   group: conformance-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   conformance:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: conformance (${{ matrix.variant }} ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     timeout-minutes: 150
@@ -193,7 +194,7 @@ jobs:
   merge:
     name: conformance (${{ matrix.variant }})
     needs: conformance
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
