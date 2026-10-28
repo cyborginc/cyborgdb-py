@@ -238,7 +238,7 @@ def _field_errors(body: Any) -> Optional[List[Dict[str, Any]]]:
     value = body.get("errors") if isinstance(body, dict) else None
     if not isinstance(value, list):
         return None
-    return [item for item in value if isinstance(item, dict)]
+    return [item for item in value if isinstance(item, dict)] or None
 
 
 def _retry_after(headers: Any) -> Optional[float]:

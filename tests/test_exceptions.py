@@ -190,6 +190,15 @@ class TestKinds(unittest.TestCase):
         result = translate_api_error(_api_exception(404, kind="not_found"), "op")
         self.assertIsNone(result.errors)
 
+    def test_field_errors_none_when_no_usable_entries(self):
+        for errors in ([], ["something"]):
+            with self.subTest(errors=errors):
+                result = translate_api_error(
+                    _api_exception(422, kind="invalid_argument", errors=errors),
+                    "op failed",
+                )
+                self.assertIsNone(result.errors)
+
     def test_errors_raised_by_the_sdk_have_kinds(self):
         self.assertEqual(ValidationError("bad").kind, "invalid_argument")
         self.assertEqual(_ArgumentTypeError("bad").kind, "invalid_argument")
