@@ -139,6 +139,8 @@ jobs:
 
       - name: Install the service and the SDK
         run: |
+          # The job can request an AWS token (id-token: write); install and build scripts don't need that ability.
+          unset ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install "cyborgdb-service[embeddings,kms-aws]" --pre
           # Not editable: the adapter must test what users install.
