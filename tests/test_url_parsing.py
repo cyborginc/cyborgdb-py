@@ -6,9 +6,10 @@ from unittest.mock import MagicMock, patch
 
 
 def _make_client(base_url, **kwargs):
-    with patch(
-        "cyborgdb.openapi_client.api_client.ApiClient"
-    ) as mock_api_client, patch("cyborgdb.openapi_client.api.default_api.DefaultApi"):
+    with (
+        patch("cyborgdb.openapi_client.api_client.ApiClient") as mock_api_client,
+        patch("cyborgdb.openapi_client.api.default_api.DefaultApi"),
+    ):
         mock_api_client.return_value = MagicMock()
         from cyborgdb.client.client import Client
 

@@ -13,6 +13,7 @@ training, so these run on small untrained indexes.
 import os
 import unittest
 import uuid
+from typing import get_type_hints
 
 import numpy as np
 from dotenv import load_dotenv
@@ -445,8 +446,11 @@ class TestMetadataResultContract(unittest.TestCase):
 
         self.assertEqual(set(MetadataResult.__required_keys__), {"id"})
         self.assertEqual(set(MetadataResult.__optional_keys__), {"score"})
-        self.assertEqual(MetadataResult.__annotations__["id"], str)
-        self.assertEqual(MetadataResult.__annotations__["score"], float)
+        # get_type_hints strips the NotRequired wrapper; optionality is pinned by
+        # the key sets above.
+        hints = get_type_hints(MetadataResult)
+        self.assertEqual(hints["id"], str)
+        self.assertEqual(hints["score"], float)
 
     def test_typed_dict_matches_wire_contract(self):
         # The wire model is generated from openapi.json (sourced from core), so
