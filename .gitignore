@@ -72,3 +72,6 @@ datasets
 venv
 
 .env.local
+
+# OpenAPI spec lives in cyborgdb-service
+openapi.json

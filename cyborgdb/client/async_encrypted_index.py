@@ -21,7 +21,10 @@ from cyborgdb.client._request_builders import (
     build_upsert_request,
     hybrid_query_kwargs,
     parse_binary_query_response,
+    parse_bm25,
+    parse_describe_response,
     parse_get_response,
+    parse_metadata_schema,
     parse_query_metadata_response,
     parse_query_response,
     request_headers,
@@ -201,16 +204,9 @@ class AsyncEncryptedIndex:
 
         Returned as plain dicts — the same shape `create_index` accepts — so
         generated openapi_client models never leak out of the wrapper."""
-        return {
-            field: {
-                "filterable": policy.filterable,
-                "pattern": policy.pattern,
-                "full_text": policy.full_text,
-            }
-            for field, policy in (
-                (await self._describe_translated()).metadata_schema or {}
-            ).items()
-        }
+        return parse_metadata_schema(
+            (await self._describe_translated()).metadata_schema
+        )
 
     async def bm25(self) -> Optional[Dict[str, Any]]:
         """BM25 scorer config the index reports back, as
@@ -222,14 +218,19 @@ class AsyncEncryptedIndex:
 
         Returned as a plain dict so generated openapi_client models never leak
         out of the wrapper."""
-        config = (await self._describe_translated()).bm25
-        if config is None:
-            return None
-        return {
-            "k1": config.k1,
-            "b": config.b,
-            "analyzer_version": config.analyzer_version,
-        }
+        return parse_bm25((await self._describe_translated()).bm25)
+
+    async def describe(self) -> Dict[str, Any]:
+        """
+        Get the index's configuration and training state in one call.
+
+        Returns:
+            The same dict as :meth:`EncryptedIndex.describe`.
+
+        Raises:
+            CyborgDBError: If the index could not be described.
+        """
+        return parse_describe_response(await self._describe_translated())
 
     async def is_trained(self) -> bool:
         """
@@ -799,6 +800,24 @@ class AsyncEncryptedIndex:
             return response.ids
         except _TRANSPORT_ERRORS as e:
             raise translate_api_error(e, "Failed to list document IDs") from e
+
+    async def get_num_vectors(self) -> int:
+        """
+        Get the number of items stored in the index.
+
+        Returns:
+            The item count. Overwriting an existing ID doesn't change it.
+
+        Raises:
+            CyborgDBError: If the count could not be retrieved.
+        """
+        try:
+            response = await self._api.get_index_size_v1_vectors_num_vectors_post(
+                index_operation_request=self._ior()
+            )
+            return response.result
+        except _TRANSPORT_ERRORS as e:
+            raise translate_api_error(e, "Failed to get the number of vectors") from e
 
     async def is_training(self) -> bool:
         """

@@ -47,10 +47,10 @@ CONCEPTS = {
 }
 
 
-def _api_exception(status, detail="synthetic failure", headers=None):
+def _api_exception(status, detail="synthetic failure", headers=None, **body):
     """Build an ApiException the way the generated client would."""
     exc = ApiException(status=status, reason="synthetic")
-    exc.body = json.dumps({"detail": detail})
+    exc.body = json.dumps({"status_code": status, "detail": detail, **body})
     exc.headers = headers if headers is not None else {"X-Request-Id": "req-abc123"}
     return exc
 
@@ -122,6 +122,91 @@ class TestTranslation(unittest.TestCase):
         self.assertIsInstance(result, ServiceError)
         self.assertIsNone(result.request_id)
         self.assertIsNone(result.retry_after)
+
+
+class TestKinds(unittest.TestCase):
+    def test_service_kind_is_carried(self):
+        for status, kind, expected in (
+            (401, "wrong_key", AuthenticationError),
+            (401, "unauthenticated", AuthenticationError),
+            (403, "quota_exceeded", AuthenticationError),
+            (403, "permission_denied", AuthenticationError),
+            (400, "failed_precondition", ValidationError),
+            (500, "data_loss", ServiceError),
+        ):
+            with self.subTest(kind=kind):
+                result = translate_api_error(
+                    _api_exception(status, kind=kind), "op failed"
+                )
+                self.assertIsInstance(result, expected)
+                self.assertEqual(result.kind, kind)
+
+    def test_unknown_kind_is_passed_through(self):
+        result = translate_api_error(
+            _api_exception(400, kind="some_new_kind"), "op failed"
+        )
+        self.assertIsInstance(result, ValidationError)
+        self.assertEqual(result.kind, "some_new_kind")
+
+    def test_kind_falls_back_to_the_status(self):
+        for status, kind in (
+            (400, "invalid_argument"),
+            (401, "unauthenticated"),
+            (403, "permission_denied"),
+            (404, "not_found"),
+            (405, "invalid_argument"),
+            (409, "already_exists"),
+            (422, "invalid_argument"),
+            (429, "rate_limited"),
+            (500, "internal"),
+            (503, "unavailable"),
+        ):
+            with self.subTest(status=status):
+                result = translate_api_error(_api_exception(status), "op failed")
+                self.assertEqual(result.kind, kind)
+
+    def test_kind_without_a_json_body(self):
+        exc = ApiException(status=503, reason="synthetic")
+        exc.body = "Service Unavailable"
+        result = translate_api_error(exc, "op failed")
+        self.assertEqual(result.kind, "unavailable")
+        self.assertEqual(result.detail, "Service Unavailable")
+
+    def test_field_errors_are_carried(self):
+        field_errors = [
+            {
+                "field": "body.items.0.vector",
+                "message": "Field required",
+                "type": "missing",
+            }
+        ]
+        result = translate_api_error(
+            _api_exception(422, kind="invalid_argument", errors=field_errors),
+            "op failed",
+        )
+        self.assertEqual(result.errors, field_errors)
+
+    def test_field_errors_absent_by_default(self):
+        result = translate_api_error(_api_exception(404, kind="not_found"), "op")
+        self.assertIsNone(result.errors)
+
+    def test_field_errors_none_when_no_usable_entries(self):
+        for errors in ([], ["something"]):
+            with self.subTest(errors=errors):
+                result = translate_api_error(
+                    _api_exception(422, kind="invalid_argument", errors=errors),
+                    "op failed",
+                )
+                self.assertIsNone(result.errors)
+
+    def test_errors_raised_by_the_sdk_have_kinds(self):
+        self.assertEqual(ValidationError("bad").kind, "invalid_argument")
+        self.assertEqual(_ArgumentTypeError("bad").kind, "invalid_argument")
+        result = translate_api_error(
+            urllib3.exceptions.TimeoutError("timed out"), "op failed"
+        )
+        self.assertEqual(result.kind, "transport")
+        self.assertIsNone(result.errors)
 
 
 class TestPublicSurface(unittest.TestCase):

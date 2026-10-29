@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 __all__ = [
     "CyborgDBError",
@@ -35,12 +35,22 @@ class CyborgDBError(ValueError):
         detail: The service's own message, or ``None`` when there was no
             response.
         retry_after: Seconds from the ``Retry-After`` header, or ``None``.
+        kind: What went wrong, for branching where a status is shared (401 is
+            ``wrong_key`` or ``unauthenticated``; 403 is ``permission_denied``
+            or ``quota_exceeded``). The service may add kinds; treat an unknown
+            one like ``internal``. Derived from the status when the service
+            predates kinds. ``None`` only for an error raised without a status
+            or kind.
+        errors: The service's per-field rejections, one
+            ``{"field", "message", "type"}`` dict each, or ``None`` when the
+            request didn't fail field validation.
         retryable: Whether backing off and retrying can succeed. Fixed per
             type — retry loops branch on this rather than re-deriving a status
             table.
     """
 
     retryable: bool = False
+    _default_kind: Optional[str] = None
 
     def __init__(
         self,
@@ -50,12 +60,16 @@ class CyborgDBError(ValueError):
         request_id: Optional[str] = None,
         detail: Optional[str] = None,
         retry_after: Optional[float] = None,
+        kind: Optional[str] = None,
+        errors: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.request_id = request_id
         self.detail = detail
         self.retry_after = retry_after
+        self.kind = kind or self._default_kind
+        self.errors = errors
 
 
 class ValidationError(CyborgDBError):
@@ -65,6 +79,7 @@ class ValidationError(CyborgDBError):
     """
 
     retryable = False
+    _default_kind = "invalid_argument"
 
 
 class _ArgumentTypeError(ValidationError, TypeError):
@@ -76,9 +91,11 @@ class _ArgumentTypeError(ValidationError, TypeError):
 
 
 class AuthenticationError(CyborgDBError):
-    """HTTP 401 and 403. Check the API key and its permissions.
+    """HTTP 401 and 403. Check the API key, the index key and permissions.
 
-    Inspect ``status_code`` to tell the two apart.
+    Inspect ``kind`` to tell them apart: ``unauthenticated`` (API key missing
+    or rejected), ``wrong_key`` (the index key doesn't decrypt the index),
+    ``permission_denied`` or ``quota_exceeded``.
     """
 
     retryable = False
@@ -128,6 +145,7 @@ class TransportError(CyborgDBError):
     """
 
     retryable = True
+    _default_kind = "transport"
 
 
 # Status -> exception class. Mirrors the `mapping` block of the taxonomy file.
@@ -140,6 +158,28 @@ _STATUS_MAP = {
     422: ValidationError,
     429: RateLimitError,
 }
+
+# Status -> kind for services that predate kinds; the service's own defaults.
+_STATUS_KINDS = {
+    400: "invalid_argument",
+    401: "unauthenticated",
+    403: "permission_denied",
+    404: "not_found",
+    409: "already_exists",
+    422: "invalid_argument",
+    429: "rate_limited",
+    502: "unavailable",
+    503: "unavailable",
+    504: "unavailable",
+}
+
+
+def _kind_for_status(status: Optional[int]) -> Optional[str]:
+    if not isinstance(status, int):
+        return None
+    if status in _STATUS_KINDS:
+        return _STATUS_KINDS[status]
+    return "invalid_argument" if 400 <= status < 500 else "internal"
 
 
 def _header(headers: Any, name: str) -> Optional[str]:
@@ -161,8 +201,8 @@ def _header(headers: Any, name: str) -> Optional[str]:
     return None
 
 
-def _detail(body: Any) -> Optional[str]:
-    """Pull the service's own message out of a response body."""
+def _decode_body(body: Any) -> Any:
+    """The response body as parsed JSON, else as text, else ``None``."""
     if body is None:
         return None
     if isinstance(body, (bytes, bytearray)):
@@ -172,13 +212,32 @@ def _detail(body: Any) -> Optional[str]:
             return None
     if isinstance(body, str):
         try:
-            body = json.loads(body)
+            return json.loads(body)
         except (ValueError, TypeError):
             return body or None
+    return body
+
+
+def _detail(body: Any) -> Optional[str]:
+    """Pull the service's own message out of a decoded response body."""
+    if isinstance(body, str):
+        return body
     if isinstance(body, dict) and "detail" in body:
         value = body["detail"]
         return value if isinstance(value, str) else json.dumps(value)
     return None
+
+
+def _kind(body: Any) -> Optional[str]:
+    value = body.get("kind") if isinstance(body, dict) else None
+    return value if isinstance(value, str) and value else None
+
+
+def _field_errors(body: Any) -> Optional[List[Dict[str, Any]]]:
+    value = body.get("errors") if isinstance(body, dict) else None
+    if not isinstance(value, list):
+        return None
+    return [item for item in value if isinstance(item, dict)] or None
 
 
 def _retry_after(headers: Any) -> Optional[float]:
@@ -229,12 +288,14 @@ def translate_api_error(exc: Exception, context: str) -> Exception:
 
     status = getattr(exc, "status", None)
     headers = getattr(exc, "headers", None)
-    detail = _detail(getattr(exc, "body", None))
+    body = _decode_body(getattr(exc, "body", None))
     kwargs = {
         "status_code": status,
         "request_id": _header(headers, "X-Request-Id"),
-        "detail": detail,
+        "detail": _detail(body),
         "retry_after": _retry_after(headers),
+        "kind": _kind(body) or _kind_for_status(status),
+        "errors": _field_errors(body),
     }
     message = f"{context}: {exc}"
 
