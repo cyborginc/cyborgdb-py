@@ -73,10 +73,5 @@ venv
 
 .env.local
 
-PLAN.md
-FINDINGS.md
-pr.md
-pr-review.md
-
 # OpenAPI spec lives in cyborgdb-service
 openapi.json
