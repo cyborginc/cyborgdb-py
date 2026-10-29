@@ -31,7 +31,7 @@ import cyborgdb
 from cyborgdb.exceptions import TransportError, ValidationError
 
 PROTOCOL = 1
-IMPL = "cyborgdb-py"
+IMPL = "sdk-py"
 CODE_OP_FAILED = -32000
 CODE_UNSUPPORTED = -32601
 CODE_INVALID_PARAMS = -32602

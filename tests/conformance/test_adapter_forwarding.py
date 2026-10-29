@@ -798,7 +798,7 @@ def test_hello_reports_variant_capabilities(monkeypatch):
     binary_names = Harness("binary", monkeypatch).call("hello", {"protocol": 1})[
         "result"
     ]
-    assert json_names["impl"] == "cyborgdb-py"
+    assert json_names["impl"] == "sdk-py"
     assert "ragged_batches" in json_names["capabilities"]
     assert "ragged_batches" not in binary_names["capabilities"]
     for absent in ("kms_blob", "gpu", "error_fields", "free_tier"):
@@ -855,7 +855,7 @@ def test_framing_over_fds_3_and_4():
         responses = [json.loads(line) for line in from_adapter]
     assert process.wait(timeout=30) == 0
     assert [response["id"] for response in responses] == [1, 2, None]
-    assert responses[0]["result"]["impl"] == "cyborgdb-py"
+    assert responses[0]["result"]["impl"] == "sdk-py"
     assert responses[1]["error"]["code"] == CODE_UNSUPPORTED
     assert responses[2]["error"]["code"] == -32700
 
