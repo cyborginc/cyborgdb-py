@@ -37,11 +37,10 @@ class CyborgDBError(ValueError):
         retry_after: Seconds from the ``Retry-After`` header, or ``None``.
         kind: What went wrong, for branching where a status is shared (401 is
             ``wrong_key`` or ``unauthenticated``; 403 is ``permission_denied``
-            or ``quota_exceeded``). One of ``cyborgdb-tests/errors.yaml``'s
-            kinds, or ``rate_limited`` / ``transport``. The service may add
-            kinds; treat an unknown one like ``internal``. Derived from the
-            status when the service predates kinds. ``None`` only for an error
-            raised without a status or kind.
+            or ``quota_exceeded``). The service may add kinds; treat an unknown
+            one like ``internal``. Derived from the status when the service
+            predates kinds. ``None`` only for an error raised without a status
+            or kind.
         errors: The service's per-field rejections, one
             ``{"field", "message", "type"}`` dict each, or ``None`` when the
             request didn't fail field validation.
