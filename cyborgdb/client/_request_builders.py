@@ -63,6 +63,10 @@ def apply_full_text_implication(
     which the service reads as an explicit conflict with ``full_text``.
     Stopgap until the service schema drops that default (cyborgdb-core#2393).
     """
+    if metadata_schema is not None and not isinstance(metadata_schema, dict):
+        raise ValidationError(
+            "metadata_schema must be a dict mapping field names to policy dicts"
+        )
     if not metadata_schema:
         return metadata_schema
     return {

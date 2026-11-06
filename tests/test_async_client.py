@@ -523,6 +523,25 @@ class TestValidation:
         index._api.upsert_vectors_v1_vectors_upsert_post.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_pydantic_rejections_are_translated(self):
+        # Malformed arguments the generated request models reject must surface
+        # as the SDK's ValidationError, kind invalid_argument, exactly as in
+        # the sync client.
+        index = _async_index()
+        for call in (
+            index.upsert([{"id": 123, "vector": [0.1]}]),
+            index.upsert([{"id": "a", "vector": [0.1], "contents": 123}]),
+            index.query(query_vectors=[0.1, 0.2], filters="nope"),
+            index.query(),
+            index.query_metadata(filters="nope", text="hello"),
+        ):
+            with pytest.raises(ValidationError) as ctx:
+                await call
+            assert ctx.value.kind == "invalid_argument"
+            assert ctx.value.status_code is None
+        assert index._api.method_calls == []
+
+    @pytest.mark.asyncio
     async def test_bad_index_key_is_rejected_before_any_request(self):
         client = AsyncClient(BASE_URL, api_key=API_KEY)
         with pytest.raises(ValidationError):

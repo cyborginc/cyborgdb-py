@@ -260,8 +260,11 @@ def translate_api_error(exc: Exception, context: str) -> Exception:
     This is the single translation point for the SDK: the sync and async
     client modules call it instead of each carrying its own cascade, so the
     mapping cannot drift between methods or between the two clients. It
-    accepts the ``ApiException`` of either generated package, plus urllib3
-    errors (sync transport) and ``httpx.RequestError`` (async transport).
+    accepts the ``ApiException`` of either generated package, urllib3
+    errors (sync transport), ``httpx.RequestError`` (async transport), and
+    ``pydantic.ValidationError`` — a malformed argument the generated request
+    models rejected before any request was sent, which must surface as this
+    SDK's ``ValidationError`` rather than a bare pydantic error.
 
     Returns the exception to raise — it never raises on its own. Statuses the
     taxonomy does not name (405, 413, ...) map to the base ``CyborgDBError``.
@@ -277,7 +280,22 @@ def translate_api_error(exc: Exception, context: str) -> Exception:
         ApiException as AsyncApiException,
     )
     import httpx
+    import pydantic
     import urllib3.exceptions
+
+    if isinstance(exc, pydantic.ValidationError):
+        errors = [
+            {
+                "field": ".".join(str(loc) for loc in error.get("loc", ())),
+                "message": error.get("msg", ""),
+                "type": error.get("type", ""),
+            }
+            for error in exc.errors()
+        ]
+        logger.error("%s: %s", context, exc)
+        return ValidationError(
+            f"{context}: {exc}", detail=str(exc), errors=errors or None
+        )
 
     if isinstance(exc, (urllib3.exceptions.HTTPError, httpx.RequestError)):
         logger.error("%s: %s", context, exc)

@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import httpx
 import numpy as np
+from pydantic import ValidationError as PydanticValidationError
 
 from cyborgdb.client._request_builders import (
     build_binary_query_request,
@@ -60,7 +61,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-_TRANSPORT_ERRORS = (ApiException, httpx.RequestError)
+# Everything translate_api_error maps onto the public taxonomy; pydantic
+# rejections included so they surface as ValidationError.
+_TRANSLATED_ERRORS = (ApiException, httpx.RequestError, PydanticValidationError)
 
 
 class AsyncEncryptedIndex:
@@ -153,7 +156,7 @@ class AsyncEncryptedIndex:
     async def _describe_translated(self):
         try:
             return await self._describe()
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to describe index") from e
 
     def _request_headers(self) -> Dict[str, str]:
@@ -258,7 +261,7 @@ class AsyncEncryptedIndex:
             await self._api.delete_index_v1_indexes_delete_post(
                 index_operation_request=self._ior()
             )
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to delete index") from e
 
     async def get(
@@ -294,7 +297,7 @@ class AsyncEncryptedIndex:
                 _headers=self._request_headers(),
             )
             return parse_get_response(response, include)
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to retrieve items") from e
         except Exception as e:
             error_msg = f"Get operation failed: {str(e)}"
@@ -342,7 +345,7 @@ class AsyncEncryptedIndex:
             )
 
             await self._api.train_index_v1_indexes_train_post(train_request=request)
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to train index") from e
 
     async def upsert(
@@ -389,11 +392,8 @@ class AsyncEncryptedIndex:
                 _headers=self._request_headers(),
             )
 
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to upsert items") from e
-        except (TypeError, ValueError) as e:
-            logger.error(str(e))
-            raise
 
     async def upsert_binary(
         self,
@@ -420,22 +420,21 @@ class AsyncEncryptedIndex:
                 ``contents`` don't match ``ids`` in length.
             CyborgDBError: If the service rejects the upsert.
         """
-        request = build_binary_upsert_request(
-            _models,
-            self._index_name,
-            self._key_to_hex(),
-            ids,
-            vectors,
-            metadata,
-            contents,
-        )
-
         try:
+            request = build_binary_upsert_request(
+                _models,
+                self._index_name,
+                self._key_to_hex(),
+                ids,
+                vectors,
+                metadata,
+                contents,
+            )
             await self._api.upsert_vectors_binary_v1_vectors_upsert_binary_post(
                 binary_upsert_request=request,
                 _headers=self._request_headers(),
             )
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to upsert items (binary)") from e
 
     async def delete(self, ids: List[str]) -> None:
@@ -460,7 +459,7 @@ class AsyncEncryptedIndex:
             await self._api.delete_vectors_v1_vectors_delete_post(
                 delete_request=delete_request
             )
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to delete items") from e
 
     async def query(
@@ -605,15 +604,8 @@ class AsyncEncryptedIndex:
 
                 logger.error(traceback.format_exc())
                 raise
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Query failed") from e
-        except Exception as e:
-            error_msg = f"Unexpected error in query: {str(e)}"
-            logger.error(error_msg)
-            import traceback
-
-            logger.error(traceback.format_exc())
-            raise
 
     async def query_binary(
         self,
@@ -669,29 +661,28 @@ class AsyncEncryptedIndex:
                 unsupported value, or the service rejects a parameter.
             CyborgDBError: If the service rejects the query.
         """
-        request, is_single_query = build_binary_query_request(
-            _models,
-            self._index_name,
-            self._key_to_hex(),
-            query_vectors,
-            top_k,
-            n_probes,
-            filters,
-            include,
-            greedy,
-            rerank_mult,
-            hybrid_query_kwargs(
-                text,
-                text_fields,
-                text_field_weights,
-                require_all_terms,
-                alpha,
-                rrf_k,
-                window_mult,
-            ),
-        )
-
         try:
+            request, is_single_query = build_binary_query_request(
+                _models,
+                self._index_name,
+                self._key_to_hex(),
+                query_vectors,
+                top_k,
+                n_probes,
+                filters,
+                include,
+                greedy,
+                rerank_mult,
+                hybrid_query_kwargs(
+                    text,
+                    text_fields,
+                    text_field_weights,
+                    require_all_terms,
+                    alpha,
+                    rrf_k,
+                    window_mult,
+                ),
+            )
             response = (
                 await self._api.query_vectors_binary_v1_vectors_query_binary_post(
                     binary_query_request=request,
@@ -700,7 +691,7 @@ class AsyncEncryptedIndex:
             )
             return parse_binary_query_response(response, is_single_query)
 
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to query (binary)") from e
 
     async def query_metadata(
@@ -760,26 +751,25 @@ class AsyncEncryptedIndex:
             ValidationError: If the filter cannot be resolved from the metadata
                 index, or ``order_by`` is malformed.
         """
-        request = build_query_metadata_request(
-            _models,
-            self._index_name,
-            self._key_to_hex(),
-            filters,
-            top_k,
-            order_by,
-            ascending,
-            text,
-            text_fields,
-            text_field_weights,
-            require_all_terms,
-        )
-
         try:
+            request = build_query_metadata_request(
+                _models,
+                self._index_name,
+                self._key_to_hex(),
+                filters,
+                top_k,
+                order_by,
+                ascending,
+                text,
+                text_fields,
+                text_field_weights,
+                require_all_terms,
+            )
             response = await self._api.query_metadata_v1_vectors_query_metadata_post(
                 query_metadata_request=request
             )
             return parse_query_metadata_response(response, text)
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to query metadata") from e
 
     async def list_ids(self) -> List[str]:
@@ -798,7 +788,7 @@ class AsyncEncryptedIndex:
             )
 
             return response.ids
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to list document IDs") from e
 
     async def get_num_vectors(self) -> int:
@@ -816,7 +806,7 @@ class AsyncEncryptedIndex:
                 index_operation_request=self._ior()
             )
             return response.result
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to get the number of vectors") from e
 
     async def is_training(self) -> bool:
@@ -836,7 +826,7 @@ class AsyncEncryptedIndex:
 
             return False
 
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to get index training status") from e
 
     # RBAC — user management (root API key required). See EncryptedIndex for
@@ -873,7 +863,7 @@ class AsyncEncryptedIndex:
                 index_name=self._index_name, create_user_request=request
             )
             return {"user_id": response.user_id, "api_key": response.api_key}
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to create user") from e
 
     async def list_users(self) -> List[Dict[str, Any]]:
@@ -896,7 +886,7 @@ class AsyncEncryptedIndex:
                 {"user_id": u.user_id, "permissions": u.permissions}
                 for u in response.users
             ]
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to list users") from e
 
     async def delete_user(self, user_id: str) -> None:
@@ -918,7 +908,7 @@ class AsyncEncryptedIndex:
                 user_id=user_id,
                 x_index_key=self._index_key_hex,
             )
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to delete user") from e
 
     def _key_to_hex(self) -> Optional[str]:

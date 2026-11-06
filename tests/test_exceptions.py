@@ -3,6 +3,7 @@
 import json
 import unittest
 
+import pydantic
 import urllib3.exceptions
 
 import cyborgdb
@@ -207,6 +208,42 @@ class TestKinds(unittest.TestCase):
         )
         self.assertEqual(result.kind, "transport")
         self.assertIsNone(result.errors)
+
+
+class TestPydanticTranslation(unittest.TestCase):
+    """Arguments the generated request models reject must surface as this
+    SDK's ValidationError (kind invalid_argument), never as a bare pydantic
+    error the caller would classify as internal."""
+
+    class _Model(pydantic.BaseModel):
+        filters: dict
+
+    def _pydantic_error(self):
+        try:
+            self._Model(filters="not a dict")
+        except pydantic.ValidationError as exc:
+            return exc
+
+    def test_becomes_the_sdk_validation_error(self):
+        result = translate_api_error(self._pydantic_error(), "Query failed")
+        self.assertIsInstance(result, ValidationError)
+        self.assertEqual(result.kind, "invalid_argument")
+        self.assertIsNone(result.status_code)
+        self.assertFalse(result.retryable)
+        self.assertIn("Query failed", str(result))
+
+    def test_field_errors_are_carried(self):
+        result = translate_api_error(self._pydantic_error(), "op failed")
+        self.assertEqual(
+            result.errors,
+            [
+                {
+                    "field": "filters",
+                    "message": "Input should be a valid dictionary",
+                    "type": "dict_type",
+                }
+            ],
+        )
 
 
 class TestPublicSurface(unittest.TestCase):

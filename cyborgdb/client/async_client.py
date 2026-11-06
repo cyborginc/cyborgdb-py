@@ -40,7 +40,9 @@ __all__ = [
     "AsyncEncryptedIndex",
 ]
 
-_TRANSPORT_ERRORS = (ApiException, httpx.RequestError)
+# Everything translate_api_error maps onto the public taxonomy; pydantic
+# rejections included so they surface as ValidationError.
+_TRANSLATED_ERRORS = (ApiException, httpx.RequestError, PydanticValidationError)
 
 
 class AsyncClient:
@@ -160,7 +162,7 @@ class AsyncClient:
         try:
             response = await self.api.list_indexes_v1_indexes_list_get()
             return response.indexes
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to list indexes") from e
 
     async def create_index(
@@ -272,12 +274,8 @@ class AsyncClient:
 
             return index
 
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to create index") from e
-        except PydanticValidationError as ve:
-            error_msg = f"Validation error while creating index: {ve}"
-            logger.error(error_msg)
-            raise ValidationError(error_msg) from ve
 
     async def load_index(
         self,
@@ -309,12 +307,8 @@ class AsyncClient:
 
             return index
 
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, f"Failed to load index '{index_name}'") from e
-        except PydanticValidationError as ve:
-            error_msg = f"Validation error while loading index '{index_name}': {ve}"
-            logger.error(error_msg)
-            raise ValidationError(error_msg) from ve
 
     async def get_health(self) -> Dict[str, str]:
         """
@@ -328,7 +322,7 @@ class AsyncClient:
         """
         try:
             return await self.api.health_check_v1_health_get()
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to get health status") from e
 
     async def get_training_status(self) -> Dict[str, Any]:
@@ -348,7 +342,7 @@ class AsyncClient:
                 await self.api.get_training_status_v1_indexes_training_status_get()
             )
             return parse_training_status(response)
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to get training status") from e
 
     async def list_embedding_models(self) -> List[Dict[str, Any]]:
@@ -371,5 +365,5 @@ class AsyncClient:
         try:
             response = await self.api.list_embedding_models_v1_embedding_models_get()
             return parse_embedding_models(response)
-        except _TRANSPORT_ERRORS as e:
+        except _TRANSLATED_ERRORS as e:
             raise translate_api_error(e, "Failed to list embedding models") from e

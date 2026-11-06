@@ -251,5 +251,69 @@ class TestIncludeValidation(unittest.TestCase):
         self.assertEqual(api.method_calls, [])
 
 
+class TestPydanticRejectionsAreTranslated(unittest.TestCase):
+    """Malformed arguments the generated request models reject must surface as
+    the SDK's ValidationError (kind invalid_argument), never as bare pydantic
+    errors a caller would classify as internal."""
+
+    def assert_rejected_before_sending(self, api, fn):
+        with self.assertRaises(ValidationError) as ctx:
+            fn()
+        self.assertEqual(ctx.exception.kind, "invalid_argument")
+        self.assertIsNone(ctx.exception.status_code)
+        self.assertEqual(api.method_calls, [])
+
+    def test_upsert_non_string_id(self):
+        api = MagicMock()
+        self.assert_rejected_before_sending(
+            api, lambda: _index(api).upsert([{"id": 123, "vector": [0.1]}])
+        )
+
+    def test_upsert_contents_of_wrong_type(self):
+        api = MagicMock()
+        self.assert_rejected_before_sending(
+            api,
+            lambda: _index(api).upsert([{"id": "a", "vector": [0.1], "contents": 123}]),
+        )
+
+    def test_query_non_object_filter(self):
+        api = MagicMock()
+        self.assert_rejected_before_sending(
+            api, lambda: _index(api).query(query_vectors=[0.1, 0.2], filters="nope")
+        )
+
+    def test_query_binary_non_object_filter(self):
+        api = MagicMock()
+        self.assert_rejected_before_sending(
+            api,
+            lambda: _index(api).query(
+                query_vectors=np.zeros((1, 2), dtype=np.float32), filters="nope"
+            ),
+        )
+
+    def test_query_without_vectors_or_contents(self):
+        api = MagicMock()
+        self.assert_rejected_before_sending(api, lambda: _index(api).query())
+
+    def test_query_metadata_non_object_filter(self):
+        api = MagicMock()
+        self.assert_rejected_before_sending(
+            api, lambda: _index(api).query_metadata(filters="nope", text="hello")
+        )
+
+    def test_create_index_non_object_schema(self):
+        client = Client("http://api.example.com", api_key="k")
+        client.api = MagicMock()
+        self.assert_rejected_before_sending(
+            client.api,
+            lambda: client.create_index("idx", KEY, metadata_schema="not a dict"),
+        )
+
+    def test_field_errors_point_at_the_argument(self):
+        with self.assertRaises(ValidationError) as ctx:
+            _index().query(query_vectors=[0.1, 0.2], filters="nope")
+        self.assertEqual(ctx.exception.errors[0]["field"], "filters")
+
+
 if __name__ == "__main__":
     unittest.main()
