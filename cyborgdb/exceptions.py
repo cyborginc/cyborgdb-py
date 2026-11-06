@@ -350,6 +350,44 @@ def _safe_field(title: str, loc) -> str:
     return ".".join(parts)
 
 
+def _scrubbed_errors(exc) -> tuple:
+    """Per-field error dicts and a one-line summary, values and keys scrubbed."""
+    errors = [
+        {
+            "field": _safe_field(exc.title, error.get("loc", ())),
+            "message": _scrub_pydantic(error.get("msg", "")),
+            "type": error.get("type", ""),
+        }
+        for error in exc.errors(include_url=False, include_input=False)
+    ]
+    return errors, "; ".join(f"{e['field']}: {e['message']}" for e in errors)
+
+
+def malformed_response_error(exc: Exception, status: int) -> "ServiceError":
+    """A 2xx body the response models rejected, as ``ServiceError``.
+
+    Built from scrubbed parts: a response body can carry decrypted contents
+    (values) and user field names (loc keys). The generated anyOf wrappers
+    reject with a plain ValueError whose text embeds nested pydantic
+    renderings; for those only the static prefix before the embedded details
+    is kept.
+    """
+    import pydantic
+
+    if isinstance(exc, pydantic.ValidationError):
+        _, summary = _scrubbed_errors(exc)
+        detail = f"{exc.error_count()} validation error(s) for {exc.title}: {summary}"
+    else:
+        detail = _scrub_pydantic(str(exc).split("Details: ", 1)[0]).strip()
+    return ServiceError(
+        f"The service returned HTTP {status} with a body that does not match "
+        f"the response model: {detail}",
+        status_code=status,
+        detail=detail,
+        kind="internal",
+    )
+
+
 def safe_cause(exc: Exception) -> Optional[Exception]:
     """What to chain as ``__cause__`` when raising a translated error.
 
@@ -396,18 +434,8 @@ def translate_api_error(exc: Exception, context: str) -> Exception:
 
     if isinstance(exc, pydantic.ValidationError):
         # Built from scrubbed parts, never str(exc) — it repeats the values.
-        errors = [
-            {
-                "field": _safe_field(exc.title, error.get("loc", ())),
-                "message": _scrub_pydantic(error.get("msg", "")),
-                "type": error.get("type", ""),
-            }
-            for error in exc.errors(include_url=False, include_input=False)
-        ]
-        detail = (
-            "; ".join(f"{e['field']}: {e['message']}" for e in errors)
-            or "request arguments failed validation"
-        )
+        errors, summary = _scrubbed_errors(exc)
+        detail = summary or "request arguments failed validation"
         message = (
             f"{context}: {exc.error_count()} validation error(s) "
             f"for {exc.title} — {detail}"

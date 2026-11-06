@@ -286,6 +286,35 @@ class TestPydanticTranslation(unittest.TestCase):
         self.assertNotIn("SECRET-FIELD", str(result))
         self.assertNotIn("SECRET-FIELD", result.detail)
 
+    def test_response_side_dict_keys_are_redacted(self):
+        # A malformed 2xx body can put user field names in loc; the response
+        # error must redact them the same way the argument side does.
+        from cyborgdb.exceptions import malformed_response_error
+        from cyborgdb.openapi_client.models import IndexInfoResponseModel
+
+        try:
+            IndexInfoResponseModel.model_validate(
+                {
+                    "index_name": "i",
+                    "is_trained": False,
+                    "dimension": 4,
+                    "metric": "euclidean",
+                    "n_lists": 1,
+                    "index_type": "disk_ivf",
+                    "training_state": "untrained",
+                    "storage_precision": "float32",
+                    "metadata_schema": {"SECRET-FIELD": {"filterable": "nope"}},
+                }
+            )
+        except pydantic.ValidationError as exc:
+            result = malformed_response_error(exc, 200)
+        self.assertIsInstance(result, ServiceError)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.kind, "internal")
+        self.assertNotIn("SECRET-FIELD", str(result))
+        self.assertNotIn("SECRET-FIELD", result.detail)
+        self.assertIn("metadata_schema.<key>.filterable", result.detail)
+
     def test_values_containing_the_input_type_delimiter_are_scrubbed(self):
         # A value containing ", input_type=" must not defeat the redaction.
         from cyborgdb.openapi_client.models import Contents
