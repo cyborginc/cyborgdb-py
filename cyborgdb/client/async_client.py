@@ -29,9 +29,15 @@ from cyborgdb.client._request_builders import (
     request_headers,
     validate_index_key,
 )
+from cyborgdb.client._response_guard import ResponseValidationGuard
 from cyborgdb.client.async_encrypted_index import AsyncEncryptedIndex
 from cyborgdb.client.client import Client
-from cyborgdb.exceptions import CyborgDBError, ValidationError, translate_api_error
+from cyborgdb.exceptions import (
+    CyborgDBError,
+    ValidationError,
+    safe_cause,
+    translate_api_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +47,13 @@ __all__ = [
 ]
 
 # Everything translate_api_error maps onto the public taxonomy; pydantic
-# rejections included so they surface as ValidationError.
+# rejections surface as ValidationError (response-side ones are already
+# ServiceError via the guarded ApiClient).
 _TRANSLATED_ERRORS = (ApiException, httpx.RequestError, PydanticValidationError)
+
+
+class _GuardedApiClient(ResponseValidationGuard, ApiClient):
+    """The generated client, with malformed 2xx bodies raised as ServiceError."""
 
 
 class AsyncClient:
@@ -114,7 +125,7 @@ class AsyncClient:
         # Construction opens no connections: the generated client creates its
         # httpx pool lazily on the first request, inside the running loop.
         try:
-            self.api_client = ApiClient(self.config)
+            self.api_client = _GuardedApiClient(self.config)
             self.api = DefaultApi(self.api_client)
 
             if api_key:
@@ -163,7 +174,7 @@ class AsyncClient:
             response = await self.api.list_indexes_v1_indexes_list_get()
             return response.indexes
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to list indexes") from e
+            raise translate_api_error(e, "Failed to list indexes") from safe_cause(e)
 
     async def create_index(
         self,
@@ -275,7 +286,7 @@ class AsyncClient:
             return index
 
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to create index") from e
+            raise translate_api_error(e, "Failed to create index") from safe_cause(e)
 
     async def load_index(
         self,
@@ -308,7 +319,9 @@ class AsyncClient:
             return index
 
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, f"Failed to load index '{index_name}'") from e
+            raise translate_api_error(
+                e, f"Failed to load index '{index_name}'"
+            ) from safe_cause(e)
 
     async def get_health(self) -> Dict[str, str]:
         """
@@ -323,7 +336,9 @@ class AsyncClient:
         try:
             return await self.api.health_check_v1_health_get()
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to get health status") from e
+            raise translate_api_error(e, "Failed to get health status") from safe_cause(
+                e
+            )
 
     async def get_training_status(self) -> Dict[str, Any]:
         """
@@ -343,7 +358,9 @@ class AsyncClient:
             )
             return parse_training_status(response)
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to get training status") from e
+            raise translate_api_error(
+                e, "Failed to get training status"
+            ) from safe_cause(e)
 
     async def list_embedding_models(self) -> List[Dict[str, Any]]:
         """
@@ -366,4 +383,6 @@ class AsyncClient:
             response = await self.api.list_embedding_models_v1_embedding_models_get()
             return parse_embedding_models(response)
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to list embedding models") from e
+            raise translate_api_error(
+                e, "Failed to list embedding models"
+            ) from safe_cause(e)

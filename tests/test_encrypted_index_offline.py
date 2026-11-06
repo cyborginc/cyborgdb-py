@@ -314,6 +314,19 @@ class TestPydanticRejectionsAreTranslated(unittest.TestCase):
             _index().query(query_vectors=[0.1, 0.2], filters="nope")
         self.assertEqual(ctx.exception.errors[0]["field"], "filters")
 
+    def test_rejected_value_stays_out_of_the_traceback(self):
+        # The raw pydantic error renders the value, so it is not chained.
+        import traceback
+
+        with self.assertRaises(ValidationError) as ctx:
+            _index().query(query_vectors=[0.1, 0.2], filters="TOP-SECRET-VALUE")
+        exc = ctx.exception
+        self.assertIsNone(exc.__cause__)
+        rendered = "".join(
+            traceback.format_exception(type(exc), exc, exc.__traceback__)
+        )
+        self.assertNotIn("TOP-SECRET-VALUE", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

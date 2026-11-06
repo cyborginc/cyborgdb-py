@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
 __all__ = [
@@ -25,7 +26,8 @@ class CyborgDBError(ValueError):
 
     Catch this to handle any CyborgDB failure; catch a subclass to handle one
     kind. Every instance carries the context below, and the originating
-    exception stays reachable through ``__cause__``.
+    exception stays reachable through ``__cause__`` — except pydantic
+    rejections, whose rendering embeds the rejected values (``safe_cause``).
 
     Attributes:
         status_code: HTTP status, or ``None`` for transport failures and for
@@ -127,9 +129,10 @@ class RateLimitError(CyborgDBError):
 
 
 class ServiceError(CyborgDBError):
-    """Any 5xx.
+    """Any 5xx, or a 2xx whose body doesn't match the response model.
 
-    Not "ServiceUnavailable": a 500 is a server bug, not unavailability.
+    Not "ServiceUnavailable": a 500 is a server bug, not unavailability — and
+    so is a malformed 2xx (``status_code`` keeps it, ``kind`` is ``internal``).
     """
 
     retryable = True
@@ -254,6 +257,33 @@ def _retry_after(headers: Any) -> Optional[float]:
         return None
 
 
+# The `input_value=...` segment of pydantic's error rendering repeats the
+# rejected value verbatim; `input_type=` always follows it. Best-effort.
+_PYDANTIC_INPUT_VALUE = re.compile(r"input_value=.*?, input_type=", re.DOTALL)
+
+
+def _scrub_pydantic(text: str) -> str:
+    """Redact rejected input values from pydantic's error text.
+
+    The values are confidential. Dropping ``errors()``'s input field isn't
+    enough: the generated anyOf validators embed nested error text, values
+    included, inside their ``msg``.
+    """
+    return _PYDANTIC_INPUT_VALUE.sub("input_value=<redacted>, input_type=", text)
+
+
+def safe_cause(exc: Exception) -> Optional[Exception]:
+    """What to chain as ``__cause__`` when raising a translated error.
+
+    The original exception, except pydantic rejections: their rendering embeds
+    the rejected values, which tracebacks would print. ``None`` also
+    suppresses the implicit context.
+    """
+    import pydantic
+
+    return None if isinstance(exc, pydantic.ValidationError) else exc
+
+
 def translate_api_error(exc: Exception, context: str) -> Exception:
     """Map a generated-client or transport exception onto the public taxonomy.
 
@@ -264,7 +294,10 @@ def translate_api_error(exc: Exception, context: str) -> Exception:
     errors (sync transport), ``httpx.RequestError`` (async transport), and
     ``pydantic.ValidationError`` — a malformed argument the generated request
     models rejected before any request was sent, which must surface as this
-    SDK's ``ValidationError`` rather than a bare pydantic error.
+    SDK's ``ValidationError`` rather than a bare pydantic error. Pydantic
+    errors here are always argument-side — a rejected *response* body becomes
+    ``ServiceError`` in ``_response_guard.py`` — and the rejected values are
+    scrubbed from the result (see ``_scrub_pydantic``).
 
     Returns the exception to raise — it never raises on its own. Statuses the
     taxonomy does not name (405, 413, ...) map to the base ``CyborgDBError``.
@@ -284,18 +317,25 @@ def translate_api_error(exc: Exception, context: str) -> Exception:
     import urllib3.exceptions
 
     if isinstance(exc, pydantic.ValidationError):
+        # Built from scrubbed parts, never str(exc) — it repeats the values.
         errors = [
             {
                 "field": ".".join(str(loc) for loc in error.get("loc", ())),
-                "message": error.get("msg", ""),
+                "message": _scrub_pydantic(error.get("msg", "")),
                 "type": error.get("type", ""),
             }
-            for error in exc.errors()
+            for error in exc.errors(include_url=False, include_input=False)
         ]
-        logger.error("%s: %s", context, exc)
-        return ValidationError(
-            f"{context}: {exc}", detail=str(exc), errors=errors or None
+        detail = (
+            "; ".join(f"{e['field']}: {e['message']}" for e in errors)
+            or "request arguments failed validation"
         )
+        message = (
+            f"{context}: {exc.error_count()} validation error(s) "
+            f"for {exc.title} — {detail}"
+        )
+        logger.error(message)
+        return ValidationError(message, detail=detail, errors=errors or None)
 
     if isinstance(exc, (urllib3.exceptions.HTTPError, httpx.RequestError)):
         logger.error("%s: %s", context, exc)

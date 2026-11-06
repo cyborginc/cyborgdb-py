@@ -408,6 +408,49 @@ class TestWireParity:
         assert sync_headers["Content-Type"] == async_headers["content-type"]
 
 
+class TestMalformedResponse:
+    """A 2xx body the response models reject must surface as ServiceError,
+    never as the argument-side ValidationError."""
+
+    @staticmethod
+    def _empty_body(url):
+        return {}
+
+    def _assert_service_error(self, exc):
+        assert not isinstance(exc, ValidationError)
+        assert exc.kind == "internal"
+        assert exc.status_code == 200
+        assert exc.retryable
+
+    def test_sync_malformed_200_is_service_error(self):
+        client = _sync_client(_Recorder(), body_for_path=self._empty_body)
+        index = EncryptedIndex("idx", KEY, client.api, client.api_client)
+        with pytest.raises(ServiceError) as ctx:
+            index.query_binary(np.zeros((1, 2), dtype=np.float32))
+        self._assert_service_error(ctx.value)
+
+    def test_malformed_body_values_stay_out_of_the_error(self):
+        # A 2xx body can carry decrypted contents; its values must not reach
+        # the error or the cause chain.
+        client = _sync_client(
+            _Recorder(), body_for_path=lambda url: {"results": "TOP-SECRET-VALUE"}
+        )
+        index = EncryptedIndex("idx", KEY, client.api, client.api_client)
+        with pytest.raises(ServiceError) as ctx:
+            index.query_binary(np.zeros((1, 2), dtype=np.float32))
+        assert "TOP-SECRET-VALUE" not in str(ctx.value)
+        assert "TOP-SECRET-VALUE" not in ctx.value.detail
+        assert ctx.value.__cause__ is None
+
+    @pytest.mark.asyncio
+    async def test_async_malformed_200_is_service_error(self):
+        client = _async_client(_Recorder(), body_for_path=self._empty_body)
+        index = AsyncEncryptedIndex("idx", KEY, client.api, client.api_client)
+        with pytest.raises(ServiceError) as ctx:
+            await index.query_binary(np.zeros((1, 2), dtype=np.float32))
+        self._assert_service_error(ctx.value)
+
+
 SYNC_TO_ASYNC_STATUSES = [401, 403, 404, 409, 422, 429, 500]
 EXPECTED_BY_STATUS = {
     401: AuthenticationError,

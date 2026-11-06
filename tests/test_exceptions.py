@@ -245,6 +245,30 @@ class TestPydanticTranslation(unittest.TestCase):
             ],
         )
 
+    def test_rejected_values_are_scrubbed(self):
+        # What the caller passed is confidential and must not be echoed.
+        try:
+            self._Model(filters="TOP-SECRET-VALUE")
+        except pydantic.ValidationError as exc:
+            result = translate_api_error(exc, "op failed")
+        self.assertNotIn("TOP-SECRET-VALUE", str(result))
+        self.assertNotIn("TOP-SECRET-VALUE", result.detail)
+        for error in result.errors:
+            self.assertNotIn("TOP-SECRET-VALUE", error["message"])
+
+    def test_values_embedded_by_anyof_validators_are_scrubbed(self):
+        # The generated anyOf validators (Contents) embed the rejected value
+        # inside msg itself, so the scrub must reach into messages.
+        from cyborgdb.openapi_client.models import Contents
+
+        try:
+            Contents(4111111111111111)
+        except pydantic.ValidationError as exc:
+            result = translate_api_error(exc, "op failed")
+        self.assertNotIn("4111111111111111", str(result))
+        self.assertNotIn("4111111111111111", result.detail)
+        self.assertIn("<redacted>", result.errors[0]["message"])
+
 
 class TestPublicSurface(unittest.TestCase):
     def test_importable_from_the_exceptions_module(self):
