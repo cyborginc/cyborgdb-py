@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union, get_args, get_origin
 
 __all__ = [
     "CyborgDBError",
@@ -257,9 +257,11 @@ def _retry_after(headers: Any) -> Optional[float]:
         return None
 
 
-# The `input_value=...` segment of pydantic's error rendering repeats the
-# rejected value verbatim; `input_type=` always follows it. Best-effort.
-_PYDANTIC_INPUT_VALUE = re.compile(r"input_value=.*?, input_type=", re.DOTALL)
+# Pydantic's `input_value=...` segment repeats the rejected value verbatim.
+# The value's repr has no reliable terminator (it can itself contain
+# ", input_type="), so everything from the first marker onward is dropped;
+# what follows is only nested detail from other anyOf attempts.
+_PYDANTIC_INPUT_VALUE = re.compile(r"input_value=.*", re.DOTALL)
 
 
 def _scrub_pydantic(text: str) -> str:
@@ -269,7 +271,83 @@ def _scrub_pydantic(text: str) -> str:
     enough: the generated anyOf validators embed nested error text, values
     included, inside their ``msg``.
     """
-    return _PYDANTIC_INPUT_VALUE.sub("input_value=<redacted>, input_type=", text)
+    return _PYDANTIC_INPUT_VALUE.sub("input_value=<redacted>", text)
+
+
+def _model_by_name(title: str):
+    """The generated model class named ``title``, from either package."""
+    import pydantic
+
+    try:
+        from cyborgdb.openapi_client import models as sync_models
+        from cyborgdb.openapi_client_async import models as async_models
+    except ImportError:
+        return None
+    for namespace in (sync_models, async_models):
+        cls = getattr(namespace, title, None)
+        if isinstance(cls, type) and issubclass(cls, pydantic.BaseModel):
+            return cls
+    return None
+
+
+def _flatten_union(annotation) -> list:
+    if get_origin(annotation) is Union:
+        return [a for arg in get_args(annotation) for a in _flatten_union(arg)]
+    return [annotation]
+
+
+def _safe_field(title: str, loc) -> str:
+    """Join a pydantic ``loc``, keeping only provably static components.
+
+    Dict keys in a ``loc`` (e.g. ``metadata_schema`` field names) are
+    user-supplied and confidential, so a string survives only where the model's
+    annotations prove it is a field name; anything else becomes ``<key>``.
+    Indices always survive. An unresolvable model keeps just the first
+    component, which the builders control.
+    """
+    import pydantic
+
+    model = _model_by_name(title)
+    if model is None:
+        return ".".join(
+            str(c) if isinstance(c, int) or i == 0 else "<key>"
+            for i, c in enumerate(loc)
+        )
+    parts, candidates = [], [model]
+    for comp in loc:
+        if isinstance(comp, int):
+            parts.append(str(comp))
+            candidates = [
+                flat
+                for ann in candidates
+                if get_origin(ann) in (list, tuple, set, frozenset) and get_args(ann)
+                for flat in _flatten_union(get_args(ann)[0])
+            ]
+            continue
+        fields = [
+            ann
+            for ann in candidates
+            if isinstance(ann, type)
+            and issubclass(ann, pydantic.BaseModel)
+            and comp in ann.model_fields
+        ]
+        dicts = [ann for ann in candidates if get_origin(ann) is dict]
+        if fields and not dicts:
+            parts.append(comp)
+            candidates = [
+                flat
+                for ann in fields
+                for flat in _flatten_union(ann.model_fields[comp].annotation)
+            ]
+        else:
+            parts.append("<key>")
+            candidates = [
+                flat
+                for ann in dicts
+                if len(get_args(ann)) == 2
+                for flat in _flatten_union(get_args(ann)[1])
+            ]
+    return ".".join(parts)
 
 
 def safe_cause(exc: Exception) -> Optional[Exception]:
@@ -320,7 +398,7 @@ def translate_api_error(exc: Exception, context: str) -> Exception:
         # Built from scrubbed parts, never str(exc) — it repeats the values.
         errors = [
             {
-                "field": ".".join(str(loc) for loc in error.get("loc", ())),
+                "field": _safe_field(exc.title, error.get("loc", ())),
                 "message": _scrub_pydantic(error.get("msg", "")),
                 "type": error.get("type", ""),
             }

@@ -429,17 +429,24 @@ class TestMalformedResponse:
             index.query_binary(np.zeros((1, 2), dtype=np.float32))
         self._assert_service_error(ctx.value)
 
-    def test_malformed_body_values_stay_out_of_the_error(self):
+    @pytest.mark.parametrize(
+        "secret",
+        ["TOP-SECRET-VALUE", "SECRET-A, input_type=x SECRET-B"],
+        ids=["plain", "contains-scrub-delimiter"],
+    )
+    def test_malformed_body_values_stay_out_of_the_error(self, secret):
         # A 2xx body can carry decrypted contents; its values must not reach
-        # the error or the cause chain.
+        # the error or the cause chain — even values crafted to contain the
+        # redaction delimiter.
         client = _sync_client(
-            _Recorder(), body_for_path=lambda url: {"results": "TOP-SECRET-VALUE"}
+            _Recorder(), body_for_path=lambda url: {"results": secret}
         )
         index = EncryptedIndex("idx", KEY, client.api, client.api_client)
         with pytest.raises(ServiceError) as ctx:
             index.query_binary(np.zeros((1, 2), dtype=np.float32))
-        assert "TOP-SECRET-VALUE" not in str(ctx.value)
-        assert "TOP-SECRET-VALUE" not in ctx.value.detail
+        for fragment in ("TOP-SECRET-VALUE", "SECRET-A", "SECRET-B"):
+            assert fragment not in str(ctx.value)
+            assert fragment not in ctx.value.detail
         assert ctx.value.__cause__ is None
 
     @pytest.mark.asyncio

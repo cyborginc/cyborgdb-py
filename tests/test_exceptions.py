@@ -269,6 +269,37 @@ class TestPydanticTranslation(unittest.TestCase):
         self.assertNotIn("4111111111111111", result.detail)
         self.assertIn("<redacted>", result.errors[0]["message"])
 
+    def test_user_supplied_dict_keys_are_redacted_from_fields(self):
+        # metadata_schema keys are user data and must not reach loc-derived
+        # fields; the model's own field names stay.
+        from cyborgdb.openapi_client.models import CreateIndexRequest
+
+        try:
+            CreateIndexRequest(
+                index_name="i",
+                index_key="00" * 32,
+                metadata_schema={"SECRET-FIELD": {"filterable": object()}},
+            )
+        except pydantic.ValidationError as exc:
+            result = translate_api_error(exc, "op failed")
+        self.assertEqual(result.errors[0]["field"], "metadata_schema.<key>.filterable")
+        self.assertNotIn("SECRET-FIELD", str(result))
+        self.assertNotIn("SECRET-FIELD", result.detail)
+
+    def test_values_containing_the_input_type_delimiter_are_scrubbed(self):
+        # A value containing ", input_type=" must not defeat the redaction.
+        from cyborgdb.openapi_client.models import Contents
+
+        try:
+            Contents(["SECRET-A, input_type=x SECRET-B"])
+        except pydantic.ValidationError as exc:
+            result = translate_api_error(exc, "op failed")
+        for secret in ("SECRET-A", "SECRET-B"):
+            self.assertNotIn(secret, str(result))
+            self.assertNotIn(secret, result.detail)
+            for error in result.errors:
+                self.assertNotIn(secret, error["message"])
+
 
 class TestPublicSurface(unittest.TestCase):
     def test_importable_from_the_exceptions_module(self):
