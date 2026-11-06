@@ -76,6 +76,13 @@ class TestUpsertBinaryContents(unittest.TestCase):
             _index().upsert_binary(["a"], [[0.0, 1.0]])
         self.assertIsInstance(ctx.exception, TypeError)
 
+    def test_zero_dimension_vectors_are_a_validation_error(self):
+        api = MagicMock()
+        with self.assertRaises(ValidationError) as ctx:
+            _index(api).upsert_binary(["a"], np.zeros((1, 0), dtype=np.float32))
+        self.assertEqual(ctx.exception.kind, "invalid_argument")
+        self.assertEqual(api.method_calls, [])
+
 
 class TestDimensionCache(unittest.TestCase):
     def test_zero_dimension_is_not_cached(self):
@@ -308,6 +315,22 @@ class TestPydanticRejectionsAreTranslated(unittest.TestCase):
             client.api,
             lambda: client.create_index("idx", KEY, metadata_schema="not a dict"),
         )
+
+    def test_create_index_non_finite_bm25_params(self):
+        # nan/inf can't travel as JSON: httpx (async) raises a bare ValueError
+        # serializing them, so they must be rejected client-side on both paths.
+        client = Client("http://api.example.com", api_key="k")
+        client.api = MagicMock()
+        for kwargs in (
+            {"bm25_k1": float("nan")},
+            {"bm25_k1": float("inf")},
+            {"bm25_b": float("nan")},
+            {"bm25_b": float("-inf")},
+        ):
+            with self.subTest(**kwargs):
+                self.assert_rejected_before_sending(
+                    client.api, lambda: client.create_index("idx", KEY, **kwargs)
+                )
 
     def test_field_errors_point_at_the_argument(self):
         with self.assertRaises(ValidationError) as ctx:

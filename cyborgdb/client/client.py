@@ -35,6 +35,7 @@ from cyborgdb.client._request_builders import (
     parse_embedding_models,
     parse_training_status,
     request_headers,
+    validate_bm25_params,
     validate_index_key,
 )
 from cyborgdb.client._response_guard import ResponseValidationGuard
@@ -287,6 +288,8 @@ class Client:
 
         if index_key is not None:
             validate_index_key(index_key)
+
+        validate_bm25_params(bm25_k1, bm25_b)
 
         try:
             # Build the handle first (no network I/O); it owns the single

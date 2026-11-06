@@ -13,6 +13,7 @@ Nothing in this module performs I/O.
 import base64
 import datetime as _dt
 import json
+import math
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -75,6 +76,23 @@ def apply_full_text_implication(
         else policy
         for field, policy in metadata_schema.items()
     }
+
+
+def validate_bm25_params(
+    bm25_k1: Optional[float],
+    bm25_b: Optional[float],
+) -> None:
+    """Reject non-finite BM25 tuning values before the request is built.
+
+    JSON cannot carry nan/inf: the async transport (httpx) refuses to
+    serialize them with a bare ``ValueError``, while the sync transport would
+    emit the non-standard ``NaN`` literal and leave the rejection to the
+    service. Both must surface as this SDK's ``ValidationError``. Range checks
+    stay with the service; only transportability is enforced here.
+    """
+    for name, value in (("bm25_k1", bm25_k1), ("bm25_b", bm25_b)):
+        if isinstance(value, float) and not math.isfinite(value):
+            raise ValidationError(f"{name} must be a finite number (got {value})")
 
 
 def request_headers(api_key: Optional[str]) -> Dict[str, str]:
@@ -236,6 +254,11 @@ def build_binary_upsert_request(
         raise ValidationError(
             "vectors must be a 2D array of shape (n_vectors, dimension)"
         )
+
+    # A dimension-0 batch would serialize as empty bytes, which the service
+    # rejects as a 500 rather than a validation error.
+    if vectors.shape[0] and vectors.shape[1] == 0:
+        raise ValidationError("vectors must have a non-zero dimension")
 
     if len(ids) != vectors.shape[0]:
         raise ValidationError(
