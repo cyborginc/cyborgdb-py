@@ -315,6 +315,39 @@ class TestPydanticTranslation(unittest.TestCase):
         self.assertNotIn("SECRET-FIELD", result.detail)
         self.assertIn("metadata_schema.<key>.filterable", result.detail)
 
+    def test_non_pydantic_decode_error_text_stays_out_of_the_error(self):
+        # A non-pydantic decode failure may quote body bytes in its text
+        # (JSONDecodeError embeds the offending control character); only
+        # known-safe parts may reach the ServiceError.
+        from cyborgdb.exceptions import malformed_response_error
+
+        try:
+            json.loads('"\x01SECRET"')
+        except ValueError as exc:
+            result = malformed_response_error(exc, 200)
+        self.assertNotIn("\x01", str(result))
+        self.assertNotIn("\x01", result.detail)
+        self.assertIn("line 1", result.detail)
+
+        result = malformed_response_error(
+            ValueError("could not parse 'TOP-SECRET-VALUE' as int"), 200
+        )
+        self.assertNotIn("TOP-SECRET-VALUE", str(result))
+        self.assertNotIn("TOP-SECRET-VALUE", result.detail)
+        self.assertIn("ValueError", result.detail)
+
+    def test_anyof_wrapper_rejections_keep_only_the_static_prefix(self):
+        from cyborgdb.exceptions import malformed_response_error
+
+        exc = ValueError(
+            "No match found when deserializing the JSON string into Contents "
+            "with anyOf schemas: str. Details: input_value='SECRET-VALUE'"
+        )
+        result = malformed_response_error(exc, 200)
+        self.assertIn("No match found", result.detail)
+        self.assertNotIn("SECRET-VALUE", str(result))
+        self.assertNotIn("SECRET-VALUE", result.detail)
+
     def test_values_containing_the_input_type_delimiter_are_scrubbed(self):
         # A value containing ", input_type=" must not defeat the redaction.
         from cyborgdb.openapi_client.models import Contents

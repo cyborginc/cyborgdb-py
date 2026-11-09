@@ -145,7 +145,9 @@ class EncryptedIndex:
         try:
             return self._describe()
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to describe index") from safe_cause(e)
+            error = translate_api_error(e, "Failed to describe index")
+            cause = safe_cause(e)
+        raise error from cause
 
     def _request_headers(self) -> Dict[str, str]:
         """Build the request headers for data-path calls. Only includes
@@ -259,8 +261,11 @@ class EncryptedIndex:
             self._api.delete_index_v1_indexes_delete_post(
                 index_operation_request=self._ior()
             )
+            return
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to delete index") from safe_cause(e)
+            error = translate_api_error(e, "Failed to delete index")
+            cause = safe_cause(e)
+        raise error from cause
 
     def get(
         self, ids: List[str], include: List[str] = ["vector", "contents", "metadata"]
@@ -299,11 +304,13 @@ class EncryptedIndex:
             )
             return parse_get_response(response, include)
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to retrieve items") from safe_cause(e)
+            error = translate_api_error(e, "Failed to retrieve items")
+            cause = safe_cause(e)
         except Exception as e:
             error_msg = f"Get operation failed: {str(e)}"
             logger.error(error_msg)
             raise
+        raise error from cause
 
     def train(
         self,
@@ -346,8 +353,11 @@ class EncryptedIndex:
             )
 
             self._api.train_index_v1_indexes_train_post(train_request=request)
+            return
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to train index") from safe_cause(e)
+            error = translate_api_error(e, "Failed to train index")
+            cause = safe_cause(e)
+        raise error from cause
 
     def upsert(
         self,
@@ -394,9 +404,12 @@ class EncryptedIndex:
                 upsert_request=request,
                 _headers=self._request_headers(),
             )
+            return
 
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to upsert items") from safe_cause(e)
+            error = translate_api_error(e, "Failed to upsert items")
+            cause = safe_cause(e)
+        raise error from cause
 
     def upsert_binary(
         self,
@@ -437,10 +450,11 @@ class EncryptedIndex:
                 binary_upsert_request=request,
                 _headers=self._request_headers(),
             )
+            return
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(
-                e, "Failed to upsert items (binary)"
-            ) from safe_cause(e)
+            error = translate_api_error(e, "Failed to upsert items (binary)")
+            cause = safe_cause(e)
+        raise error from cause
 
     def delete(self, ids: List[str]) -> None:
         """
@@ -464,8 +478,11 @@ class EncryptedIndex:
             self._api.delete_vectors_v1_vectors_delete_post(
                 delete_request=delete_request
             )
+            return
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to delete items") from safe_cause(e)
+            error = translate_api_error(e, "Failed to delete items")
+            cause = safe_cause(e)
+        raise error from cause
 
     def query(
         self,
@@ -610,8 +627,11 @@ class EncryptedIndex:
 
                 logger.error(traceback.format_exc())
                 raise
+            return
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Query failed") from safe_cause(e)
+            error = translate_api_error(e, "Query failed")
+            cause = safe_cause(e)
+        raise error from cause
 
     def query_binary(
         self,
@@ -696,7 +716,9 @@ class EncryptedIndex:
             return parse_binary_query_response(response, is_single_query)
 
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to query (binary)") from safe_cause(e)
+            error = translate_api_error(e, "Failed to query (binary)")
+            cause = safe_cause(e)
+        raise error from cause
 
     def query_metadata(
         self,
@@ -774,7 +796,9 @@ class EncryptedIndex:
             )
             return parse_query_metadata_response(response, text)
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to query metadata") from safe_cause(e)
+            error = translate_api_error(e, "Failed to query metadata")
+            cause = safe_cause(e)
+        raise error from cause
 
     def list_ids(self) -> List[str]:
         """
@@ -793,9 +817,9 @@ class EncryptedIndex:
 
             return response.ids
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to list document IDs") from safe_cause(
-                e
-            )
+            error = translate_api_error(e, "Failed to list document IDs")
+            cause = safe_cause(e)
+        raise error from cause
 
     def get_num_vectors(self) -> int:
         """
@@ -813,9 +837,9 @@ class EncryptedIndex:
             )
             return response.result
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(
-                e, "Failed to get the number of vectors"
-            ) from safe_cause(e)
+            error = translate_api_error(e, "Failed to get the number of vectors")
+            cause = safe_cause(e)
+        raise error from cause
 
     def is_training(self) -> bool:
         """
@@ -833,9 +857,9 @@ class EncryptedIndex:
             return False
 
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(
-                e, "Failed to get index training status"
-            ) from safe_cause(e)
+            error = translate_api_error(e, "Failed to get index training status")
+            cause = safe_cause(e)
+        raise error from cause
 
     # ------------------------------------------------------------------
     # RBAC — user management (root API key required)
@@ -880,7 +904,9 @@ class EncryptedIndex:
             )
             return {"user_id": response.user_id, "api_key": response.api_key}
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to create user") from safe_cause(e)
+            error = translate_api_error(e, "Failed to create user")
+            cause = safe_cause(e)
+        raise error from cause
 
     def list_users(self) -> List[Dict[str, Any]]:
         """List the users provisioned for this index.
@@ -903,7 +929,9 @@ class EncryptedIndex:
                 for u in response.users
             ]
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to list users") from safe_cause(e)
+            error = translate_api_error(e, "Failed to list users")
+            cause = safe_cause(e)
+        raise error from cause
 
     def delete_user(self, user_id: str) -> None:
         """Revoke a user, erasing their wrapped keys for this index.
@@ -924,8 +952,11 @@ class EncryptedIndex:
                 user_id=user_id,
                 x_index_key=self._index_key_hex,
             )
+            return
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to delete user") from safe_cause(e)
+            error = translate_api_error(e, "Failed to delete user")
+            cause = safe_cause(e)
+        raise error from cause
 
     def _key_to_hex(self) -> Optional[str]:
         """Hex-encoded key for API calls, or ``None`` for KMS-backed indexes.

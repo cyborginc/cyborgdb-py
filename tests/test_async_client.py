@@ -448,6 +448,7 @@ class TestMalformedResponse:
             assert fragment not in str(ctx.value)
             assert fragment not in ctx.value.detail
         assert ctx.value.__cause__ is None
+        assert ctx.value.__context__ is None
 
     @pytest.mark.asyncio
     async def test_async_malformed_200_is_service_error(self):

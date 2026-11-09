@@ -21,4 +21,5 @@ class ResponseValidationGuard:
             # ValueError: the generated anyOf wrappers reject mismatched
             # bodies with one. Scrubbed and unchained — a 2xx body can carry
             # decrypted contents.
-            raise malformed_response_error(exc, response_data.status) from None
+            error = malformed_response_error(exc, response_data.status)
+        raise error

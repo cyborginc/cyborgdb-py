@@ -269,6 +269,8 @@ class TestPydanticRejectionsAreTranslated(unittest.TestCase):
         self.assertEqual(ctx.exception.kind, "invalid_argument")
         self.assertIsNone(ctx.exception.status_code)
         self.assertEqual(api.method_calls, [])
+        self.assertIsNone(ctx.exception.__cause__)
+        self.assertIsNone(ctx.exception.__context__)
 
     def test_upsert_non_string_id(self):
         api = MagicMock()

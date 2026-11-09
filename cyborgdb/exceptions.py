@@ -370,15 +370,24 @@ def malformed_response_error(exc: Exception, status: int) -> "ServiceError":
     (values) and user field names (loc keys). The generated anyOf wrappers
     reject with a plain ValueError whose text embeds nested pydantic
     renderings; for those only the static prefix before the embedded details
-    is kept.
+    is kept. Any other ValueError's text may embed body values too (a
+    JSONDecodeError can quote the offending byte), so only parts known to be
+    safe survive: decode positions, or just the exception type.
     """
     import pydantic
 
     if isinstance(exc, pydantic.ValidationError):
         _, summary = _scrubbed_errors(exc)
         detail = f"{exc.error_count()} validation error(s) for {exc.title}: {summary}"
-    else:
+    elif str(exc).startswith("No match found when"):
         detail = _scrub_pydantic(str(exc).split("Details: ", 1)[0]).strip()
+    elif isinstance(exc, json.JSONDecodeError):
+        detail = (
+            f"the body is not valid JSON: line {exc.lineno} "
+            f"column {exc.colno} (char {exc.pos})"
+        )
+    else:
+        detail = f"the body could not be decoded ({type(exc).__name__})"
     return ServiceError(
         f"The service returned HTTP {status} with a body that does not match "
         f"the response model: {detail}",
@@ -394,6 +403,11 @@ def safe_cause(exc: Exception) -> Optional[Exception]:
     The original exception, except pydantic rejections: their rendering embeds
     the rejected values, which tracebacks would print. ``None`` also
     suppresses the implicit context.
+
+    Call sites bind the translated error and this cause inside the handler
+    but ``raise`` after it: a raise inside the handler would leave the
+    original exception on ``__context__`` (``from None`` only hides it from
+    the traceback), keeping the rejected values reachable.
     """
     import pydantic
 

@@ -175,7 +175,9 @@ class AsyncClient:
             response = await self.api.list_indexes_v1_indexes_list_get()
             return response.indexes
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to list indexes") from safe_cause(e)
+            error = translate_api_error(e, "Failed to list indexes")
+            cause = safe_cause(e)
+        raise error from cause
 
     async def create_index(
         self,
@@ -289,7 +291,9 @@ class AsyncClient:
             return index
 
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to create index") from safe_cause(e)
+            error = translate_api_error(e, "Failed to create index")
+            cause = safe_cause(e)
+        raise error from cause
 
     async def load_index(
         self,
@@ -322,9 +326,9 @@ class AsyncClient:
             return index
 
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(
-                e, f"Failed to load index '{index_name}'"
-            ) from safe_cause(e)
+            error = translate_api_error(e, f"Failed to load index '{index_name}'")
+            cause = safe_cause(e)
+        raise error from cause
 
     async def get_health(self) -> Dict[str, str]:
         """
@@ -339,9 +343,9 @@ class AsyncClient:
         try:
             return await self.api.health_check_v1_health_get()
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(e, "Failed to get health status") from safe_cause(
-                e
-            )
+            error = translate_api_error(e, "Failed to get health status")
+            cause = safe_cause(e)
+        raise error from cause
 
     async def get_training_status(self) -> Dict[str, Any]:
         """
@@ -361,9 +365,9 @@ class AsyncClient:
             )
             return parse_training_status(response)
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(
-                e, "Failed to get training status"
-            ) from safe_cause(e)
+            error = translate_api_error(e, "Failed to get training status")
+            cause = safe_cause(e)
+        raise error from cause
 
     async def list_embedding_models(self) -> List[Dict[str, Any]]:
         """
@@ -386,6 +390,6 @@ class AsyncClient:
             response = await self.api.list_embedding_models_v1_embedding_models_get()
             return parse_embedding_models(response)
         except _TRANSLATED_ERRORS as e:
-            raise translate_api_error(
-                e, "Failed to list embedding models"
-            ) from safe_cause(e)
+            error = translate_api_error(e, "Failed to list embedding models")
+            cause = safe_cause(e)
+        raise error from cause
