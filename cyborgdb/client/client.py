@@ -152,9 +152,7 @@ class Client:
                 self.api_client.default_headers["X-API-Key"] = api_key
 
         except Exception as e:
-            error_msg = f"Failed to initialize client: {e}"
-            logger.error(error_msg)
-            raise CyborgDBError(error_msg) from e
+            raise CyborgDBError(f"Failed to initialize client: {e}") from e
 
     def _request_headers(self) -> Dict[str, str]:
         """Build the request headers for data-path calls. Only includes

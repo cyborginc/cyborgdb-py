@@ -454,11 +454,11 @@ def translate_api_error(exc: Exception, context: str) -> Exception:
             f"{context}: {exc.error_count()} validation error(s) "
             f"for {exc.title} — {detail}"
         )
-        logger.error(message)
+        logger.debug(message)
         return ValidationError(message, detail=detail, errors=errors or None)
 
     if isinstance(exc, (urllib3.exceptions.HTTPError, httpx.RequestError)):
-        logger.error("%s: %s", context, exc)
+        logger.debug("%s: %s", context, exc)
         return TransportError(f"{context}: {exc}", detail=str(exc))
 
     if not isinstance(exc, (ApiException, AsyncApiException)):
@@ -483,5 +483,12 @@ def translate_api_error(exc: Exception, context: str) -> Exception:
     if error_cls is None:
         error_cls = CyborgDBError
 
-    logger.error(message)
+    logger.debug(
+        "%s: %s status=%s request_id=%s detail=%r",
+        context,
+        error_cls.__name__,
+        status,
+        kwargs["request_id"],
+        kwargs["detail"],
+    )
     return error_cls(message, **kwargs)
