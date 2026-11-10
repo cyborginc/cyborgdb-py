@@ -3,6 +3,7 @@
 import json
 import unittest
 
+import pydantic
 import urllib3.exceptions
 
 import cyborgdb
@@ -207,6 +208,159 @@ class TestKinds(unittest.TestCase):
         )
         self.assertEqual(result.kind, "transport")
         self.assertIsNone(result.errors)
+
+
+class TestPydanticTranslation(unittest.TestCase):
+    """Arguments the generated request models reject must surface as this
+    SDK's ValidationError (kind invalid_argument), never as a bare pydantic
+    error the caller would classify as internal."""
+
+    class _Model(pydantic.BaseModel):
+        filters: dict
+
+    def _pydantic_error(self):
+        try:
+            self._Model(filters="not a dict")
+        except pydantic.ValidationError as exc:
+            return exc
+
+    def test_becomes_the_sdk_validation_error(self):
+        result = translate_api_error(self._pydantic_error(), "Query failed")
+        self.assertIsInstance(result, ValidationError)
+        self.assertEqual(result.kind, "invalid_argument")
+        self.assertIsNone(result.status_code)
+        self.assertFalse(result.retryable)
+        self.assertIn("Query failed", str(result))
+
+    def test_field_errors_are_carried(self):
+        result = translate_api_error(self._pydantic_error(), "op failed")
+        self.assertEqual(
+            result.errors,
+            [
+                {
+                    "field": "filters",
+                    "message": "Input should be a valid dictionary",
+                    "type": "dict_type",
+                }
+            ],
+        )
+
+    def test_rejected_values_are_scrubbed(self):
+        # What the caller passed is confidential and must not be echoed.
+        try:
+            self._Model(filters="TOP-SECRET-VALUE")
+        except pydantic.ValidationError as exc:
+            result = translate_api_error(exc, "op failed")
+        self.assertNotIn("TOP-SECRET-VALUE", str(result))
+        self.assertNotIn("TOP-SECRET-VALUE", result.detail)
+        for error in result.errors:
+            self.assertNotIn("TOP-SECRET-VALUE", error["message"])
+
+    def test_values_embedded_by_anyof_validators_are_scrubbed(self):
+        # The generated anyOf validators (Contents) embed the rejected value
+        # inside msg itself, so the scrub must reach into messages.
+        from cyborgdb.openapi_client.models import Contents
+
+        try:
+            Contents(4111111111111111)
+        except pydantic.ValidationError as exc:
+            result = translate_api_error(exc, "op failed")
+        self.assertNotIn("4111111111111111", str(result))
+        self.assertNotIn("4111111111111111", result.detail)
+        self.assertIn("<redacted>", result.errors[0]["message"])
+
+    def test_user_supplied_dict_keys_are_redacted_from_fields(self):
+        # metadata_schema keys are user data and must not reach loc-derived
+        # fields; the model's own field names stay.
+        from cyborgdb.openapi_client.models import CreateIndexRequest
+
+        try:
+            CreateIndexRequest(
+                index_name="i",
+                index_key="00" * 32,
+                metadata_schema={"SECRET-FIELD": {"filterable": object()}},
+            )
+        except pydantic.ValidationError as exc:
+            result = translate_api_error(exc, "op failed")
+        self.assertEqual(result.errors[0]["field"], "metadata_schema.<key>.filterable")
+        self.assertNotIn("SECRET-FIELD", str(result))
+        self.assertNotIn("SECRET-FIELD", result.detail)
+
+    def test_response_side_dict_keys_are_redacted(self):
+        # A malformed 2xx body can put user field names in loc; the response
+        # error must redact them the same way the argument side does.
+        from cyborgdb.exceptions import malformed_response_error
+        from cyborgdb.openapi_client.models import IndexInfoResponseModel
+
+        try:
+            IndexInfoResponseModel.model_validate(
+                {
+                    "index_name": "i",
+                    "is_trained": False,
+                    "dimension": 4,
+                    "metric": "euclidean",
+                    "n_lists": 1,
+                    "index_type": "disk_ivf",
+                    "training_state": "untrained",
+                    "storage_precision": "float32",
+                    "metadata_schema": {"SECRET-FIELD": {"filterable": "nope"}},
+                }
+            )
+        except pydantic.ValidationError as exc:
+            result = malformed_response_error(exc, 200)
+        self.assertIsInstance(result, ServiceError)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.kind, "internal")
+        self.assertNotIn("SECRET-FIELD", str(result))
+        self.assertNotIn("SECRET-FIELD", result.detail)
+        self.assertIn("metadata_schema.<key>.filterable", result.detail)
+
+    def test_non_pydantic_decode_error_text_stays_out_of_the_error(self):
+        # A non-pydantic decode failure may quote body bytes in its text
+        # (JSONDecodeError embeds the offending control character); only
+        # known-safe parts may reach the ServiceError.
+        from cyborgdb.exceptions import malformed_response_error
+
+        try:
+            json.loads('"\x01SECRET"')
+        except ValueError as exc:
+            result = malformed_response_error(exc, 200)
+        self.assertNotIn("\x01", str(result))
+        self.assertNotIn("\x01", result.detail)
+        self.assertIn("line 1", result.detail)
+
+        result = malformed_response_error(
+            ValueError("could not parse 'TOP-SECRET-VALUE' as int"), 200
+        )
+        self.assertNotIn("TOP-SECRET-VALUE", str(result))
+        self.assertNotIn("TOP-SECRET-VALUE", result.detail)
+        self.assertIn("ValueError", result.detail)
+
+    def test_anyof_wrapper_rejections_keep_only_the_static_prefix(self):
+        from cyborgdb.exceptions import malformed_response_error
+
+        exc = ValueError(
+            "No match found when deserializing the JSON string into Contents "
+            "with anyOf schemas: str. Details: input_value='SECRET-VALUE'"
+        )
+        result = malformed_response_error(exc, 200)
+        self.assertIn("No match found", result.detail)
+        self.assertNotIn("SECRET-VALUE", str(result))
+        self.assertNotIn("SECRET-VALUE", result.detail)
+
+    def test_values_containing_the_input_type_delimiter_are_scrubbed(self):
+        # A value containing ", input_type=" must not defeat the redaction.
+        from cyborgdb.openapi_client.models import Contents
+
+        try:
+            Contents(["SECRET-A, input_type=x SECRET-B"])
+        except pydantic.ValidationError as exc:
+            result = translate_api_error(exc, "op failed")
+        for secret in ("SECRET-A", "SECRET-B"):
+            self.assertNotIn(secret, str(result))
+            self.assertNotIn(secret, result.detail)
+            for error in result.errors:
+                self.assertNotIn(secret, error["message"])
 
 
 class TestPublicSurface(unittest.TestCase):

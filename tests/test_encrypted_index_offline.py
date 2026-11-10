@@ -76,6 +76,13 @@ class TestUpsertBinaryContents(unittest.TestCase):
             _index().upsert_binary(["a"], [[0.0, 1.0]])
         self.assertIsInstance(ctx.exception, TypeError)
 
+    def test_zero_dimension_vectors_are_a_validation_error(self):
+        api = MagicMock()
+        with self.assertRaises(ValidationError) as ctx:
+            _index(api).upsert_binary(["a"], np.zeros((1, 0), dtype=np.float32))
+        self.assertEqual(ctx.exception.kind, "invalid_argument")
+        self.assertEqual(api.method_calls, [])
+
 
 class TestDimensionCache(unittest.TestCase):
     def test_zero_dimension_is_not_cached(self):
@@ -249,6 +256,101 @@ class TestIncludeValidation(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "not a single string"):
             index.query(query_vectors=[0.0, 1.0], include="distance")
         self.assertEqual(api.method_calls, [])
+
+
+class TestPydanticRejectionsAreTranslated(unittest.TestCase):
+    """Malformed arguments the generated request models reject must surface as
+    the SDK's ValidationError (kind invalid_argument), never as bare pydantic
+    errors a caller would classify as internal."""
+
+    def assert_rejected_before_sending(self, api, fn):
+        with self.assertRaises(ValidationError) as ctx:
+            fn()
+        self.assertEqual(ctx.exception.kind, "invalid_argument")
+        self.assertIsNone(ctx.exception.status_code)
+        self.assertEqual(api.method_calls, [])
+        self.assertIsNone(ctx.exception.__cause__)
+        self.assertIsNone(ctx.exception.__context__)
+
+    def test_upsert_non_string_id(self):
+        api = MagicMock()
+        self.assert_rejected_before_sending(
+            api, lambda: _index(api).upsert([{"id": 123, "vector": [0.1]}])
+        )
+
+    def test_upsert_contents_of_wrong_type(self):
+        api = MagicMock()
+        self.assert_rejected_before_sending(
+            api,
+            lambda: _index(api).upsert([{"id": "a", "vector": [0.1], "contents": 123}]),
+        )
+
+    def test_query_non_object_filter(self):
+        api = MagicMock()
+        self.assert_rejected_before_sending(
+            api, lambda: _index(api).query(query_vectors=[0.1, 0.2], filters="nope")
+        )
+
+    def test_query_binary_non_object_filter(self):
+        api = MagicMock()
+        self.assert_rejected_before_sending(
+            api,
+            lambda: _index(api).query(
+                query_vectors=np.zeros((1, 2), dtype=np.float32), filters="nope"
+            ),
+        )
+
+    def test_query_without_vectors_or_contents(self):
+        api = MagicMock()
+        self.assert_rejected_before_sending(api, lambda: _index(api).query())
+
+    def test_query_metadata_non_object_filter(self):
+        api = MagicMock()
+        self.assert_rejected_before_sending(
+            api, lambda: _index(api).query_metadata(filters="nope", text="hello")
+        )
+
+    def test_create_index_non_object_schema(self):
+        client = Client("http://api.example.com", api_key="k")
+        client.api = MagicMock()
+        self.assert_rejected_before_sending(
+            client.api,
+            lambda: client.create_index("idx", KEY, metadata_schema="not a dict"),
+        )
+
+    def test_create_index_non_finite_bm25_params(self):
+        # nan/inf can't travel as JSON: httpx (async) raises a bare ValueError
+        # serializing them, so they must be rejected client-side on both paths.
+        client = Client("http://api.example.com", api_key="k")
+        client.api = MagicMock()
+        for kwargs in (
+            {"bm25_k1": float("nan")},
+            {"bm25_k1": float("inf")},
+            {"bm25_b": float("nan")},
+            {"bm25_b": float("-inf")},
+        ):
+            with self.subTest(**kwargs):
+                self.assert_rejected_before_sending(
+                    client.api, lambda: client.create_index("idx", KEY, **kwargs)
+                )
+
+    def test_field_errors_point_at_the_argument(self):
+        with self.assertRaises(ValidationError) as ctx:
+            _index().query(query_vectors=[0.1, 0.2], filters="nope")
+        self.assertEqual(ctx.exception.errors[0]["field"], "filters")
+
+    def test_rejected_value_stays_out_of_the_traceback(self):
+        # The raw pydantic error renders the value, so it is not chained.
+        import traceback
+
+        with self.assertRaises(ValidationError) as ctx:
+            _index().query(query_vectors=[0.1, 0.2], filters="TOP-SECRET-VALUE")
+        exc = ctx.exception
+        self.assertIsNone(exc.__cause__)
+        rendered = "".join(
+            traceback.format_exception(type(exc), exc, exc.__traceback__)
+        )
+        self.assertNotIn("TOP-SECRET-VALUE", rendered)
 
 
 if __name__ == "__main__":

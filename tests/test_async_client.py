@@ -408,6 +408,57 @@ class TestWireParity:
         assert sync_headers["Content-Type"] == async_headers["content-type"]
 
 
+class TestMalformedResponse:
+    """A 2xx body the response models reject must surface as ServiceError,
+    never as the argument-side ValidationError."""
+
+    @staticmethod
+    def _empty_body(url):
+        return {}
+
+    def _assert_service_error(self, exc):
+        assert not isinstance(exc, ValidationError)
+        assert exc.kind == "internal"
+        assert exc.status_code == 200
+        assert exc.retryable
+
+    def test_sync_malformed_200_is_service_error(self):
+        client = _sync_client(_Recorder(), body_for_path=self._empty_body)
+        index = EncryptedIndex("idx", KEY, client.api, client.api_client)
+        with pytest.raises(ServiceError) as ctx:
+            index.query_binary(np.zeros((1, 2), dtype=np.float32))
+        self._assert_service_error(ctx.value)
+
+    @pytest.mark.parametrize(
+        "secret",
+        ["TOP-SECRET-VALUE", "SECRET-A, input_type=x SECRET-B"],
+        ids=["plain", "contains-scrub-delimiter"],
+    )
+    def test_malformed_body_values_stay_out_of_the_error(self, secret):
+        # A 2xx body can carry decrypted contents; its values must not reach
+        # the error or the cause chain — even values crafted to contain the
+        # redaction delimiter.
+        client = _sync_client(
+            _Recorder(), body_for_path=lambda url: {"results": secret}
+        )
+        index = EncryptedIndex("idx", KEY, client.api, client.api_client)
+        with pytest.raises(ServiceError) as ctx:
+            index.query_binary(np.zeros((1, 2), dtype=np.float32))
+        for fragment in ("TOP-SECRET-VALUE", "SECRET-A", "SECRET-B"):
+            assert fragment not in str(ctx.value)
+            assert fragment not in ctx.value.detail
+        assert ctx.value.__cause__ is None
+        assert ctx.value.__context__ is None
+
+    @pytest.mark.asyncio
+    async def test_async_malformed_200_is_service_error(self):
+        client = _async_client(_Recorder(), body_for_path=self._empty_body)
+        index = AsyncEncryptedIndex("idx", KEY, client.api, client.api_client)
+        with pytest.raises(ServiceError) as ctx:
+            await index.query_binary(np.zeros((1, 2), dtype=np.float32))
+        self._assert_service_error(ctx.value)
+
+
 SYNC_TO_ASYNC_STATUSES = [401, 403, 404, 409, 422, 429, 500]
 EXPECTED_BY_STATUS = {
     401: AuthenticationError,
@@ -521,6 +572,25 @@ class TestValidation:
         with pytest.raises(ValidationError):
             await index.query_metadata(order_by={"a": 1, "b": -1})
         index._api.upsert_vectors_v1_vectors_upsert_post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_pydantic_rejections_are_translated(self):
+        # Malformed arguments the generated request models reject must surface
+        # as the SDK's ValidationError, kind invalid_argument, exactly as in
+        # the sync client.
+        index = _async_index()
+        for call in (
+            index.upsert([{"id": 123, "vector": [0.1]}]),
+            index.upsert([{"id": "a", "vector": [0.1], "contents": 123}]),
+            index.query(query_vectors=[0.1, 0.2], filters="nope"),
+            index.query(),
+            index.query_metadata(filters="nope", text="hello"),
+        ):
+            with pytest.raises(ValidationError) as ctx:
+                await call
+            assert ctx.value.kind == "invalid_argument"
+            assert ctx.value.status_code is None
+        assert index._api.method_calls == []
 
     @pytest.mark.asyncio
     async def test_bad_index_key_is_rejected_before_any_request(self):

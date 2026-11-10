@@ -35,12 +35,33 @@ from cyborgdb.client._request_builders import (
     parse_embedding_models,
     parse_training_status,
     request_headers,
+    validate_bm25_params,
     validate_index_key,
 )
+from cyborgdb.client._response_guard import ResponseValidationGuard
 from cyborgdb.client.encrypted_index import EncryptedIndex
-from cyborgdb.exceptions import CyborgDBError, ValidationError, translate_api_error
+from cyborgdb.exceptions import (
+    CyborgDBError,
+    ValidationError,
+    safe_cause,
+    translate_api_error,
+)
 
 logger = logging.getLogger(__name__)
+
+# Everything translate_api_error maps onto the public taxonomy; pydantic
+# rejections surface as ValidationError (response-side ones are already
+# ServiceError via the guarded ApiClient).
+_TRANSLATED_ERRORS = (
+    ApiException,
+    urllib3.exceptions.HTTPError,
+    PydanticValidationError,
+)
+
+
+class _GuardedApiClient(ResponseValidationGuard, ApiClient):
+    """The generated client, with malformed 2xx bodies raised as ServiceError."""
+
 
 __all__ = [
     "Client",
@@ -123,7 +144,7 @@ class Client:
 
         # Create the API client
         try:
-            self.api_client = ApiClient(self.config)
+            self.api_client = _GuardedApiClient(self.config)
             self.api = DefaultApi(self.api_client)
 
             # If API key was provided, also set it directly in default headers
@@ -187,8 +208,10 @@ class Client:
         try:
             response = self.api.list_indexes_v1_indexes_list_get()
             return response.indexes
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
-            raise translate_api_error(e, "Failed to list indexes") from e
+        except _TRANSLATED_ERRORS as e:
+            error = translate_api_error(e, "Failed to list indexes")
+            cause = safe_cause(e)
+        raise error from cause
 
     def create_index(
         self,
@@ -268,6 +291,8 @@ class Client:
         if index_key is not None:
             validate_index_key(index_key)
 
+        validate_bm25_params(bm25_k1, bm25_b)
+
         try:
             # Build the handle first (no network I/O); it owns the single
             # hex encoding of the key, which we reuse for the request below.
@@ -299,12 +324,10 @@ class Client:
 
             return index
 
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
-            raise translate_api_error(e, "Failed to create index") from e
-        except PydanticValidationError as ve:
-            error_msg = f"Validation error while creating index: {ve}"
-            logger.error(error_msg)
-            raise ValidationError(error_msg) from ve
+        except _TRANSLATED_ERRORS as e:
+            error = translate_api_error(e, "Failed to create index")
+            cause = safe_cause(e)
+        raise error from cause
 
     def load_index(
         self,
@@ -336,12 +359,10 @@ class Client:
 
             return index
 
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
-            raise translate_api_error(e, f"Failed to load index '{index_name}'") from e
-        except PydanticValidationError as ve:
-            error_msg = f"Validation error while loading index '{index_name}': {ve}"
-            logger.error(error_msg)
-            raise ValidationError(error_msg) from ve
+        except _TRANSLATED_ERRORS as e:
+            error = translate_api_error(e, f"Failed to load index '{index_name}'")
+            cause = safe_cause(e)
+        raise error from cause
 
     def get_health(self) -> Dict[str, str]:
         """
@@ -355,8 +376,10 @@ class Client:
         """
         try:
             return self.api.health_check_v1_health_get()
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
-            raise translate_api_error(e, "Failed to get health status") from e
+        except _TRANSLATED_ERRORS as e:
+            error = translate_api_error(e, "Failed to get health status")
+            cause = safe_cause(e)
+        raise error from cause
 
     def get_training_status(self) -> Dict[str, Any]:
         """
@@ -373,8 +396,10 @@ class Client:
         try:
             response = self.api.get_training_status_v1_indexes_training_status_get()
             return parse_training_status(response)
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
-            raise translate_api_error(e, "Failed to get training status") from e
+        except _TRANSLATED_ERRORS as e:
+            error = translate_api_error(e, "Failed to get training status")
+            cause = safe_cause(e)
+        raise error from cause
 
     def list_embedding_models(self) -> List[Dict[str, Any]]:
         """
@@ -396,5 +421,7 @@ class Client:
         try:
             response = self.api.list_embedding_models_v1_embedding_models_get()
             return parse_embedding_models(response)
-        except (ApiException, urllib3.exceptions.HTTPError) as e:
-            raise translate_api_error(e, "Failed to list embedding models") from e
+        except _TRANSLATED_ERRORS as e:
+            error = translate_api_error(e, "Failed to list embedding models")
+            cause = safe_cause(e)
+        raise error from cause
