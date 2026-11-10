@@ -133,9 +133,7 @@ class AsyncClient:
                 self.api_client.default_headers["X-API-Key"] = api_key
 
         except Exception as e:
-            error_msg = f"Failed to initialize client: {e}"
-            logger.error(error_msg)
-            raise CyborgDBError(error_msg) from e
+            raise CyborgDBError(f"Failed to initialize client: {e}") from e
 
     async def close(self) -> None:
         """Close the underlying connection pool.

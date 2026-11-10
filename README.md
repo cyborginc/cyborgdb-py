@@ -261,6 +261,20 @@ Index handles share the client's connection pool, so close the client once
 when you are done with all of its indexes. See `examples/fastapi_example.py`
 for opening a client and index in a FastAPI lifespan.
 
+### Logging
+
+Failed calls raise a typed exception (for example `NotFoundError`) carrying the
+status code, request ID, and server detail; the SDK does not log them. To see a
+one-line diagnostic for each failed call, enable debug logging on the `cyborgdb`
+logger:
+
+```python
+import logging
+
+logging.basicConfig()
+logging.getLogger("cyborgdb").setLevel(logging.DEBUG)
+```
+
 ## Documentation
 
 For more information on CyborgDB, see the [Cyborg Docs](https://docs.cyborg.co).

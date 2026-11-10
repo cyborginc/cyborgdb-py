@@ -66,9 +66,7 @@ def get_demo_api_key(description: Optional[str] = None) -> str:
         # Extract the API key
         api_key = data.get("apiKey", None)
         if not api_key:
-            error_msg = "Demo API key not found in response."
-            logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise ValueError("Demo API key not found in response.")
 
         # Log expiration info if available
         expires_at = data.get("expiresAt", None)
@@ -85,6 +83,4 @@ def get_demo_api_key(description: Optional[str] = None) -> str:
         return api_key
 
     except requests.exceptions.RequestException as e:
-        error_msg = f"Failed to generate demo API key: {e}"
-        logger.error(error_msg)
-        raise ValueError(error_msg)
+        raise ValueError(f"Failed to generate demo API key: {e}")

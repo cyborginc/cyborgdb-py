@@ -7,7 +7,6 @@ httpx transport in ``cyborgdb.openapi_client_async``.
 
 import binascii
 import json
-import logging
 from typing import Any, Dict, List, Optional, Union
 
 import httpx
@@ -60,7 +59,6 @@ except ImportError:
         "Failed to import openapi_client_async. Make sure the OpenAPI client library is properly installed."
     )
 
-logger = logging.getLogger(__name__)
 
 # Everything translate_api_error maps onto the public taxonomy; pydantic
 # rejections surface as ValidationError (response-side ones are already
@@ -307,10 +305,6 @@ class AsyncEncryptedIndex:
         except _TRANSLATED_ERRORS as e:
             error = translate_api_error(e, "Failed to retrieve items")
             cause = safe_cause(e)
-        except Exception as e:
-            error_msg = f"Get operation failed: {str(e)}"
-            logger.error(error_msg)
-            raise
         raise error from cause
 
     async def train(
@@ -600,32 +594,23 @@ class AsyncEncryptedIndex:
                 hybrid_kwargs,
             )
 
-            try:
-                raw_response = await self._api.query_vectors_v1_vectors_query_post_without_preload_content(
-                    request=request,
-                    _headers=self._request_headers(),
+            raw_response = await self._api.query_vectors_v1_vectors_query_post_without_preload_content(
+                request=request,
+                _headers=self._request_headers(),
+            )
+            body = await raw_response.aread()
+
+            # _without_preload_content skips status validation, so surface
+            # 4xx/5xx (e.g. an RBAC 403) instead of parsing the error body.
+            if not 200 <= raw_response.status_code <= 299:
+                raise ApiException.from_response(
+                    http_resp=RESTResponse(raw_response),
+                    body=body.decode("utf-8"),
+                    data=None,
                 )
-                body = await raw_response.aread()
 
-                # _without_preload_content skips status validation, so surface
-                # 4xx/5xx (e.g. an RBAC 403) instead of parsing the error body.
-                if not 200 <= raw_response.status_code <= 299:
-                    raise ApiException.from_response(
-                        http_resp=RESTResponse(raw_response),
-                        body=body.decode("utf-8"),
-                        data=None,
-                    )
-
-                response_json = json.loads(body.decode("utf-8"))
-                return parse_query_response(response_json, include)
-            except Exception as e:
-                error_msg = f"Unexpected error in query: {str(e)}"
-                logger.error(error_msg)
-                import traceback
-
-                logger.error(traceback.format_exc())
-                raise
-            return
+            response_json = json.loads(body.decode("utf-8"))
+            return parse_query_response(response_json, include)
         except _TRANSLATED_ERRORS as e:
             error = translate_api_error(e, "Query failed")
             cause = safe_cause(e)

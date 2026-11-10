@@ -1,6 +1,7 @@
 """Offline unit tests for EncryptedIndex / Client wrapper logic (no service)."""
 
 import json
+import logging
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -351,6 +352,57 @@ class TestPydanticRejectionsAreTranslated(unittest.TestCase):
             traceback.format_exception(type(exc), exc, exc.__traceback__)
         )
         self.assertNotIn("TOP-SECRET-VALUE", rendered)
+
+
+class TestHandledErrorsAreQuiet(unittest.TestCase):
+    """cyborgdb-core#2540: the raised exception carries the error, not the log."""
+
+    HEADER_VALUE = "uvicorn-header-sentinel"
+
+    def _load_missing_index(self):
+        exc = _not_found()
+        exc.headers = {"server": self.HEADER_VALUE, "X-Request-Id": "req-1"}
+        client = Client("http://api.example.com", api_key="k")
+        client.api = MagicMock()
+        client.api.get_index_info_v1_indexes_describe_post.side_effect = exc
+        with self.assertRaises(NotFoundError) as ctx:
+            client.load_index("missing", KEY)
+        return ctx.exception
+
+    def _query_missing_index(self):
+        api = MagicMock()
+        raw = api.query_vectors_v1_vectors_query_post_without_preload_content
+        raw.return_value = SimpleNamespace(
+            status=404,
+            reason="Not Found",
+            data=json.dumps({"detail": "index not found"}).encode("utf-8"),
+            headers={"server": self.HEADER_VALUE},
+        )
+        with self.assertRaises(NotFoundError) as ctx:
+            _index(api).query(query_vectors=[0.0, 1.0], top_k=1)
+        return ctx.exception
+
+    def test_handled_4xx_logs_nothing_at_warning_or_above(self):
+        for name, call in (
+            ("load_index", self._load_missing_index),
+            ("query", self._query_missing_index),
+        ):
+            with self.subTest(call=name):
+                with self.assertNoLogs("cyborgdb", level=logging.WARNING):
+                    exc = call()
+                self.assertEqual(exc.status_code, 404)
+                self.assertEqual(exc.detail, "index not found")
+
+    def test_debug_logs_one_line_without_headers(self):
+        with self.assertLogs("cyborgdb", level=logging.DEBUG) as captured:
+            exc = self._load_missing_index()
+        self.assertEqual(len(captured.records), 1)
+        line = captured.records[0].getMessage()
+        self.assertNotIn("\n", line)
+        self.assertNotIn(self.HEADER_VALUE, line)
+        self.assertIn("NotFoundError", line)
+        self.assertIn("404", line)
+        self.assertEqual(exc.request_id, "req-1")
 
 
 if __name__ == "__main__":
