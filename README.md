@@ -265,8 +265,10 @@ for opening a client and index in a FastAPI lifespan.
 
 Failed calls raise a typed exception (for example `NotFoundError`) carrying the
 status code, request ID, and server detail; the SDK does not log them. To see a
-one-line diagnostic for each failed call, enable debug logging on the `cyborgdb`
-logger:
+one-line diagnostic when a request fails (an error response from the service, a
+network error, or arguments rejected while building the request), enable debug
+logging on the `cyborgdb` logger. Argument checks the SDK runs before building a
+request raise without logging.
 
 ```python
 import logging
