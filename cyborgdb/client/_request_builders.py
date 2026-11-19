@@ -129,7 +129,8 @@ def _encode_contents(value):
     """Send bytes-like contents as their UTF-8 text; strings pass through.
 
     The service transports contents as JSON strings, so bytes that aren't
-    valid UTF-8 can't round-trip and are rejected here rather than encoded.
+    valid UTF-8, and strings with no UTF-8 form (lone surrogates, e.g. from
+    ``surrogateescape``), can't round-trip and are rejected here.
     """
     if isinstance(value, (bytes, bytearray)):
         try:
@@ -137,6 +138,13 @@ def _encode_contents(value):
         except UnicodeDecodeError as e:
             raise ValidationError(
                 f"contents must be valid UTF-8 (invalid byte at position {e.start})"
+            ) from None
+    if isinstance(value, str):
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError as e:
+            raise ValidationError(
+                f"contents must be valid UTF-8 (lone surrogate at position {e.start})"
             ) from None
     return value
 
