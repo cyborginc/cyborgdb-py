@@ -126,9 +126,26 @@ def _vectors_to_b64(vectors: np.ndarray) -> str:
 
 
 def _encode_contents(value):
-    """Base64-encode bytes-like contents for JSON; strings pass through."""
+    """Send bytes-like contents as their UTF-8 text; strings pass through.
+
+    The service transports contents as JSON strings, so bytes that aren't
+    valid UTF-8, and strings with no UTF-8 form (lone surrogates, e.g. from
+    ``surrogateescape``), can't round-trip and are rejected here.
+    """
     if isinstance(value, (bytes, bytearray)):
-        return base64.b64encode(bytes(value)).decode("utf-8")
+        try:
+            return bytes(value).decode("utf-8")
+        except UnicodeDecodeError as e:
+            raise ValidationError(
+                f"contents must be valid UTF-8 (invalid byte at position {e.start})"
+            ) from None
+    if isinstance(value, str):
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError as e:
+            raise ValidationError(
+                f"contents must be valid UTF-8 (lone surrogate at position {e.start})"
+            ) from None
     return value
 
 
@@ -219,8 +236,8 @@ def _wrap_binary_contents(
     models,
     contents: Optional[List[Optional[Union[str, bytes, bytearray]]]],
 ):
-    """Wrap per-item contents in the generated anyOf model, base64-encoding
-    bytes the same way ``upsert()`` does on the JSON path.
+    """Wrap per-item contents in the generated anyOf model, decoding bytes
+    the same way ``upsert()`` does on the JSON path.
 
     ``None`` becomes ``""`` rather than staying ``None``: the generated
     ``BinaryVectorBatch.to_dict()`` drops ``None`` entries, which would shift

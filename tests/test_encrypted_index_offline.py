@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -57,8 +58,25 @@ class TestUpsertBinaryContents(unittest.TestCase):
         return request.kwargs["binary_upsert_request"].batch.to_dict()
 
     def test_str_and_bytes_contents_are_accepted(self):
-        batch = self._sent_batch(["hello", b"\x00\x01", bytearray(b"hi")])
-        self.assertEqual(batch["contents"], ["hello", "AAE=", "aGk="])
+        batch = self._sent_batch(["hello", "caf\u00e9".encode(), bytearray(b"hi")])
+        self.assertEqual(batch["contents"], ["hello", "caf\u00e9", "hi"])
+
+    def test_non_utf8_bytes_contents_are_rejected(self):
+        api = MagicMock()
+        with self.assertRaises(ValidationError):
+            _index(api).upsert_binary(
+                ["a"], np.zeros((1, 2), dtype=np.float32), contents=[b"\xff\xfe"]
+            )
+        self.assertEqual(api.method_calls, [])
+
+    def test_lone_surrogate_string_contents_are_rejected(self):
+        api = MagicMock()
+        with self.assertRaises(ValidationError) as ctx:
+            _index(api).upsert_binary(
+                ["a"], np.zeros((1, 2), dtype=np.float32), contents=["a\ud800b"]
+            )
+        self.assertEqual(ctx.exception.kind, "invalid_argument")
+        self.assertEqual(api.method_calls, [])
 
     def test_none_contents_keep_their_position(self):
         batch = self._sent_batch([None, "second", None])
@@ -83,6 +101,39 @@ class TestUpsertBinaryContents(unittest.TestCase):
             _index(api).upsert_binary(["a"], np.zeros((1, 0), dtype=np.float32))
         self.assertEqual(ctx.exception.kind, "invalid_argument")
         self.assertEqual(api.method_calls, [])
+
+
+class TestUpsertContents(unittest.TestCase):
+    def test_bytes_contents_are_sent_as_utf8_text(self):
+        api = MagicMock()
+        _index(api).upsert([{"id": "a", "vector": [0.0, 1.0], "contents": b"alpha"}])
+        request = api.upsert_vectors_v1_vectors_upsert_post.call_args
+        sent = request.kwargs["upsert_request"].to_dict()
+        self.assertEqual(sent["items"][0]["contents"], "alpha")
+
+    def test_non_utf8_bytes_contents_are_rejected(self):
+        api = MagicMock()
+        with self.assertRaises(ValidationError) as ctx:
+            _index(api).upsert([{"id": "a", "vector": [0.0], "contents": b"\xff"}])
+        self.assertEqual(ctx.exception.kind, "invalid_argument")
+        self.assertEqual(api.method_calls, [])
+
+    def test_lone_surrogate_string_contents_are_rejected(self):
+        api = MagicMock()
+        contents = os.fsdecode(b"report\xff.txt")  # surrogateescape -> "\udcff"
+        with self.assertRaises(ValidationError) as ctx:
+            _index(api).upsert([{"id": "a", "vector": [0.0], "contents": contents}])
+        self.assertEqual(ctx.exception.kind, "invalid_argument")
+        self.assertEqual(api.method_calls, [])
+
+    def test_well_formed_string_contents_pass_through(self):
+        api = MagicMock()
+        _index(api).upsert(
+            [{"id": "a", "vector": [0.0], "contents": "caf\u00e9 \U0001f600"}]
+        )
+        request = api.upsert_vectors_v1_vectors_upsert_post.call_args
+        sent = request.kwargs["upsert_request"].to_dict()
+        self.assertEqual(sent["items"][0]["contents"], "caf\u00e9 \U0001f600")
 
 
 class TestDimensionCache(unittest.TestCase):
