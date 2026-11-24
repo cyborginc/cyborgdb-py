@@ -252,15 +252,28 @@ jobs:
           : "${CYBORGDB_SERVICE_ROOT_KEY:?root key is empty; RBAC tests would skip}"
           : "${CYBORGDB_KMS_NAME_REAL:?KMS slot is empty; RBAC tests would skip}"
 
-          # Stop the non-RBAC service and wait for the port to free up.
+          # Stop the non-RBAC service and wait for the *process* to exit, not
+          # just the port: the service holds a single-process lock file that
+          # is only released on exit, and newer builds refuse to start while
+          # it is held. The port closes before the lock is released, so a
+          # port-only wait races the lock and the RBAC service dies on boot.
           if [ -f server-standard.pid ]; then
-            kill "$(cat server-standard.pid)" 2>/dev/null || true
+            STANDARD_PID="$(cat server-standard.pid)"
+            kill "$STANDARD_PID" 2>/dev/null || true
+            for i in {1..30}; do
+              kill -0 "$STANDARD_PID" 2>/dev/null || break
+              sleep 1
+            done
+            if kill -0 "$STANDARD_PID" 2>/dev/null; then
+              echo "Standard service did not exit after 30s; sending SIGKILL"
+              kill -9 "$STANDARD_PID" 2>/dev/null || true
+              sleep 1
+            fi
             rm -f server-standard.pid
           fi
-          for i in {1..15}; do
-            curl -fs http://localhost:8000/v1/health > /dev/null || break
-            sleep 1
-          done
+          # The old process is gone, so any remaining lock file is stale
+          # (e.g. left behind by SIGKILL) and would block the RBAC service.
+          rm -f /tmp/cyborgdb-service.8000.worker.lock
 
           export CYBORGDB_DB_TYPE=disk
           export CYBORGDB_SERVICE_LOG_LEVEL=DEBUG
