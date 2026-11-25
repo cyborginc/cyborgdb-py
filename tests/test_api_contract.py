@@ -735,15 +735,6 @@ class TestAPIContract(unittest.TestCase):
         for result in results:
             validate_exact_keys(result, {"id"}, "get() result with include=[]")
 
-    def _unwrap_single_batch(self, results):
-        """A batch query of one vector returns one nested result list."""
-        self.assertIsInstance(results, list)
-        self.assertEqual(
-            len(results), 1, "Batch of one query should return one result list"
-        )
-        self.assertIsInstance(results[0], list)
-        return results[0]
-
     def test_15_encrypted_index_query(self):
         """Test EncryptedIndex.query() with exact response validation."""
         query_vector = self.test_vectors[0]
@@ -755,8 +746,8 @@ class TestAPIContract(unittest.TestCase):
             query_vectors=[query_vector], include=["distance", "metadata"]
         )
 
-        # [query_vector] is a batch of one, so results arrive nested
-        results = self._unwrap_single_batch(results)
+        self.assertIsInstance(results, list)
+        # Single query returns flat list of results
         self.assertGreater(len(results), 0, "Query should return at least one result")
 
         # Check exact structure with include=['distance', 'metadata']
@@ -800,7 +791,7 @@ class TestAPIContract(unittest.TestCase):
             query_vectors=[query_vector], top_k=5, include=["distance", "metadata"]
         )
 
-        for result in self._unwrap_single_batch(results):
+        for result in results:
             validate_exact_keys(
                 result,
                 {"id", "distance", "metadata"},
@@ -820,7 +811,7 @@ class TestAPIContract(unittest.TestCase):
         # Test with empty include (should only have id and distance)
         results = self.index.query(query_vectors=[query_vector], include=["distance"])
 
-        for result in self._unwrap_single_batch(results):
+        for result in results:
             validate_exact_keys(
                 result, {"id", "distance"}, "query() result with include=[]"
             )
@@ -834,7 +825,7 @@ class TestAPIContract(unittest.TestCase):
         )
 
         # Results should have id and metadata only
-        for result in self._unwrap_single_batch(results):
+        for result in results:
             validate_exact_keys(
                 result,
                 {"id", "metadata"},
@@ -851,7 +842,7 @@ class TestAPIContract(unittest.TestCase):
         # Default include (no include arg) should return only id
         results = self.index.query(query_vectors=[query_vector], top_k=5)
 
-        results = self._unwrap_single_batch(results)
+        self.assertIsInstance(results, list)
         self.assertGreater(len(results), 0)
         for result in results:
             validate_exact_keys(
@@ -877,20 +868,20 @@ class TestAPIContract(unittest.TestCase):
         self.assertIn("id", results[0])
         self.assertIn("distance", results[0])
 
-        # Test Pattern 2: Single vector in nested list -> one nested result list
+        # Test Pattern 2: Single vector in nested list -> flat list return (API update)
         single_vector_nested = [self.test_vectors[1].tolist()]
         results = self.index.query(
             query_vectors=single_vector_nested, top_k=3, include=["distance"]
         )
 
-        # A batch of one keeps batch shape: one result list, nested
-        inner = self._unwrap_single_batch(results)
-        self.assertGreater(len(inner), 0, "Should have results for single query")
+        # Single query now returns flat list of results directly
+        self.assertIsInstance(results, list)
+        self.assertGreater(len(results), 0, "Should have results for single query")
         self.assertIsInstance(
-            inner[0], dict, "Batch-of-one query should return a list of dicts"
+            results[0], dict, "Single query should return flat list of dicts"
         )
-        self.assertIn("id", inner[0])
-        self.assertIn("distance", inner[0])
+        self.assertIn("id", results[0])
+        self.assertIn("distance", results[0])
 
         # Test Pattern 3: Multiple vectors -> multiple result lists
         multiple_vectors = [

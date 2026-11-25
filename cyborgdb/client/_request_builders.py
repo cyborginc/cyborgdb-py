@@ -389,6 +389,9 @@ def build_query_request(
     ``query_vectors`` is a flat list (single query), a list of vectors (batch),
     or None (content-based query). Numpy input is routed to the binary endpoint
     by the caller before reaching here.
+
+    Returns the request and whether exactly one query was sent (a flat vector,
+    a batch of one, or contents), which decides the result shape.
     """
     vector_list = None
     is_single_query = False
@@ -425,7 +428,12 @@ def build_query_request(
         query_kwargs.update(hybrid_kwargs)
         query_request = models.BatchQueryRequest(**query_kwargs)
 
-    return models.Request(query_request)
+    single_query = (
+        is_single_query
+        or query_contents is not None
+        or (vector_list is not None and len(vector_list) == 1)
+    )
+    return models.Request(query_request), single_query
 
 
 def _parse_query_item(
@@ -444,12 +452,18 @@ def _parse_query_item(
 
 
 def parse_query_response(
-    response_json: Dict[str, Any], include: Optional[List[str]]
+    response_json: Dict[str, Any],
+    include: Optional[List[str]],
+    single_query: bool = False,
 ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
     """Turn the raw JSON body of the query endpoint into plain result dicts.
 
     ``include=None`` keeps everything the server returned; otherwise distance
     and metadata are only kept when they were asked for.
+
+    ``single_query`` flattens a batch-shaped answer of one result list: one
+    query in always means a flat list out, whether or not the service
+    flattened a batch of one server-side (older ones did, newer ones don't).
     """
     include_distance = include is None or "distance" in include
     include_metadata = include is None or "metadata" in include
@@ -458,13 +472,16 @@ def parse_query_response(
         return []
     results = response_json["results"]
     if results and isinstance(results[0], list):
-        return [
+        batch_results = [
             [
                 _parse_query_item(item, include_distance, include_metadata)
                 for item in query_result
             ]
             for query_result in results
         ]
+        if single_query and len(batch_results) == 1:
+            return batch_results[0]
+        return batch_results
     return [
         _parse_query_item(item, include_distance, include_metadata) for item in results
     ]
@@ -485,20 +502,19 @@ def build_binary_query_request(
 ) -> Tuple[Any, bool]:
     """Validate ``query_vectors`` and assemble the ``BinaryQueryRequest``.
 
-    Returns the request and whether the input was a single (1D) query, which
-    decides the result shape.
+    Returns the request and whether exactly one query was sent (1D input or a
+    one-row batch), which decides the result shape.
     """
     if not isinstance(query_vectors, np.ndarray):
         raise _ArgumentTypeError("query_vectors must be a numpy array")
 
-    is_single_query = False
     if query_vectors.ndim == 1:
-        is_single_query = True
         query_vectors = query_vectors.reshape(1, -1)
     elif query_vectors.ndim != 2:
         raise ValidationError(
             "query_vectors must be a 1D array (single query) or 2D array (batch queries)"
         )
+    is_single_query = query_vectors.shape[0] == 1
 
     batch = models.BinaryQueryBatch(
         vectors_b64=_vectors_to_b64(query_vectors),
@@ -522,8 +538,8 @@ def parse_binary_query_response(
 ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
     """Unwrap the binary query response into plain result dicts.
 
-    A 1D input always yields a flat list, even though the service answers a
-    batch of one.
+    Exactly one query (1D input or a one-row batch) always yields a flat
+    list, even though the service answers a batch of one.
     """
     results = response.results.actual_instance
     if results and isinstance(results[0], list):

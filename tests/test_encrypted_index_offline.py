@@ -269,6 +269,49 @@ class TestQueryInclude(unittest.TestCase):
         self.assertEqual(self._query(results, []), [{"id": "a", "score": 0.7}])
 
 
+class TestQueryResultShape(unittest.TestCase):
+    """One query in -> flat list out, regardless of whether the service
+    flattens a batch of one server-side (older ones do, newer ones don't)."""
+
+    def _query(self, query_vectors, results):
+        api = MagicMock()
+        raw = api.query_vectors_v1_vectors_query_post_without_preload_content
+        raw.return_value = SimpleNamespace(
+            status=200, data=json.dumps({"results": results}).encode("utf-8")
+        )
+        return _index(api).query(query_vectors=query_vectors, include=["distance"])
+
+    def test_flat_single_vector_flattens_batch_shaped_answer(self):
+        nested = [[{"id": "a", "distance": 0.1}]]
+        self.assertEqual(
+            self._query([0.0, 1.0], nested), [{"id": "a", "distance": 0.1}]
+        )
+
+    def test_batch_of_one_flattens_batch_shaped_answer(self):
+        nested = [[{"id": "a", "distance": 0.1}]]
+        self.assertEqual(
+            self._query([[0.0, 1.0]], nested), [{"id": "a", "distance": 0.1}]
+        )
+
+    def test_single_query_flat_answer_passes_through(self):
+        flat = [{"id": "a", "distance": 0.1}]
+        self.assertEqual(self._query([[0.0, 1.0]], flat), flat)
+
+    def test_batch_of_two_stays_nested(self):
+        nested = [[{"id": "a", "distance": 0.1}], [{"id": "b", "distance": 0.2}]]
+        self.assertEqual(self._query([[0.0, 1.0], [1.0, 0.0]], nested), nested)
+
+    def test_binary_batch_of_one_is_flattened(self):
+        api = MagicMock()
+        item = MagicMock()
+        item.to_dict.return_value = {"id": "a"}
+        api.query_vectors_binary_v1_vectors_query_binary_post.return_value = (
+            SimpleNamespace(results=SimpleNamespace(actual_instance=[[item]]))
+        )
+        results = _index(api).query_binary(np.zeros((1, 2), dtype=np.float32))
+        self.assertEqual(results, [{"id": "a"}])
+
+
 class TestIncludeValidation(unittest.TestCase):
     """A bad ``include`` raises ``ValidationError`` with the service's wording
     before any request is sent."""

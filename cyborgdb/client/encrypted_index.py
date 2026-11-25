@@ -580,7 +580,7 @@ class EncryptedIndex:
                     "Expected 1D or 2D NumPy array for `query_vectors`."
                 )
 
-            request = build_query_request(
+            request, single_query = build_query_request(
                 _models,
                 self._index_name,
                 self._key_to_hex(),
@@ -614,7 +614,7 @@ class EncryptedIndex:
                 )
 
             response_json = json.loads(raw_response.data.decode("utf-8"))
-            return parse_query_response(response_json, include)
+            return parse_query_response(response_json, include, single_query)
         except _TRANSLATED_ERRORS as e:
             error = translate_api_error(e, "Query failed")
             cause = safe_cause(e)
