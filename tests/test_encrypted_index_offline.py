@@ -2,7 +2,6 @@
 
 import json
 import logging
-import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -120,7 +119,9 @@ class TestUpsertContents(unittest.TestCase):
 
     def test_lone_surrogate_string_contents_are_rejected(self):
         api = MagicMock()
-        contents = os.fsdecode(b"report\xff.txt")  # surrogateescape -> "\udcff"
+        # Explicit surrogateescape: os.fsdecode would raise on Windows, where
+        # the filesystem error handler is surrogatepass, not surrogateescape.
+        contents = b"report\xff.txt".decode("utf-8", "surrogateescape")  # "\udcff"
         with self.assertRaises(ValidationError) as ctx:
             _index(api).upsert([{"id": "a", "vector": [0.0], "contents": contents}])
         self.assertEqual(ctx.exception.kind, "invalid_argument")
