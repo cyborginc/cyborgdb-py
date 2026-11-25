@@ -231,8 +231,13 @@ class TestKMSRealRejectsSDKKey(unittest.TestCase):
             pass
 
     def test_create_index_with_real_kms_and_key_is_rejected(self):
+        # The service's mutex wording changed across releases; accept both so
+        # this passes against either build. Both phrasings name the two
+        # conflicting fields, which is what distinguishes the mutex 400.
         with self.assertRaisesRegex(
-            ValueError, "index_key must not be supplied alongside"
+            ValueError,
+            "index_key must not be supplied alongside"
+            "|Supply exactly one of index_key or kms_name",
         ):
             self.client.create_index(
                 index_name=self.index_name,
@@ -286,7 +291,14 @@ class TestStrictMutexFiresBeforeSlotLookup(unittest.TestCase):
             self.assertEqual(exc.code, 400)
             body = json.loads(exc.read().decode("utf-8"))
             self.assertIn("detail", body)
-            self.assertIn("index_key must not be supplied alongside", body["detail"])
+            # Same cross-version tolerance as above: either mutex phrasing
+            # proves the mutex check fired, as opposed to an "unknown slot"
+            # 400, which never mentions index_key.
+            self.assertRegex(
+                body["detail"],
+                "index_key must not be supplied alongside"
+                "|Supply exactly one of index_key or kms_name",
+            )
 
 
 if __name__ == "__main__":

@@ -257,7 +257,9 @@ class TestEdgeCases(unittest.TestCase):
 
         retrieved = results[0]
         self.assertEqual(retrieved["id"], "preserve_test")
-        np.testing.assert_array_equal(retrieved["vector"], original_vector)
+        np.testing.assert_array_equal(
+            np.asarray(retrieved["vector"], dtype=np.float32), original_vector
+        )
         self.assertEqual(retrieved["metadata"], original_metadata)
 
     def test_index_cleanup_error_handling(self):
